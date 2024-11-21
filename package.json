@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "drizzle-orm": "^0.36.3",
+    "postgres": "^3.4.5"
+  },
+  "scripts": {
+    "db-generate": "drizzle-kit generate"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.28.1"
+  }
+}
