@@ -21,32 +21,5 @@ import androidx.navigation.NavController
 
 @Composable
 fun HomeScreen(navController: NavController) {
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(onClick = {
-                navController.navigate("create")
-            }) {
-                Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit")
-            }
-
-        },
-        modifier = Modifier.fillMaxSize()
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-
-        ) {
-            Text(
-                text = "Home Screen",
-                fontSize = 20.sp
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-
-        }
-    }
+    
 }
-

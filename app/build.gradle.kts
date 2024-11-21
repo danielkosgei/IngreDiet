@@ -31,7 +31,7 @@ android {
                 buildConfigField(
                     type = "String",
                     name = "SUPABASE_ANON_KEY",
-                    value = supabaseAnonKey
+                    value = "\"$supabaseAnonKey\""
                 )
 
         val supabaseUrl = properties.getProperty("SUPABASE_URL") ?: ""
@@ -39,7 +39,7 @@ android {
                 buildConfigField(
                     type = "String",
                     name = "SUPABASE_URL",
-                    value = supabaseUrl
+                    value = "\"$supabaseUrl\""
                 )
 
     }
