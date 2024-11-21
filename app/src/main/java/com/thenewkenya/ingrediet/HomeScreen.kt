@@ -28,25 +28,22 @@ fun HomeScreen(navController: NavController) {
             }) {
                 Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit")
             }
-
         },
         modifier = Modifier.fillMaxSize()
     ) { innerPadding ->
+        // Apply innerPadding to the Column modifier
         Column(
-            modifier = Modifier.padding(innerPadding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding), // Use innerPadding here
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
-
         ) {
             Text(
                 text = "Home Screen",
                 fontSize = 20.sp
             )
-
             Spacer(modifier = Modifier.height(16.dp))
-
-
         }
     }
 }
-
