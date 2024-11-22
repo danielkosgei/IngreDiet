@@ -5,43 +5,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
-import io.github.jan.supabase.createSupabaseClient
-import io.github.jan.supabase.postgrest.Postgrest
-import io.github.jan.supabase.postgrest.from
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-
-
-val supabase = createSupabaseClient(
-    supabaseUrl = BuildConfig.SUPABASE_URL,
-    supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
-) {
-    install(Postgrest)
-}
-
-@Serializable
-data class Country(
-    val id: Int,
-    val name: String,
-)
-
 
 
 class MainActivity : ComponentActivity() {
@@ -124,60 +98,4 @@ val bottomNavItems = listOf(
     BottomNavItem("Profile", "profile", Icons.Filled.Person, Icons.Outlined.Person, false, 8)
 )
 
-@Composable
-fun CountriesList() {
-    var countries by remember { mutableStateOf<List<Country>>(listOf()) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            try {
-                countries = supabase.from("countries").select().decodeList<Country>()
-                errorMessage = null
-            } catch (e: Exception) {
-                errorMessage = "Failed to load data: ${e.message}"
-            }
-        }
-    }
-
-    if (errorMessage != null) {
-        Text(
-            text = errorMessage!!,
-            color = MaterialTheme.colorScheme.error,
-            modifier = Modifier.padding(16.dp)
-        )
-    } else {
-        Column {
-            var newCountry by remember { mutableStateOf("") }
-            val composableScope = rememberCoroutineScope()
-            LazyColumn {
-                items(countries, key = { country -> country.id }) { country ->
-                    Text(country.name, modifier = Modifier.padding(8.dp).animateItem())
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(value = newCountry, onValueChange = { newCountry = it },
-                    modifier = Modifier.weight(1f)
-                )
-                Button(onClick = {
-                    composableScope.launch(Dispatchers.IO) {
-                        val country = supabase.from("countries").insert(mapOf("name" to newCountry)) {
-                            select()
-                            single()
-                        }.decodeAs<Country>()
-                        countries = countries + country
-                        newCountry = ""
-                    }
-                }) {
-                    Text("Add")
-                }
-            }
-
-
-        }
-    }
-}
