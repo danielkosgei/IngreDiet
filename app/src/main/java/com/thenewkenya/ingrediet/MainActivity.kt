@@ -16,8 +16,26 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
+import dagger.hilt.android.AndroidEntryPoint
 
 
+data class BottomNavItem(
+    val title: String,
+    val route: String,
+    val selectedIcon: ImageVector,
+    val unselectedIcon: ImageVector,
+    val hasNews: Boolean,
+    val badges: Int
+)
+
+val bottomNavItems = listOf(
+    BottomNavItem("Home", "home", Icons.Filled.Home, Icons.Outlined.Home, false, 0),
+    BottomNavItem("Recipes", "recipes", Icons.Filled.DateRange, Icons.Outlined.DateRange, false, 0),
+    BottomNavItem("Notifications", "notifications", Icons.Filled.Notifications, Icons.Outlined.Notifications, false, 3),
+    BottomNavItem("Profile", "profile", Icons.Filled.Person, Icons.Outlined.Person, false, 8)
+)
+
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,21 +99,5 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
-data class BottomNavItem(
-    val title: String,
-    val route: String,
-    val selectedIcon: ImageVector,
-    val unselectedIcon: ImageVector,
-    val hasNews: Boolean,
-    val badges: Int
-)
-
-val bottomNavItems = listOf(
-    BottomNavItem("Home", "home", Icons.Filled.Home, Icons.Outlined.Home, false, 0),
-    BottomNavItem("Recipes", "recipes", Icons.Filled.DateRange, Icons.Outlined.DateRange, false, 0),
-    BottomNavItem("Notifications", "notifications", Icons.Filled.Notifications, Icons.Outlined.Notifications, false, 3),
-    BottomNavItem("Profile", "profile", Icons.Filled.Person, Icons.Outlined.Person, false, 8)
-)
 
 
