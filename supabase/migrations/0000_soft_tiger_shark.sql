@@ -1,9 +1,3 @@
-CREATE TABLE IF NOT EXISTS "profile" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"first_name" text NOT NULL,
-	"last_name" text NOT NULL,
-	"email" text NOT NULL
-);
 
 -- Create the table
 create table countries (
@@ -16,5 +10,3 @@ values
   ('Canada'),
   ('United States'),
   ('Mexico');
-
-ALTER TABLE "profile" ENABLE ROW LEVEL SECURITY;
