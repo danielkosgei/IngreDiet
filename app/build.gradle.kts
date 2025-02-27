@@ -7,13 +7,12 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 
     kotlin("plugin.serialization") version "$kotlin_version"
-    id("org.jetbrains.kotlin.kapt")
-    id("com.google.dagger.hilt.android")
+
 }
 
 android {
     namespace = "com.thenewkenya.ingrediet"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.thenewkenya.ingrediet"
@@ -69,10 +68,6 @@ android {
 }
 
 dependencies {
-    val nav_version = "2.8.3"
-    val supabase_version = "3.0.1"
-    val ktor_version = "3.0.1"
-    val hilt_version = "2.51.1"
 
     // Google
     implementation(libs.androidx.credentials)
@@ -82,6 +77,7 @@ dependencies {
     implementation(platform(libs.supabase.bom))
     implementation(libs.auth.kt)
 
+    // Ktor
     implementation(libs.ktor.client.okhttp)
 
     implementation(libs.androidx.core.ktx)
@@ -99,25 +95,5 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-
-    // Jetpack Compose integration
-    implementation("androidx.navigation:navigation-compose:$nav_version")
-
-    // ktor,postgres and supabase integration
-    implementation(platform("io.github.jan-tennert.supabase:bom:$supabase_version"))
-    implementation("io.github.jan-tennert.supabase:postgrest-kt")
-    implementation("io.github.jan-tennert.supabase:storage-kt")
-    implementation("io.github.jan-tennert.supabase:auth-kt")
-    implementation("io.github.jan-tennert.supabase:compose-auth-ui")
-    implementation("io.ktor:ktor-client-android:$ktor_version")
-    implementation("io.ktor:ktor-client-core:$ktor_version")
-    implementation("io.ktor:ktor-utils:$ktor_version")
-
-    // hilt for dependency injection
-    implementation("com.google.dagger:hilt-android:$hilt_version")
-    kapt("com.google.dagger:hilt-android-compiler:$hilt_version")
-    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-
-
 
 }
