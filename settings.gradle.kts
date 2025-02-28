@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "IngreDiet"
 include(":app")
+include(":feature-authentication")
