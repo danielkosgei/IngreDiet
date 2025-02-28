@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -56,6 +57,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
@@ -83,14 +88,30 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             IngreDietTheme {
-                LoginScreen()
+                // Surface container using the background color from the theme
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    AppNavigation()
+                }
             }
         }
     }
 }
 
 @Composable
-fun RegisterScreen() {
+fun AppNavigation() {
+    val navController = rememberNavController()
+
+    NavHost(navController = navController, startDestination = "login") {
+        composable("login") { LoginScreen(navController) }
+        composable("register") { RegisterScreen(navController) }
+    }
+}
+
+@Composable
+fun RegisterScreen(navController: NavController) {
 
     var emailValue by remember {
         mutableStateOf("")
@@ -304,7 +325,9 @@ fun RegisterScreen() {
             Spacer(modifier = Modifier.height(25.dp))
 
             TextButton(
-                onClick = {}
+                onClick = {
+                    navController.navigate("login")
+                }
             ) {
                 Text(
                     text = buildAnnotatedString {
@@ -334,7 +357,7 @@ fun RegisterScreen() {
 }
 
 @Composable
-fun LoginScreen() {
+fun LoginScreen(navController: NavController) {
     var emailValue by remember {
         mutableStateOf("")
     }
@@ -546,7 +569,9 @@ fun LoginScreen() {
             Spacer(modifier = Modifier.height(25.dp))
 
             TextButton(
-                onClick = {}
+                onClick = {
+                    navController.navigate("register")
+                }
             ) {
                 Text(
                     text = buildAnnotatedString {
@@ -638,7 +663,7 @@ private fun LoginHeader() {
 @Composable
 private fun RegisterPreview(){
     IngreDietTheme {
-        RegisterScreen()
+        RegisterScreen(navController = rememberNavController())
     }
 }
 
