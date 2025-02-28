@@ -36,6 +36,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +65,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.thenewkenya.ingrediet.data.network.LocalSupabase
+import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
 import com.thenewkenya.ingrediet.ui.theme.black
 import com.thenewkenya.ingrediet.ui.theme.darkGray
@@ -74,11 +78,13 @@ import io.github.jan.supabase.auth.exception.AuthErrorCode
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.providers.builtin.IDToken
+import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.createSupabaseClient
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -93,7 +99,9 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation()
+                    CompositionLocalProvider(LocalSupabase provides supabase) {
+                        AppNavigation()
+                    }
                 }
             }
         }
@@ -103,11 +111,30 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+    val coroutineScope = rememberCoroutineScope()
+    var startDestination by remember { mutableStateOf("login") }
+    val supabase = LocalSupabase.current
 
-    NavHost(navController = navController, startDestination = "login") {
+    LaunchedEffect(Unit) {
+        coroutineScope.launch {
+            supabase.auth.sessionStatus.onEach {
+                startDestination = when (it) {
+                    // is SessionStatus.Authenticated -> "home"
+                    is SessionStatus.NotAuthenticated -> "login"
+                    // is SessionStatus.Initializing -> "loading"
+                    else -> "login"
+                }
+            }.launchIn(coroutineScope)
+        }
+    }
+
+    NavHost(navController = navController, startDestination = startDestination) {
         composable("login") { LoginScreen(navController) }
         composable("register") { RegisterScreen(navController) }
+        // composable("home") { HomeScreen() }
+        // composable("loading") { LoadingScreen() }
     }
+
 }
 
 @Composable
@@ -699,13 +726,6 @@ sealed interface AuthResponse {
 class AuthManager(
     private val context: Context
 ) {
-    private val supabase = createSupabaseClient(
-        supabaseUrl = BuildConfig.SUPABASE_URL,
-        supabaseKey = BuildConfig.SUPABASE_ANON_KEY
-    ) {
-        install(Auth)
-    }
-
     fun signUpWithEmail(emailValue: String, passwordValue: String): Flow<AuthResponse> = flow {
         try {
             supabase.auth.signUpWith(Email) {
