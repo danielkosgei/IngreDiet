@@ -62,10 +62,12 @@ import io.github.jan.supabase.auth.exception.AuthErrorCode
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.providers.builtin.IDToken
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -395,15 +397,14 @@ class AuthManager(
         }
     }
 
-    fun signOut(): Flow<AuthResponse> = flow {
+    suspend fun signOut() {
         try {
-            supabase.auth.signOut()
-            emit(AuthResponse.Success)
+            withContext(Dispatchers.IO) {
+                supabase.auth.signOut()
+            }
         } catch (e: Exception) {
-            emit(AuthResponse.Error(e.localizedMessage))
+            Log.e("AuthManager", "Error signing out", e)
         }
-
-
     }
 
     fun createNonce(): String {

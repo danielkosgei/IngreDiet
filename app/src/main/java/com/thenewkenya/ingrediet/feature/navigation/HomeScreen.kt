@@ -16,6 +16,7 @@ import androidx.navigation.NavController
 import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.feature.authentication.AuthManager
 import io.github.jan.supabase.auth.auth
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(navController: NavController) {
@@ -29,8 +30,12 @@ fun HomeScreen(navController: NavController) {
     // Inside your composable
     val user = supabase.auth.currentUserOrNull()
     if (user == null) {
-        navController.navigate("login") {
-            popUpTo("home") { inclusive = true }
+        LoadingScreen()
+        coroutineScope.launch {
+            authManager.signOut()
+            //navController.navigate("login") {
+            //    popUpTo("home") { inclusive = true }
+            //}
         }
     } else {
         Column(
@@ -41,9 +46,11 @@ fun HomeScreen(navController: NavController) {
             Text(text = "Welcome ${user.email}")
             Button(
                 onClick = {
-                    authManager.signOut()
-                    navController.navigate("login") {
-                        popUpTo("home") { inclusive = true }
+                    coroutineScope.launch {
+                        authManager.signOut()
+                        navController.navigate("login") {
+                            popUpTo("home") { inclusive = true }
+                        }
                     }
                 },
                 modifier = Modifier.padding(top = 16.dp)

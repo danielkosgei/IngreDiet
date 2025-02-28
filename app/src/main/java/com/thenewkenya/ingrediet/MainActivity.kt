@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.navigation.NavController
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -116,7 +117,7 @@ class MainActivity : ComponentActivity() {
 fun AppNavigation() {
     val navController = rememberNavController()
     val coroutineScope = rememberCoroutineScope()
-    var startDestination by remember { mutableStateOf("login") }
+    var startDestination by remember { mutableStateOf("splash") }
     val supabase = LocalSupabase.current
 
     LaunchedEffect(Unit) {
@@ -125,7 +126,7 @@ fun AppNavigation() {
                 startDestination = when (it) {
                     is SessionStatus.Authenticated -> "home"
                     is SessionStatus.NotAuthenticated -> "login"
-                    is SessionStatus.Initializing -> "loading"
+                    is SessionStatus.Initializing -> "splash"
                     else -> "login"
                 }
             }.launchIn(coroutineScope)
@@ -136,7 +137,8 @@ fun AppNavigation() {
         composable("login") { LoginScreen(navController) }
         composable("register") { RegisterScreen(navController) }
         composable("home") { HomeScreen(navController) }
-        composable("loading") { LoadingScreen(navController) }
+        composable("loading") { LoadingScreen() }
+        composable("splash") { SplashScreen(navController) }
     }
 
 }
@@ -161,3 +163,13 @@ fun Gradient() {
     )
 }
 
+@Composable
+fun SplashScreen(navController: NavHostController) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+
+    ) {
+        // Add splash screen eg. logo
+    }
+}
