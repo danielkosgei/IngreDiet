@@ -83,7 +83,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             IngreDietTheme {
-                RegisterScreen()
+                LoginScreen()
             }
         }
     }
@@ -334,6 +334,248 @@ fun RegisterScreen() {
 }
 
 @Composable
+fun LoginScreen() {
+    var emailValue by remember {
+        mutableStateOf("")
+    }
+
+    var passwordValue by remember {
+        mutableStateOf("")
+    }
+
+    var passwordVisibility by remember {
+        mutableStateOf(false)
+    }
+
+    val context = LocalContext.current
+    val authManager = remember {
+        AuthManager(context)
+    }
+    val coroutineScope = rememberCoroutineScope()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(black),
+        contentAlignment = Alignment.Center
+    ) {
+        Gradient()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+                .padding(top = 110.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            LoginHeader()
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            GoogleSignInButton(
+                onClick = {
+                    authManager.loginGoogleuser()
+                        .onEach { result ->
+                            if (result is AuthResponse.Success) {
+                                Log.d("auth", "Google Success")
+                            } else {
+                                Log.e("auth", "Google Error")
+                            }
+                        }
+                        .launchIn(coroutineScope)
+                }
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(vertical = 30.dp)
+
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(1.dp)
+                        .background(Color.White.copy(alpha = 0.2f))
+                )
+
+                Text(
+                    text = "or",
+                    color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(horizontal = 10.dp)
+                )
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(1.dp)
+                        .background(Color.White.copy(alpha = 0.2f))
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(
+                    text = "Email",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                TextField(
+                    value = emailValue,
+                    onValueChange = { newValue ->
+                        emailValue = newValue
+                    },
+                    placeholder = {
+                        Text(
+                            text = "john.doe@example.com",
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = TextFieldDefaults.colors(
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        focusedContainerColor = darkGray,
+                        unfocusedContainerColor = darkGray
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Column(
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(
+                    text = "Password",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                TextField(
+                    value = passwordValue,
+                    onValueChange = { newValue ->
+                        passwordValue = newValue
+                    },
+                    placeholder = {
+                        Text(
+                            text = "Enter your password",
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    },
+                    visualTransformation = if (passwordVisibility) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailingIcon = {
+                        val image = if (passwordVisibility) {
+                            Icons.Filled.Visibility
+                        } else {
+                            Icons.Filled.VisibilityOff
+                        }
+
+                        val description: String = if (passwordVisibility) "Hide password"
+                        else "Show password"
+
+                        IconButton(onClick = { passwordVisibility = !passwordVisibility }) {
+                            Icon(imageVector = image, contentDescription = description)
+                        }
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = TextFieldDefaults.colors(
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        focusedContainerColor = darkGray,
+                        unfocusedContainerColor = darkGray
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(35.dp))
+
+            var authState by remember {
+                mutableStateOf<AuthState>(AuthState.Success)
+            }
+
+            Button(
+                onClick = {
+                    authState = AuthState.Loading
+                    authManager.signInWithEmail(emailValue, passwordValue)
+                        .onEach { result ->
+                            if (result is AuthResponse.Success) {
+                                authState = AuthState.Success
+                                Log.d("auth", "Email Success")
+                            } else {
+                                authState = AuthState.Error(AuthErrorCode.InvalidCredentials)
+                                Log.e("auth", "Email Error")
+                            }
+
+                        }
+                        .launchIn(coroutineScope)
+                },
+                enabled = authState != AuthState.Loading,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White
+                ),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (authState == AuthState.Loading) {
+                    // Show a loading indicator
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                } else {
+                    Text(
+                        text = "Sign In",
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(25.dp))
+
+            TextButton(
+                onClick = {}
+            ) {
+                Text(
+                    text = buildAnnotatedString {
+                        withStyle(
+                            style = SpanStyle(
+                                fontWeight = FontWeight.Light,
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
+                        ) {
+                            append("Don't have an account? ")
+                        }
+
+                        withStyle(
+                            style = SpanStyle(
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        ) {
+                            append("Sign Up")
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+}
+
+@Composable
 private fun GoogleSignInButton(onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
@@ -369,6 +611,24 @@ private fun RegisterHeader() {
 
     Text(
         text = "Create an account to get started",
+        style = MaterialTheme.typography.bodyMedium,
+        color = Color.White
+    )
+}
+
+@Composable
+private fun LoginHeader() {
+    Text(
+        text = "Sign In",
+        style = MaterialTheme.typography.titleLarge,
+        color = Color.White,
+        fontWeight = FontWeight.Bold
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    Text(
+        text = "Welcome back! Sign in to continue",
         style = MaterialTheme.typography.bodyMedium,
         color = Color.White
     )
