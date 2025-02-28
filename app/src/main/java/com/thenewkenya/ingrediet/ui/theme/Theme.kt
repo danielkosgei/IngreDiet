@@ -1,15 +1,10 @@
 package com.thenewkenya.ingrediet.ui.theme
 
-import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
@@ -33,8 +28,11 @@ private val LightColorScheme = lightColorScheme(
     */
 )
 
+// uncomment to enable dynamic color
+/*
 @Composable
 fun IngreDietTheme(
+    // enable this if you want the app to change theme if the system theme changes
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
@@ -52,6 +50,24 @@ fun IngreDietTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = Typography,
+        content = content
+    )
+}
+
+*/
+val teal = Color(0xFF009688)
+val darkTeal = Color(0xFF00796B)
+val black = Color(0xFF010101)
+val darkGray = Color(0xFF1A1A1A)
+
+
+@Composable
+fun IngreDietTheme(
+    content: @Composable () -> Unit
+) {
+    MaterialTheme(
+        colorScheme = DarkColorScheme,
         typography = Typography,
         content = content
     )

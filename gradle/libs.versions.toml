@@ -13,11 +13,13 @@ credentials = "1.5.0-rc01"
 googleid = "1.1.1"
 bom = "3.1.1"
 ktor = "3.0.3"
+materialIconsExtended = "1.8.0"
 
 [libraries]
 # Google
 androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }
 androidx-credentials-play-services-auth = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
+androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
 googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleid" }
 
 # Supabase

@@ -80,6 +80,8 @@ dependencies {
     // Ktor
     implementation(libs.ktor.client.okhttp)
 
+    //implementation(libs.androidx.material.icons.extended)
+    implementation ("androidx.compose.material:material-icons-extended:1.7.8")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -88,6 +90,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.googleid)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
