@@ -14,7 +14,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.thenewkenya.ingrediet.data.network.supabase
-import com.thenewkenya.ingrediet.feature.authentication.AuthManager
+import com.thenewkenya.ingrediet.data.network.AuthManager
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.launch
 

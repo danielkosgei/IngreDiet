@@ -76,6 +76,7 @@ dependencies {
     // Supabase
     implementation(platform(libs.supabase.bom))
     implementation(libs.auth.kt)
+    implementation(libs.storage.kt)
 
     // Ktor
     implementation(libs.ktor.client.okhttp)

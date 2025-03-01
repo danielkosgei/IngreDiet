@@ -44,6 +44,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.thenewkenya.ingrediet.Gradient
+import com.thenewkenya.ingrediet.data.network.AuthManager
+import com.thenewkenya.ingrediet.data.network.AuthResponse
+import com.thenewkenya.ingrediet.data.network.AuthState
 import com.thenewkenya.ingrediet.ui.theme.black
 import com.thenewkenya.ingrediet.ui.theme.darkGray
 import io.github.jan.supabase.auth.exception.AuthErrorCode

@@ -54,6 +54,10 @@ import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.thenewkenya.ingrediet.Gradient
 import com.thenewkenya.ingrediet.R
+import com.thenewkenya.ingrediet.data.network.AuthManager
+import com.thenewkenya.ingrediet.data.network.AuthResponse
+import com.thenewkenya.ingrediet.data.network.AuthState
+import com.thenewkenya.ingrediet.data.network.SessionManager
 import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.ui.theme.black
 import com.thenewkenya.ingrediet.ui.theme.darkGray
@@ -90,6 +94,7 @@ fun LoginScreen(navController: NavController) {
         AuthManager(context)
     }
     val coroutineScope = rememberCoroutineScope()
+    var authState by remember { mutableStateOf<AuthState>(AuthState.Success) }
 
     Box(
         modifier = Modifier
@@ -356,103 +361,4 @@ fun GoogleSignInButton(onClick: () -> Unit) {
     }
 }
 
-sealed class AuthState {
-    data object Loading : AuthState()
-    data object Success : AuthState()
-    data class Error(val error: AuthErrorCode) : AuthState()
-}
 
-sealed interface AuthResponse {
-    data object Success: AuthResponse
-    data class Error(val mesasage: String?) : AuthResponse
-}
-
-class AuthManager(
-    private val context: Context
-) {
-    fun signUpWithEmail(emailValue: String, passwordValue: String): Flow<AuthResponse> = flow {
-        try {
-            supabase.auth.signUpWith(Email) {
-                email = emailValue
-                password = passwordValue
-            }
-
-            emit(AuthResponse.Success)
-
-        } catch (e: Exception) {
-            emit(AuthResponse.Error(e.localizedMessage))
-
-        }
-    }
-
-    fun signInWithEmail(emailValue: String, passwordValue: String): Flow<AuthResponse> = flow {
-        try {
-            supabase.auth.signInWith(Email) {
-                email = emailValue
-                password = passwordValue
-            }
-            emit(AuthResponse.Success)
-        } catch (e: Exception) {
-            emit(AuthResponse.Error(e.localizedMessage))
-        }
-    }
-
-    suspend fun signOut() {
-        try {
-            withContext(Dispatchers.IO) {
-                supabase.auth.signOut()
-            }
-        } catch (e: Exception) {
-            Log.e("AuthManager", "Error signing out", e)
-        }
-    }
-
-    fun createNonce(): String {
-        val rawNonce = UUID.randomUUID().toString()
-        val bytes = rawNonce.toByteArray()
-        val md = MessageDigest.getInstance("SHA-256")
-        val digest = md.digest(bytes)
-
-        return digest.fold("") { str, it -> str + "%02x".format(it) }
-    }
-
-    fun loginGoogleuser(): Flow<AuthResponse> = flow {
-        val hashedNonce = createNonce()
-
-        val googleIdOption = GetGoogleIdOption.Builder()
-            .setServerClientId("363319580036-mr44i8gdn0jpauv05kdn53uaihv35g83.apps.googleusercontent.com")
-            .setNonce(hashedNonce)
-            .setAutoSelectEnabled(false)
-            .setFilterByAuthorizedAccounts(false)
-            .build()
-
-        val request = GetCredentialRequest.Builder()
-            .addCredentialOption(googleIdOption)
-            .build()
-
-        val credentialManager = CredentialManager.create(context)
-
-        try {
-            val result = credentialManager.getCredential(
-                context = context,
-                request = request
-            )
-
-            val googleIdTokenCredential = GoogleIdTokenCredential
-                .createFrom(result.credential.data)
-
-            val googleIdToken = googleIdTokenCredential.idToken
-
-            supabase.auth.signInWith(IDToken) {
-                idToken = googleIdToken
-                provider = Google
-            }
-
-            emit(AuthResponse.Success)
-
-        } catch (e: Exception) {
-            emit(AuthResponse.Error(e.localizedMessage))
-
-        }
-    }
-}

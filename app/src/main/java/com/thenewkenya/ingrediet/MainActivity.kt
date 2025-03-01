@@ -66,6 +66,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.LocalSupabase
 import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.feature.authentication.LoginScreen
@@ -85,6 +86,7 @@ import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.providers.builtin.IDToken
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.createSupabaseClient
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
@@ -118,18 +120,37 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val coroutineScope = rememberCoroutineScope()
     var startDestination by remember { mutableStateOf("splash") }
+    val context = LocalContext.current
+    val authManager = remember { AuthManager(context) }
     val supabase = LocalSupabase.current
 
     LaunchedEffect(Unit) {
         coroutineScope.launch {
-            supabase.auth.sessionStatus.onEach {
-                startDestination = when (it) {
-                    is SessionStatus.Authenticated -> "home"
-                    is SessionStatus.NotAuthenticated -> "login"
-                    is SessionStatus.Initializing -> "splash"
-                    else -> "login"
+            // Added delay to allow session to load
+            //delay(1000)
+            val sessionRestored = authManager.restoreSession()
+
+            if (sessionRestored) {
+                startDestination = "home"
+            }
+
+            supabase.auth.sessionStatus.collect { status ->
+                Log.d("Auth", "Session status: $status")
+                startDestination = when (status) {
+                    is SessionStatus.Authenticated -> {
+                        Log.d("Auth", "User is authenticated")
+                        "home"
+                    }
+                    is SessionStatus.NotAuthenticated -> {
+                        Log.d("Auth", "User is not authenticated")
+                        "login"
+                    }
+                    else -> {
+                        Log.d("Auth", "Loading auth status")
+                        "splash"
+                    }
                 }
-            }.launchIn(coroutineScope)
+            }
         }
     }
 
