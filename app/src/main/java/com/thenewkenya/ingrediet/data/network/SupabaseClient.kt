@@ -25,4 +25,5 @@ val supabase: SupabaseClient = createSupabaseClient(
         autoSaveToStorage = true
         autoLoadFromStorage = true
     }
+    install(Storage)
 }

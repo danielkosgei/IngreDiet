@@ -19,10 +19,27 @@ import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 import java.util.UUID
 
-class AuthManager(
-    private val context: Context
-) {
+class AuthManager(private val context: Context) {
     private val sessionManager = SessionManager(context)
+
+    suspend fun saveCurrentSession() {
+        try {
+            val currentSession = supabase.auth.currentSessionOrNull()
+            if (currentSession != null) {
+                val refreshToken = currentSession.refreshToken ?: ""
+                val accessToken = currentSession.accessToken ?: ""
+
+                if (refreshToken.isNotEmpty()) {
+                    sessionManager.saveTokens(refreshToken, accessToken)
+                    Log.d("AuthManager", "Session saved with refresh token: ${refreshToken.take(5)}...")
+                }
+            } else {
+                Log.d("AuthManager", "No current session to save")
+            }
+        } catch (e: Exception) {
+            Log.e("AuthManager", "Failed to save session", e)
+        }
+    }
 
     fun signUpWithEmail(emailValue: String, passwordValue: String): Flow<AuthResponse> = flow {
         try {
@@ -31,11 +48,13 @@ class AuthManager(
                 password = passwordValue
             }
 
+            // Manually save session after sing up
+            saveCurrentSession()
+
             emit(AuthResponse.Success)
-
         } catch (e: Exception) {
+            Log.e("AuthManager", "Sign up error", e)
             emit(AuthResponse.Error(e.localizedMessage))
-
         }
     }
 
@@ -45,8 +64,13 @@ class AuthManager(
                 email = emailValue
                 password = passwordValue
             }
+
+            // Manually save session after login
+            saveCurrentSession()
+
             emit(AuthResponse.Success)
         } catch (e: Exception) {
+            Log.e("AuthManager", "Login failed", e)
             emit(AuthResponse.Error(e.localizedMessage))
         }
     }
@@ -64,16 +88,43 @@ class AuthManager(
 
     suspend fun restoreSession(): Boolean {
         return try {
-            val refreshToken = sessionManager.getRefreshToken()
-            if (refreshToken != null) {
-                val session = supabase.auth.refreshSession(refreshToken)
-                session != null
-            } else {
-                false
+            // Check if we have a session first
+            if (!sessionManager.hasValidSession()) {
+                Log.d("AuthManager", "No valid session found to restore")
+                return false
+            }
+
+            val refreshToken = sessionManager.getRefreshToken() ?: ""
+            if (refreshToken.isEmpty()) {
+                Log.d("AuthManager", "Refresh token is empty, cannot restore session")
+                return false
+            }
+
+            Log.d("AuthManager", "Attempting to restore session with token: ${refreshToken.take(5)}...")
+
+            try {
+                // Use a try-catch specifically for the refresh operation
+                val result = supabase.auth.refreshSession(refreshToken)
+                if (result != null) {
+                    Log.d("AuthManager", "Session restored successfully")
+                    // Save the newly refreshed session
+                    saveCurrentSession()
+                    return true
+                } else {
+                    Log.d("AuthManager", "Session refresh returned null")
+                    return false
+                }
+            } catch (e: Exception) {
+                Log.e("AuthManager", "Session refresh failed", e)
+                // Only clear session if it's invalid
+                if (e.message?.contains("invalid", ignoreCase = true) == true) {
+                    sessionManager.clearSession()
+                }
+                return false
             }
         } catch (e: Exception) {
-            Log.e("AuthManager", "Error restoring session", e)
-            false
+            Log.e("AuthManager", "Error in restoreSession", e)
+            return false
         }
     }
 
@@ -118,8 +169,9 @@ class AuthManager(
                 provider = Google
             }
 
-            emit(AuthResponse.Success)
+            saveCurrentSession()
 
+            emit(AuthResponse.Success)
         } catch (e: Exception) {
             emit(AuthResponse.Error(e.localizedMessage))
 
