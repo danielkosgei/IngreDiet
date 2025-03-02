@@ -42,6 +42,8 @@ class AuthManager(private val context: Context) {
 
     fun signUpWithEmail(emailValue: String, passwordValue: String): Flow<AuthResponse> = flow {
         try {
+            emit(AuthResponse.Loading)
+
             supabase.auth.signUpWith(Email) {
                 email = emailValue
                 password = passwordValue
@@ -53,12 +55,21 @@ class AuthManager(private val context: Context) {
             emit(AuthResponse.Success)
         } catch (e: Exception) {
             Log.e("AuthManager", "Sign up error", e)
-            emit(AuthResponse.Error(e.localizedMessage))
+            val errorMessage = when {
+                e.message?.contains("User already registered") == true -> "Email already registered"
+                e.message?.contains("network") == true -> "Network error. Please check your connection"
+                e.message?.contains("password") == true -> "Password is too weak"
+                e.message?.contains("email") == true -> "Invalid email format"
+                else -> e.localizedMessage ?: "An unknown error occurred"
+            }
+            emit(AuthResponse.Error(errorMessage))
         }
     }
 
     fun signInWithEmail(emailValue: String, passwordValue: String): Flow<AuthResponse> = flow {
         try {
+            emit(AuthResponse.Loading)
+
             supabase.auth.signInWith(Email) {
                 email = emailValue
                 password = passwordValue
@@ -70,7 +81,12 @@ class AuthManager(private val context: Context) {
             emit(AuthResponse.Success)
         } catch (e: Exception) {
             Log.e("AuthManager", "Login failed", e)
-            emit(AuthResponse.Error(e.localizedMessage))
+            val errorMessage = when {
+                e.message?.contains("Invalid login credentials") == true -> "Invalid email or password"
+                e.message?.contains("network") == true -> "Network error. Please check your connection"
+                else -> e.localizedMessage ?: "An unknown error occurred"
+            }
+            emit(AuthResponse.Error(errorMessage))
         }
     }
 
@@ -185,6 +201,7 @@ sealed class AuthState {
 }
 
 sealed interface AuthResponse {
+    data object Loading: AuthResponse
     data object Success: AuthResponse
     data class Error(val mesasage: String?) : AuthResponse
 }

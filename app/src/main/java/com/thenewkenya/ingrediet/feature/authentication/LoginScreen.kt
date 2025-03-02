@@ -54,6 +54,7 @@ import com.thenewkenya.ingrediet.data.network.AuthResponse
 import com.thenewkenya.ingrediet.data.network.AuthState
 import com.thenewkenya.ingrediet.ui.theme.black
 import com.thenewkenya.ingrediet.ui.theme.darkGray
+import com.thenewkenya.ingrediet.ui.theme.darkTeal
 import io.github.jan.supabase.auth.exception.AuthErrorCode
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -79,6 +80,8 @@ fun LoginScreen(navController: NavController) {
     val coroutineScope = rememberCoroutineScope()
     var authState by remember { mutableStateOf<AuthState>(AuthState.Success) }
 
+    var isGoogleSignInLoading by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -100,8 +103,10 @@ fun LoginScreen(navController: NavController) {
 
             GoogleSignInButton(
                 onClick = {
+                    isGoogleSignInLoading = true
                     authManager.loginGoogleuser()
                         .onEach { result ->
+                            isGoogleSignInLoading = false
                             if (result is AuthResponse.Success) {
                                 Log.d("auth", "Google Success")
                             } else {
@@ -109,7 +114,8 @@ fun LoginScreen(navController: NavController) {
                             }
                         }
                         .launchIn(coroutineScope)
-                }
+                },
+                isLoading = isGoogleSignInLoading
             )
 
             Row(
@@ -258,15 +264,26 @@ fun LoginScreen(navController: NavController) {
                 if (authState == AuthState.Loading) {
                     // Show a loading indicator
                     CircularProgressIndicator(
-                        color = Color.White,
+                        color = darkTeal,
                         modifier = Modifier.size(24.dp)
                     )
                 } else {
                     Text(
                         text = "Sign In",
+                        color = black,
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
                 }
+            }
+
+            // Show error message if login fails
+            if (authState is AuthState.Error) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Invalid credentials. Please try again.",
+                    color = Color.Red,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
 
             Spacer(modifier = Modifier.height(25.dp))
@@ -322,25 +339,40 @@ private fun LoginHeader() {
 }
 
 @Composable
-fun GoogleSignInButton(onClick: () -> Unit) {
+fun GoogleSignInButton(
+    onClick: () -> Unit,
+    isLoading: Boolean = false
+) {
     OutlinedButton(
         onClick = onClick,
         shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        enabled = !isLoading
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.ic_google),
-            contentDescription = "Google Logo",
-            modifier = Modifier.size(24.dp)
-        )
+        if (isLoading) {
+            CircularProgressIndicator(
+                color = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_google),
+                    contentDescription = "Google Logo",
+                    modifier = Modifier.size(24.dp)
+                )
 
-        Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-        Text(
-            text = "Continue with Google",
-            color = Color.White,
-            modifier = Modifier.padding(vertical = 4.dp)
-        )
+                Text(
+                    text = "Continue with Google",
+                    color = Color.White,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+        }
     }
 }
 
