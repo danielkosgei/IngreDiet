@@ -6,7 +6,6 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.thenewkenya.ingrediet.data.network.AuthResponse
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.exception.AuthErrorCode
 import io.github.jan.supabase.auth.providers.Google

@@ -1,6 +1,5 @@
 package com.thenewkenya.ingrediet.feature.authentication
 
-import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -47,33 +46,17 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.credentials.CredentialManager
-import androidx.credentials.GetCredentialRequest
 import androidx.navigation.NavController
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.thenewkenya.ingrediet.Gradient
 import com.thenewkenya.ingrediet.R
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.AuthResponse
 import com.thenewkenya.ingrediet.data.network.AuthState
-import com.thenewkenya.ingrediet.data.network.SessionManager
-import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.ui.theme.black
 import com.thenewkenya.ingrediet.ui.theme.darkGray
-import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.exception.AuthErrorCode
-import io.github.jan.supabase.auth.providers.Google
-import io.github.jan.supabase.auth.providers.builtin.Email
-import io.github.jan.supabase.auth.providers.builtin.IDToken
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.withContext
-import java.security.MessageDigest
-import java.util.UUID
 
 @Composable
 fun LoginScreen(navController: NavController) {
