@@ -201,7 +201,10 @@ fun HomeScreen(navController: NavController) {
                     )
                     NavigationBarItem(
                         selected = selectedItem == 3,
-                        onClick = { selectedItem = 3 },
+                        onClick = {
+                            selectedItem = 3
+                            navController.navigate("profile")
+                        },
                         icon = { Icon(Icons.Outlined.AccountCircle, contentDescription = "Profile") },
                         label = { Text("Profile") }
                     )

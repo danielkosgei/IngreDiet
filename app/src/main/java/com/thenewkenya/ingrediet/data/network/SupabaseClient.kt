@@ -6,6 +6,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.storage.Storage
 import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.postgrest.Postgrest
 
 val LocalSupabase = staticCompositionLocalOf<SupabaseClient> {
     error("No SupabaseClient provided")
@@ -20,4 +21,5 @@ val supabase: SupabaseClient = createSupabaseClient(
         autoLoadFromStorage = true
     }
     install(Storage)
+    install(Postgrest)
 }

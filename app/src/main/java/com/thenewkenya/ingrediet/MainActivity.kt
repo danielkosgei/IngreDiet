@@ -46,6 +46,7 @@ import com.thenewkenya.ingrediet.feature.authentication.LoginScreen
 import com.thenewkenya.ingrediet.feature.authentication.RegisterScreen
 import com.thenewkenya.ingrediet.feature.navigation.HomeScreen
 import com.thenewkenya.ingrediet.feature.navigation.LoadingScreen
+import com.thenewkenya.ingrediet.feature.profile.ProfileScreen
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
 import com.thenewkenya.ingrediet.ui.theme.black
 import com.thenewkenya.ingrediet.ui.theme.darkTeal
@@ -152,6 +153,7 @@ fun AppNavigation() {
             composable("home") { HomeScreen(navController) }
             composable("loading") { LoadingScreen() }
             composable("splash") { SplashScreen(navController) }
+            composable("profile") { ProfileScreen(navController) }
         }
     }
 }

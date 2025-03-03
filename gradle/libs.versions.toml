@@ -16,6 +16,7 @@ ktor = "3.0.3"
 materialIconsExtended = "1.8.0"
 appcompat = "1.6.1"
 material = "1.10.0"
+postgrestKt = "3.1.1"
 storageKt = "3.1.1"
 
 [libraries]
@@ -27,6 +28,7 @@ googleid = { module = "com.google.android.libraries.identity.googleid:googleid",
 
 # Supabase
 auth-kt = { module = "io.github.jan-tennert.supabase:auth-kt" }
+postgrest-kt = { module = "io.github.jan-tennert.supabase:postgrest-kt", version.ref = "postgrestKt" }
 storage-kt = { module = "io.github.jan-tennert.supabase:storage-kt", version.ref = "storageKt" }
 supabase-bom = { module = "io.github.jan-tennert.supabase:bom", version.ref = "bom" }
 
