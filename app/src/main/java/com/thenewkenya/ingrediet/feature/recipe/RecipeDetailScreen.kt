@@ -1,5 +1,6 @@
 package com.thenewkenya.ingrediet.feature.recipe
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Fireplace
@@ -58,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -76,9 +79,11 @@ import com.thenewkenya.ingrediet.ui.theme.teal
 fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
     val recipeRepository = remember { RecipeRepository() }
     val viewModel = remember { RecipeDetailViewModel(recipeRepository) }
+    val context = LocalContext.current
 
     // Load the recipe when the screen is first displayed
     LaunchedEffect(recipeId) {
+        Log.d("RecipeDetailScreen", "Loading recipe with ID: $recipeId")
         viewModel.loadRecipe(recipeId)
     }
 
@@ -144,17 +149,52 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "Error: $errorMessage",
-                                color = Color.Red
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Error,
+                                contentDescription = null,
+                                tint = Color.Red,
+                                modifier = Modifier.size(64.dp)
                             )
+
                             Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = { viewModel.loadRecipe(recipeId) },
-                                colors = ButtonDefaults.buttonColors(containerColor = teal)
+
+                            Text(
+                                text = if (errorMessage.contains("not exit")) "Recipe Not Found" else "Error Loading Recipe",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = Color.White
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = errorMessage,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center
+                            )
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                Text("Retry")
+                                Button(
+                                    onClick = { navController.navigateUp() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = darkGray)
+                                ) {
+                                    Text("Go Back")
+                                }
+                                Button(
+                                    onClick = { viewModel.loadRecipe(recipeId) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = teal)
+                                ) {
+                                    Text("Retry")
+                                }
                             }
                         }
                     }
@@ -163,6 +203,17 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
                 is RecipeDetailUiState.Success -> {
                     recipe?.let { recipeData ->
                         RecipeDetailContent(recipe = recipeData)
+                    } ?: run {
+                        // This case should rarely happen, but handling it anyway
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Recipe data is missing",
+                                color = Color.Red
+                            )
+                        }
                     }
                 }
             }

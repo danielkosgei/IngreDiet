@@ -91,9 +91,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.thenewkenya.ingrediet.R
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.supabase
+import com.thenewkenya.ingrediet.data.repository.RecipeRepository
 import com.thenewkenya.ingrediet.ui.components.BottomNavItem
 import com.thenewkenya.ingrediet.ui.components.GlassBottomBar
 import com.thenewkenya.ingrediet.ui.theme.black
@@ -126,20 +130,20 @@ data class Category(
 fun HomeScreen(navController: NavController) {
     val context = LocalContext.current
     val authManager = remember { AuthManager(context) }
+    val recipeRepository = remember { RecipeRepository() }
     val coroutineScope = rememberCoroutineScope()
     val user = supabase.auth.currentUserOrNull()
     var isSigningOut by remember { mutableStateOf(false) }
     var selectedItem by remember { mutableStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("All Recipes") }
 
-    // Sample data
-    val recipes = listOf(
-        Recipe(1, "Healthy Avocado Toast", android.R.drawable.ic_menu_gallery, 320, "15 min", "Breakfast"),
-        Recipe(2, "Protein Smoothie Bowl", android.R.drawable.ic_menu_gallery, 450, "10 min", "Breakfast"),
-        Recipe(3, "Quinoa Veggie Salad", android.R.drawable.ic_menu_gallery, 380, "20 min", "Lunch"),
-        Recipe(4, "Grilled Chicken with Veggies", android.R.drawable.ic_menu_gallery, 520, "30 min", "Dinner")
-    )
+    // States for recipe data
+    var recipes by remember { mutableStateOf<List<RecipeRepository.RecipeListItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    // Sample categories data
     val categories = listOf(
         Category(
             1, "All Recipes",
@@ -170,6 +174,36 @@ fun HomeScreen(navController: NavController) {
         Triple(Icons.Outlined.FitnessCenter, Icons.Filled.FitnessCenter, "My Plan"),
         Triple(Icons.Outlined.AccountCircle, Icons.Filled.AccountCircle, "Profile")
     )
+
+    // Load recipes when search query or category changes
+    LaunchedEffect(searchQuery, selectedCategory) {
+        isLoading = true
+        errorMessage = null
+
+        coroutineScope.launch {
+            try {
+                recipeRepository.getRecipes(
+                    query = searchQuery.takeIf { it.isNotEmpty() },
+                    category = selectedCategory.takeIf { it != "All Recipes" }
+                ).collect { result ->
+                    isLoading = false
+                    result.fold(
+                        onSuccess = { recipesList ->
+                            recipes = recipesList
+                        },
+                        onFailure = { error ->
+                            Log.e("HomeScreen", "Error loading recipes", error)
+                            errorMessage = error.message ?: "Failed to load recipes"
+                        }
+                    )
+                }
+            } catch (e: Exception) {
+                isLoading = false
+                Log.e("HomeScreen", "Exception loading recipes", e)
+                errorMessage = e.message ?: "An unexpected error occurred"
+            }
+        }
+    }
 
     // Handle signout in a LaunchedEffect
     LaunchedEffect(isSigningOut) {
@@ -359,7 +393,13 @@ fun HomeScreen(navController: NavController) {
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(categories) { category ->
-                                CategoryItem(category = category)
+                                CategoryItem(
+                                    category = category,
+                                    isSelected = selectedCategory == category.name,
+                                    onCategorySelected = {
+                                        selectedCategory = it
+                                    }
+                                )
                             }
                         }
                     }
@@ -390,14 +430,51 @@ fun HomeScreen(navController: NavController) {
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            items(recipes) { recipe ->
-                                RecipeCard(
-                                    recipe = recipe,
-                                    navController = navController
+                        if (isLoading) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = teal)
+                            }
+                        } else if (errorMessage != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = errorMessage ?: "Unknown error",
+                                    color = Color.Red,
+                                    textAlign = TextAlign.Center
                                 )
+                            }
+                        } else if (recipes.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No recipes found",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        } else {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                items(recipes) { recipe ->
+                                    RecipeCard(
+                                        recipe = recipe,
+                                        navController = navController
+                                    )
+                                }
                             }
                         }
                     }
@@ -466,14 +543,20 @@ fun NutritionItem(title: String, value: String, target: String, progress: Float)
 }
 
 @Composable
-fun CategoryItem(category: Category) {
+fun CategoryItem(
+    category: Category,
+    isSelected: Boolean,
+    onCategorySelected: (String) -> Unit
+) {
     Box(
         modifier = Modifier
             .width(120.dp)
             .height(100.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(category.gradient)
-            .clickable { /* TODO: Navigate to category */ }
+            .background(
+                category.gradient
+            )
+            .clickable { onCategorySelected(category.name) }
             .padding(16.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -497,7 +580,7 @@ fun CategoryItem(category: Category) {
                 text = category.name,
                 color = Color.White,
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                 textAlign = TextAlign.Center
             )
         }
@@ -505,7 +588,7 @@ fun CategoryItem(category: Category) {
 }
 
 @Composable
-fun RecipeCard(recipe: Recipe, navController: NavController) {
+fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavController) {
     Card(
         modifier = Modifier
             .width(200.dp)
@@ -516,21 +599,36 @@ fun RecipeCard(recipe: Recipe, navController: NavController) {
         )
     ) {
         Column {
-            // Use a placeholder image or the actual resource
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
-                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                    .background(teal.copy(alpha = 0.3f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Filled.Restaurant,
-                    contentDescription = "Recipe Image",
-                    modifier = Modifier.size(48.dp),
-                    tint = Color.White.copy(alpha = 0.7f)
+            // Image loading with Coil
+            if (recipe.imageUrl.isNotEmpty()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(recipe.imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = recipe.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                        .background(teal.copy(alpha = 0.3f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Restaurant,
+                        contentDescription = "Recipe Image",
+                        modifier = Modifier.size(48.dp),
+                        tint = Color.White.copy(alpha = 0.7f)
+                    )
+                }
             }
 
             Column(
@@ -588,7 +686,7 @@ fun RecipeCard(recipe: Recipe, navController: NavController) {
 // String extension to capitalize first letter
 fun String.capitalize(): String {
     return this.replaceFirstChar {
-        if (it.isLowerCase()) it.titlecase(Locale.getDefault())
+        if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault())
         else it.toString()
     }
 }
