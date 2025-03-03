@@ -7,15 +7,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -23,12 +26,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalDining
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.WaterDrop
 
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Favorite
@@ -48,6 +58,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -79,9 +90,12 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
 import com.thenewkenya.ingrediet.R
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.supabase
+import com.thenewkenya.ingrediet.ui.components.BottomNavItem
+import com.thenewkenya.ingrediet.ui.components.GlassBottomBar
 import com.thenewkenya.ingrediet.ui.theme.black
 import com.thenewkenya.ingrediet.ui.theme.darkGray
 import com.thenewkenya.ingrediet.ui.theme.darkTeal
@@ -108,7 +122,6 @@ data class Category(
     val gradient: Brush
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(navController: NavController) {
     val context = LocalContext.current
@@ -116,22 +129,22 @@ fun HomeScreen(navController: NavController) {
     val coroutineScope = rememberCoroutineScope()
     val user = supabase.auth.currentUserOrNull()
     var isSigningOut by remember { mutableStateOf(false) }
-    var selectedItem by remember { mutableIntStateOf(0) }
+    var selectedItem by remember { mutableStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
 
     // Sample data
     val recipes = listOf(
-        Recipe(1, "Healthy Avocado Toast", R.drawable.ic_google, 320, "15 min", "Breakfast"),
-        Recipe(2, "Protein Smoothie Bowl", R.drawable.ic_google, 450, "10 min", "Breakfast"),
-        Recipe(3, "Quinoa Veggie Salad", R.drawable.ic_google, 380, "20 min", "Lunch"),
-        Recipe(4, "Grilled Chicken with Veggies", R.drawable.ic_google, 520, "30 min", "Dinner")
+        Recipe(1, "Healthy Avocado Toast", android.R.drawable.ic_menu_gallery, 320, "15 min", "Breakfast"),
+        Recipe(2, "Protein Smoothie Bowl", android.R.drawable.ic_menu_gallery, 450, "10 min", "Breakfast"),
+        Recipe(3, "Quinoa Veggie Salad", android.R.drawable.ic_menu_gallery, 380, "20 min", "Lunch"),
+        Recipe(4, "Grilled Chicken with Veggies", android.R.drawable.ic_menu_gallery, 520, "30 min", "Dinner")
     )
 
     val categories = listOf(
         Category(
             1, "All Recipes",
-            { Icon(Icons.Filled.LocalDining, contentDescription = "All Recipes", tint = Color.White) },
-            Brush.horizontalGradient(colors = listOf(teal, darkTeal))
+            { Icon(Icons.Filled.RestaurantMenu, contentDescription = "All Recipes", tint = Color.White) },
+            Brush.horizontalGradient(colors = listOf(teal, teal.copy(alpha = 0.7f)))
         ),
         Category(
             2, "Fitness",
@@ -140,17 +153,25 @@ fun HomeScreen(navController: NavController) {
         ),
         Category(
             3, "Vegetarian",
-            { Icon(Icons.Filled.Favorite, contentDescription = "Vegetarian", tint = Color.White) },
-            Brush.horizontalGradient(colors = listOf(Color(0xFFFF416C), Color(0xFFFF4B2B)))
+            { Icon(Icons.Filled.Eco, contentDescription = "Vegetarian", tint = Color.White) },
+            Brush.horizontalGradient(colors = listOf(Color(0xFF56ab2f), Color(0xFFa8e063)))
         ),
         Category(
             4, "Hydration",
-            { Icon(Icons.Filled.LocalDining, contentDescription = "Hydration", tint = Color.White) },
+            { Icon(Icons.Filled.WaterDrop, contentDescription = "Hydration", tint = Color.White) },
             Brush.horizontalGradient(colors = listOf(Color(0xFF2193b0), Color(0xFF6dd5ed)))
         )
     )
 
-    // Handle signout in a Launched Effect
+    // Navigation items
+    val items = listOf(
+        Triple(Icons.Outlined.Home, Icons.Filled.Home, "Home"),
+        Triple(Icons.Outlined.Favorite, Icons.Filled.Favorite, "Favorites"),
+        Triple(Icons.Outlined.FitnessCenter, Icons.Filled.FitnessCenter, "My Plan"),
+        Triple(Icons.Outlined.AccountCircle, Icons.Filled.AccountCircle, "Profile")
+    )
+
+    // Handle signout in a LaunchedEffect
     LaunchedEffect(isSigningOut) {
         if (isSigningOut) {
             authManager.signOut()
@@ -172,58 +193,41 @@ fun HomeScreen(navController: NavController) {
     } else {
         Scaffold(
             bottomBar = {
-                BottomAppBar(
-                    modifier = Modifier.fillMaxWidth(),
-                    containerColor = darkGray,
-                    contentColor = Color.White
+                NavigationBar(
+                    containerColor = darkGray
                 ) {
-                    NavigationBarItem(
-                        selected = selectedItem == 0,
-                        onClick = { selectedItem = 0 },
-                        icon = { Icon(Icons.Outlined.Home, contentDescription = "Home") },
-                        label = { Text("Home") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedItem == 1,
-                        onClick = { selectedItem = 1 },
-                        icon = { Icon(Icons.Outlined.Favorite, contentDescription = "Favorites") },
-                        label = { Text("Favorites") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedItem == 2,
-                        onClick = { selectedItem = 2 },
-                        icon = {
-                            BadgedBox(badge = { Badge { Text("2") } }) {
-                                Icon(Icons.Outlined.FitnessCenter, contentDescription = "My Plan")
+                    items.forEachIndexed { index, (outlinedIcon, filledIcon, label) ->
+                        NavigationBarItem(
+                            icon = {
+                                Icon(
+                                    imageVector = if (selectedItem == index) filledIcon else outlinedIcon,
+                                    contentDescription = label
+                                )
+                            },
+                            label = { Text(label) },
+                            selected = selectedItem == index,
+                            onClick = {
+                                selectedItem = index
+                                if (index == 3) { // Profile
+                                    navController.navigate("profile")
+                                }
                             }
-                        },
-                        label = { Text("My Plan") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedItem == 3,
-                        onClick = {
-                            selectedItem = 3
-                            navController.navigate("profile")
-                        },
-                        icon = { Icon(Icons.Outlined.AccountCircle, contentDescription = "Profile") },
-                        label = { Text("Profile") }
-                    )
+                        )
+                    }
                 }
             }
         ) { paddingValues ->
-            Box(
+            // Main content
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(black)
-                    .padding(paddingValues)
+                    .padding(paddingValues),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp)
-                ) {
-                    // Top Bar with user greeting and logout
+                // Top Bar with user greeting and logout
+                item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -247,16 +251,16 @@ fun HomeScreen(navController: NavController) {
                             onClick = { isSigningOut = true }
                         ) {
                             Icon(
-                                Icons.Filled.Logout,
+                                Icons.AutoMirrored.Filled.Logout,
                                 contentDescription = "Logout",
                                 tint = Color.White
                             )
                         }
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Search Bar
+                // Search Bar
+                item {
                     TextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
@@ -277,10 +281,10 @@ fun HomeScreen(navController: NavController) {
                             focusedIndicatorColor = Color.Transparent
                         )
                     )
+                }
 
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Daily Summary Card
+                // Daily Summary Card
+                item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -337,65 +341,70 @@ fun HomeScreen(navController: NavController) {
                             }
                         }
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Categories
-                    Text(
-                        text = "Browse Categories",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(vertical = 4.dp)
-                    ) {
-                        items(categories) { category ->
-                            CategoryItem(category = category)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Today's Recommendation
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                // Categories
+                item {
+                    Column {
                         Text(
-                            text = "Recommended for You",
+                            text = "Browse Categories",
                             style = MaterialTheme.typography.titleMedium,
                             color = Color.White,
                             fontWeight = FontWeight.Bold
                         )
 
-                        Text(
-                            text = "See All",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = teal,
-                            modifier = Modifier.clickable { /* TODO: Navigate to all recommendations */ }
-                        )
-                    }
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        contentPadding = PaddingValues(vertical = 4.dp)
-                    ) {
-                        items(recipes) { recipe ->
-                            RecipeCard(recipe = recipe)
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(categories) { category ->
+                                CategoryItem(category = category)
+                            }
                         }
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                // Today's Recommendation
+                item {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Recommended for You",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
 
-                    // Add Ingredients Button
+                            Text(
+                                text = "See All",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = teal,
+                                modifier = Modifier.clickable { /* TODO: Navigate to all recommendations */ }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(recipes) { recipe ->
+                                RecipeCard(
+                                    recipe = recipe,
+                                    navController = navController
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Add Ingredients Button
+                item {
                     Button(
                         onClick = { /* TODO: Navigate to add ingredients screen */ },
                         modifier = Modifier.fillMaxWidth(),
@@ -415,8 +424,6 @@ fun HomeScreen(navController: NavController) {
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
@@ -433,7 +440,7 @@ fun NutritionItem(title: String, value: String, target: String, progress: Float)
                 .padding(8.dp)
         ) {
             CircularProgressIndicator(
-                progress = progress,
+                progress = { progress },
                 color = teal,
                 strokeWidth = 4.dp,
                 modifier = Modifier.size(64.dp)
@@ -498,11 +505,11 @@ fun CategoryItem(category: Category) {
 }
 
 @Composable
-fun RecipeCard(recipe: Recipe) {
+fun RecipeCard(recipe: Recipe, navController: NavController) {
     Card(
         modifier = Modifier
             .width(200.dp)
-            .clickable { /* TODO: Navigate to recipe details */ },
+            .clickable { navController.navigate("recipe/${recipe.id}") },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = darkGray
@@ -519,7 +526,7 @@ fun RecipeCard(recipe: Recipe) {
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Filled.LocalDining,
+                    Icons.Filled.Restaurant,
                     contentDescription = "Recipe Image",
                     modifier = Modifier.size(48.dp),
                     tint = Color.White.copy(alpha = 0.7f)

@@ -35,9 +35,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.LocalSupabase
 import com.thenewkenya.ingrediet.data.network.SessionManager
@@ -47,6 +49,7 @@ import com.thenewkenya.ingrediet.feature.authentication.RegisterScreen
 import com.thenewkenya.ingrediet.feature.navigation.HomeScreen
 import com.thenewkenya.ingrediet.feature.navigation.LoadingScreen
 import com.thenewkenya.ingrediet.feature.profile.ProfileScreen
+import com.thenewkenya.ingrediet.feature.recipe.RecipeDetailScreen
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
 import com.thenewkenya.ingrediet.ui.theme.black
 import com.thenewkenya.ingrediet.ui.theme.darkTeal
@@ -154,6 +157,17 @@ fun AppNavigation() {
             composable("loading") { LoadingScreen() }
             composable("splash") { SplashScreen(navController) }
             composable("profile") { ProfileScreen(navController) }
+
+            // recipe detail route with parameter
+            composable(
+                route = "recipe/{recipeId}",
+                arguments = listOf(
+                    navArgument("recipeId") { type = NavType.IntType }
+                )
+            ) { backStackEntry ->
+                val recipeId = backStackEntry.arguments?.getInt("recipeId") ?: 1
+                RecipeDetailScreen(navController, recipeId)
+            }
         }
     }
 }
