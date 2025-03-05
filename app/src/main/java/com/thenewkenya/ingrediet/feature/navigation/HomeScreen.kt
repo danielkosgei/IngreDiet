@@ -98,8 +98,6 @@ import com.thenewkenya.ingrediet.R
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
-import com.thenewkenya.ingrediet.ui.components.BottomNavItem
-import com.thenewkenya.ingrediet.ui.components.GlassBottomBar
 import com.thenewkenya.ingrediet.ui.theme.black
 import com.thenewkenya.ingrediet.ui.theme.darkGray
 import com.thenewkenya.ingrediet.ui.theme.darkTeal
