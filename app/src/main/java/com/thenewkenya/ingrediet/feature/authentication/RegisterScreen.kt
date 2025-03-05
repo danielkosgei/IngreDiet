@@ -47,8 +47,6 @@ import com.thenewkenya.ingrediet.Gradient
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.AuthResponse
 import com.thenewkenya.ingrediet.data.network.AuthState
-import com.thenewkenya.ingrediet.ui.theme.black
-import com.thenewkenya.ingrediet.ui.theme.darkGray
 import io.github.jan.supabase.auth.exception.AuthErrorCode
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -56,32 +54,23 @@ import kotlinx.coroutines.flow.onEach
 
 @Composable
 fun RegisterScreen(navController: NavController) {
-
-    var emailValue by remember {
-        mutableStateOf("")
-    }
-
-    var passwordValue by remember {
-        mutableStateOf("")
-    }
-
-    var passwordVisibility by remember {
-        mutableStateOf(false)
-    }
+    var emailValue by remember { mutableStateOf("") }
+    var passwordValue by remember { mutableStateOf("") }
+    var passwordVisibility by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
-    val authManager = remember {
-        AuthManager(context)
-    }
+    val authManager = remember { AuthManager(context) }
     val coroutineScope = rememberCoroutineScope()
+
+    val colors = MaterialTheme.colorScheme // Access current theme colors
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(black),
+            .background(colors.background), // Use dynamic background color
         contentAlignment = Alignment.Center
     ) {
-        Gradient()
+        Gradient() // Uses theme-aware colors in gradient
 
         Column(
             modifier = Modifier
@@ -100,10 +89,8 @@ fun RegisterScreen(navController: NavController) {
                         .onEach { result ->
                             if (result is AuthResponse.Success) {
                                 Log.d("auth", "Google Success")
-
                             } else {
                                 Log.e("auth", "Google Error")
-
                             }
                         }
                         .launchIn(coroutineScope)
@@ -118,12 +105,12 @@ fun RegisterScreen(navController: NavController) {
                     modifier = Modifier
                         .weight(1f)
                         .height(1.dp)
-                        .background(Color.White.copy(alpha = 0.2f))
+                        .background(colors.onBackground.copy(alpha = 0.2f))
                 )
 
                 Text(
                     text = "Or",
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = colors.onBackground.copy(alpha = 0.7f),
                     modifier = Modifier.padding(horizontal = 10.dp)
                 )
 
@@ -131,16 +118,14 @@ fun RegisterScreen(navController: NavController) {
                     modifier = Modifier
                         .weight(1f)
                         .height(1.dp)
-                        .background(Color.White.copy(alpha = 0.2f))
+                        .background(colors.onBackground.copy(alpha = 0.2f))
                 )
             }
 
-            Column(
-                horizontalAlignment = Alignment.Start
-            ) {
+            Column(horizontalAlignment = Alignment.Start) {
                 Text(
                     text = "Email",
-                    color = Color.White,
+                    color = colors.onBackground, // Adapts to theme
                     fontWeight = FontWeight.Bold
                 )
 
@@ -148,21 +133,19 @@ fun RegisterScreen(navController: NavController) {
 
                 TextField(
                     value = emailValue,
-                    onValueChange = { newValue ->
-                        emailValue = newValue
-                    },
+                    onValueChange = { newValue -> emailValue = newValue },
                     placeholder = {
                         Text(
                             text = "john.doe@example.com",
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = colors.onBackground.copy(alpha = 0.7f)
                         )
                     },
                     shape = RoundedCornerShape(10.dp),
                     colors = TextFieldDefaults.colors(
                         unfocusedIndicatorColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
-                        focusedContainerColor = darkGray,
-                        unfocusedContainerColor = darkGray
+                        focusedContainerColor = colors.surface,
+                        unfocusedContainerColor = colors.surface
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -170,12 +153,10 @@ fun RegisterScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            Column(
-                horizontalAlignment = Alignment.Start
-            ) {
+            Column(horizontalAlignment = Alignment.Start) {
                 Text(
                     text = "Password",
-                    color = Color.White,
+                    color = colors.onBackground,
                     fontWeight = FontWeight.Bold
                 )
 
@@ -183,13 +164,11 @@ fun RegisterScreen(navController: NavController) {
 
                 TextField(
                     value = passwordValue,
-                    onValueChange = { newValue ->
-                        passwordValue = newValue
-                    },
+                    onValueChange = { newValue -> passwordValue = newValue },
                     placeholder = {
                         Text(
                             text = "Enter your password",
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = colors.onBackground.copy(alpha = 0.7f)
                         )
                     },
                     visualTransformation = if (passwordVisibility) {
@@ -207,15 +186,19 @@ fun RegisterScreen(navController: NavController) {
                         val description: String = if (passwordVisibility) "Hide password" else "Show password"
 
                         IconButton(onClick = { passwordVisibility = !passwordVisibility }) {
-                            Icon(imageVector = image, contentDescription = description, tint = Color.White)
+                            Icon(
+                                imageVector = image,
+                                contentDescription = description,
+                                tint = colors.onBackground // Use theme-aware icon tint
+                            )
                         }
                     },
                     shape = RoundedCornerShape(10.dp),
                     colors = TextFieldDefaults.colors(
                         unfocusedIndicatorColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
-                        focusedContainerColor = darkGray,
-                        unfocusedContainerColor = darkGray
+                        focusedContainerColor = colors.surface,
+                        unfocusedContainerColor = colors.surface
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -223,9 +206,7 @@ fun RegisterScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(35.dp))
 
-            var authState by remember {
-                mutableStateOf<AuthState>(AuthState.Success)
-            }
+            var authState by remember { mutableStateOf<AuthState>(AuthState.Success) }
 
             Button(
                 onClick = {
@@ -239,73 +220,66 @@ fun RegisterScreen(navController: NavController) {
                                 authState = AuthState.Error(AuthErrorCode.InvalidCredentials)
                                 Log.e("auth", "Email Error")
                             }
-
                         }
                         .launchIn(coroutineScope)
                 },
                 enabled = authState != AuthState.Loading, // Disable button while loading
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White
+                    containerColor = colors.primary // Use dynamic theme color
                 ),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (authState == AuthState.Loading) {
-                    // Show a loading indicator
                     CircularProgressIndicator(
-                        color = Color.White,
+                        color = colors.onPrimary, // Adapted to theme
                         modifier = Modifier.size(24.dp)
                     )
                 } else {
                     Text(
                         text = "Sign Up",
+                        color = colors.onPrimary, // Ensure contrast
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
-
                 }
-
             }
 
             Spacer(modifier = Modifier.height(25.dp))
 
             TextButton(
-                onClick = {
-                    navController.navigate("login")
-                }
+                onClick = { navController.navigate("login") }
             ) {
                 Text(
                     text = buildAnnotatedString {
                         withStyle(
                             style = SpanStyle(
                                 fontWeight = FontWeight.Light,
-                                color = Color.White.copy(alpha = 0.8f)
+                                color = colors.onBackground.copy(alpha = 0.8f)
                             )
-                        ) {
-                            append("Already have an account? ")
-                        }
+                        ) { append("Already have an account? ") }
 
                         withStyle(
                             style = SpanStyle(
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = colors.onBackground
                             )
-                        ) {
-                            append("Sign In")
-                        }
+                        ) { append("Sign In") }
                     }
                 )
             }
-
         }
     }
 }
 
+
 @Composable
 private fun RegisterHeader() {
+    val colors = MaterialTheme.colorScheme // Access dynamic theme colors
+
     Text(
         text = "Register",
         style = MaterialTheme.typography.titleLarge,
-        color = Color.White,
+        color = colors.onBackground, // Adapts to light/dark mode
         fontWeight = FontWeight.Bold
     )
 
@@ -314,6 +288,6 @@ private fun RegisterHeader() {
     Text(
         text = "Create an account to get started",
         style = MaterialTheme.typography.bodyMedium,
-        color = Color.White
+        color = colors.onBackground.copy(alpha = 0.8f) // Softer contrast for subtitle
     )
 }

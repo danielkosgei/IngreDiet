@@ -56,7 +56,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -70,9 +72,6 @@ import coil3.request.crossfade
 import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
-import com.thenewkenya.ingrediet.ui.theme.black
-import com.thenewkenya.ingrediet.ui.theme.darkGray
-import com.thenewkenya.ingrediet.ui.theme.teal
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,6 +89,11 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
     val uiState by viewModel.uiState.collectAsState()
     val recipe by viewModel.recipe.collectAsState()
 
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val textColor = MaterialTheme.colorScheme.onBackground
+    val errorColor = MaterialTheme.colorScheme.error
+    val buttonColor = MaterialTheme.colorScheme.primary
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -99,7 +103,7 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBackIos,
                             contentDescription = "Back",
-                            tint = Color.White
+                            tint = textColor
                         )
                     }
                 },
@@ -109,7 +113,7 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
                             Icon(
                                 imageVector = if (it.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                                 contentDescription = if (it.isFavorite) "Remove from favorites" else "Add to favorites",
-                                tint = if (it.isFavorite) Color.Red else Color.White
+                                tint = if (it.isFavorite) errorColor else textColor
                             )
                         }
                     }
@@ -117,7 +121,7 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
                         Icon(
                             imageVector = Icons.Filled.Share,
                             contentDescription = "Share",
-                            tint = Color.White
+                            tint = textColor
                         )
                     }
                 },
@@ -130,7 +134,7 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(black)
+                .background(backgroundColor)
                 .padding(paddingValues)
         ) {
             when (uiState) {
@@ -139,7 +143,7 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = teal)
+                        CircularProgressIndicator(color = buttonColor)
                     }
                 }
 
@@ -157,16 +161,16 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
                             Icon(
                                 imageVector = Icons.Filled.Error,
                                 contentDescription = null,
-                                tint = Color.Red,
+                                tint = errorColor,
                                 modifier = Modifier.size(64.dp)
                             )
 
                             Spacer(modifier = Modifier.height(16.dp))
 
                             Text(
-                                text = if (errorMessage.contains("not exit")) "Recipe Not Found" else "Error Loading Recipe",
+                                text = if (errorMessage.contains("not exist")) "Recipe Not Found" else "Error Loading Recipe",
                                 style = MaterialTheme.typography.headlineMedium,
-                                color = Color.White
+                                color = textColor
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -174,7 +178,7 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
                             Text(
                                 text = errorMessage,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.7f),
+                                color = textColor.copy(alpha = 0.7f),
                                 textAlign = TextAlign.Center
                             )
 
@@ -185,13 +189,13 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
                             ) {
                                 Button(
                                     onClick = { navController.navigateUp() },
-                                    colors = ButtonDefaults.buttonColors(containerColor = darkGray)
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                                 ) {
                                     Text("Go Back")
                                 }
                                 Button(
                                     onClick = { viewModel.loadRecipe(recipeId) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = teal)
+                                    colors = ButtonDefaults.buttonColors(containerColor = buttonColor)
                                 ) {
                                     Text("Retry")
                                 }
@@ -204,14 +208,13 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
                     recipe?.let { recipeData ->
                         RecipeDetailContent(recipe = recipeData)
                     } ?: run {
-                        // This case should rarely happen, but handling it anyway
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "Recipe data is missing",
-                                color = Color.Red
+                                color = errorColor
                             )
                         }
                     }
@@ -223,8 +226,11 @@ fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
 
 @Composable
 fun RecipeDetailContent(recipe: DetailedRecipe) {
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+
     LazyColumn(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize().background(colors.background)
     ) {
         // Recipe Image
         item {
@@ -247,13 +253,13 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(darkGray),
+                            .background(colors.surfaceVariant),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Restaurant,
                             contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.7f),
+                            tint = colors.onSurfaceVariant,
                             modifier = Modifier.size(80.dp)
                         )
                     }
@@ -264,10 +270,10 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
-                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                            Brush.verticalGradient(
                                 colors = listOf(
                                     Color.Transparent,
-                                    Color.Black.copy(alpha = 0.7f)
+                                    colors.surface.copy(alpha = 0.7f)
                                 ),
                                 startY = 0f,
                                 endY = 500f
@@ -275,7 +281,7 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
                         )
                 )
 
-                // Recipe title at the bottom of the image
+                // Recipe title
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -283,24 +289,21 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
                 ) {
                     Text(
                         text = recipe.name,
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White,
+                        style = typography.headlineMedium,
+                        color = colors.onSurface,
                         fontWeight = FontWeight.Bold
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
 
                     // Tags
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         recipe.tags.take(3).forEach { tag ->
                             SuggestionChip(
                                 onClick = { /* Navigate to tag */ },
-                                label = { Text(tag, color = Color.White) },
+                                label = { Text(tag, color = colors.onPrimary) },
                                 colors = SuggestionChipDefaults.suggestionChipColors(
-                                    containerColor = teal.copy(alpha = 0.7f)
+                                    containerColor = colors.primary.copy(alpha = 0.7f)
                                 )
                             )
                         }
@@ -308,7 +311,7 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
                         if (recipe.tags.size > 3) {
                             Text(
                                 text = "+${recipe.tags.size - 3} more",
-                                color = Color.White.copy(alpha = 0.7f),
+                                color = colors.onSurfaceVariant,
                                 modifier = Modifier.align(Alignment.CenterVertically)
                             )
                         }
@@ -317,61 +320,30 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
             }
         }
 
-        // Recipe Info Cards
+        // Recipe Info
         item {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                // Recipe description
-                Text(
-                    text = recipe.description,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White.copy(alpha = 0.9f)
-                )
+                Text(recipe.description, style = typography.bodyLarge, color = colors.onSurface.copy(alpha = 0.9f))
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Recipe metrics
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    RecipeMetricItem(
-                        icon = Icons.Filled.Timer,
-                        label = "Prep Time",
-                        value = "${recipe.preparationTime} min"
-                    )
-
-                    RecipeMetricItem(
-                        icon = Icons.Filled.Fireplace,
-                        label = "Cook Time",
-                        value = "${recipe.cookingTime} min"
-                    )
-
-                    RecipeMetricItem(
-                        icon = Icons.Filled.Person,
-                        label = "Servings",
-                        value = recipe.servings.toString()
-                    )
-
-                    RecipeMetricItem(
-                        icon = Icons.Filled.Stars,
-                        label = "Difficulty",
-                        value = recipe.difficulty
-                    )
+                    RecipeMetricItem(Icons.Filled.Timer, "Prep Time", "${recipe.preparationTime} min")
+                    RecipeMetricItem(Icons.Filled.Fireplace, "Cook Time", "${recipe.cookingTime} min")
+                    RecipeMetricItem(Icons.Filled.Person, "Servings", recipe.servings.toString())
+                    RecipeMetricItem(Icons.Filled.Stars, "Difficulty", recipe.difficulty)
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Nutrition section
-                Text(
-                    text = "Nutrition Facts",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Nutrition Facts", style = typography.titleLarge, color = colors.onSurface, fontWeight = FontWeight.Bold)
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -383,34 +355,20 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
 
         // Ingredients Section
         item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-            ) {
-                Text(
-                    text = "Ingredients",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Text("Ingredients", style = typography.titleLarge, color = colors.onSurface, fontWeight = FontWeight.Bold)
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = darkGray
-                    ),
+                    colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant),
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text(
-                            text = "For ${recipe.servings} serving${if (recipe.servings > 1) "s" else ""}",
-                            color = Color.White.copy(alpha = 0.7f),
-                            style = MaterialTheme.typography.bodyMedium
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("For ${recipe.servings} serving${if (recipe.servings > 1) "s" else ""}",
+                            color = colors.onSurfaceVariant,
+                            style = typography.bodyMedium
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -419,7 +377,7 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
                             IngredientItem(ingredient)
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 8.dp),
-                                color = Color.White.copy(alpha = 0.1f)
+                                color = colors.onSurface.copy(alpha = 0.1f)
                             )
                         }
 
@@ -427,15 +385,10 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
 
                         Button(
                             onClick = { /* Add all to shopping list */ },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = teal
-                            ),
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                             modifier = Modifier.align(Alignment.End)
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.ShoppingCart,
-                                contentDescription = null
-                            )
+                            Icon(imageVector = Icons.Filled.ShoppingCart, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Add to Shopping List")
                         }
@@ -448,17 +401,8 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
 
         // Instructions Section
         item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-            ) {
-                Text(
-                    text = "Instructions",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Text("Instructions", style = typography.titleLarge, color = colors.onSurface, fontWeight = FontWeight.Bold)
 
                 Spacer(modifier = Modifier.height(16.dp))
             }
@@ -473,33 +417,21 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
             }
         }
 
-        // Bottom padding
+        // Bottom padding + Start Cooking Button
         item {
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Cook Now button
             Button(
                 onClick = { /* Start cooking mode */ },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = teal
-                ),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Restaurant,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
+                Icon(imageVector = Icons.Filled.Restaurant, contentDescription = null, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Start Cooking",
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Start Cooking", modifier = Modifier.padding(vertical = 8.dp), fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -507,19 +439,22 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
     }
 }
 
+
 @Composable
 fun RecipeMetricItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     value: String
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    val textColor = MaterialTheme.colorScheme.onBackground
+    val secondaryTextColor = textColor.copy(alpha = 0.7f)
+    val iconColor = MaterialTheme.colorScheme.primary
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = teal,
+            tint = iconColor,
             modifier = Modifier.size(24.dp)
         )
 
@@ -528,117 +463,80 @@ fun RecipeMetricItem(
         Text(
             text = value,
             style = MaterialTheme.typography.bodyLarge,
-            color = Color.White,
+            color = textColor,
             fontWeight = FontWeight.Bold
         )
 
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.7f)
+            color = secondaryTextColor
         )
     }
 }
 
 @Composable
 fun NutritionFactsCard(nutritionFacts: com.thenewkenya.ingrediet.data.model.NutritionFacts) {
+    val cardBackground = MaterialTheme.colorScheme.surfaceVariant
+    val textColor = MaterialTheme.colorScheme.onSurface
+
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = darkGray
-        ),
+        colors = CardDefaults.cardColors(containerColor = cardBackground),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            NutritionFactItem(
-                label = "Calories",
-                value = "${nutritionFacts.calories}",
-                unit = "kcal"
-            )
-
-            NutritionFactItem(
-                label = "Protein",
-                value = "${nutritionFacts.protein}",
-                unit = "g"
-            )
-
-            NutritionFactItem(
-                label = "Carbs",
-                value = "${nutritionFacts.carbs}",
-                unit = "g"
-            )
-
-            NutritionFactItem(
-                label = "Fat",
-                value = "${nutritionFacts.fat}",
-                unit = "g"
-            )
-        }
-
-        // Additional nutrition facts (optional)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            nutritionFacts.fiber?.let {
-                NutritionFactItem(
-                    label = "Fiber",
-                    value = "$it",
-                    unit = "g"
-                )
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                NutritionFactItem("Calories", "${nutritionFacts.calories}", "kcal", textColor)
+                NutritionFactItem("Protein", "${nutritionFacts.protein}", "g", textColor)
+                NutritionFactItem("Carbs", "${nutritionFacts.carbs}", "g", textColor)
+                NutritionFactItem("Fat", "${nutritionFacts.fat}", "g", textColor)
             }
 
-            nutritionFacts.sugar?.let {
-                NutritionFactItem(
-                    label = "Sugar",
-                    value = "$it",
-                    unit = "g"
-                )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Optional nutrients (only shown if present)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                nutritionFacts.fiber?.let {
+                    NutritionFactItem("Fiber", "$it", "g", textColor)
+                }
+
+                nutritionFacts.sugar?.let {
+                    NutritionFactItem("Sugar", "$it", "g", textColor)
+                }
             }
         }
     }
 }
 
 @Composable
-fun NutritionFactItem(
-    label: String,
-    value: String,
-    unit: String
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+fun NutritionFactItem(label: String, value: String, unit: String, textColor: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = value,
             style = MaterialTheme.typography.bodyLarge,
-            color = Color.White,
+            color = textColor,
             fontWeight = FontWeight.Bold
         )
-
         Text(
-            text = unit,
+            text = "$label ($unit)",
             style = MaterialTheme.typography.bodySmall,
-            color = teal,
-            fontWeight = FontWeight.Medium
-        )
-
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.7f)
+            color = textColor.copy(alpha = 0.7f)
         )
     }
 }
 
 @Composable
 fun IngredientItem(ingredient: IngredientItem) {
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -649,8 +547,8 @@ fun IngredientItem(ingredient: IngredientItem) {
             checked = false,
             onCheckedChange = { /* Toggle ingredient checked state */ },
             colors = CheckboxDefaults.colors(
-                checkedColor = teal,
-                uncheckedColor = Color.White.copy(alpha = 0.6f)
+                checkedColor = colors.primary,
+                uncheckedColor = colors.onSurface.copy(alpha = 0.6f)
             )
         )
 
@@ -659,15 +557,15 @@ fun IngredientItem(ingredient: IngredientItem) {
         Column {
             Text(
                 text = ingredient.name,
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White
+                style = typography.bodyLarge,
+                color = colors.onSurface
             )
 
             Row {
                 Text(
                     text = "${ingredient.quantity} ${ingredient.unit}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.7f)
+                    style = typography.bodyMedium,
+                    color = colors.onSurface.copy(alpha = 0.7f)
                 )
             }
         }
@@ -676,6 +574,9 @@ fun IngredientItem(ingredient: IngredientItem) {
 
 @Composable
 fun InstructionStep(stepNumber: Int, instruction: String) {
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -686,12 +587,13 @@ fun InstructionStep(stepNumber: Int, instruction: String) {
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(teal),
+                .background(colors.primary),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = stepNumber.toString(),
-                color = Color.White,
+                color = colors.onPrimary,
+                style = typography.bodyLarge,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -701,8 +603,8 @@ fun InstructionStep(stepNumber: Int, instruction: String) {
         // Instruction text
         Text(
             text = instruction,
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color.White,
+            style = typography.bodyLarge,
+            color = colors.onSurface,
             modifier = Modifier.padding(top = 6.dp)
         )
     }

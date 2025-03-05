@@ -53,40 +53,27 @@ import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.AuthResponse
 import com.thenewkenya.ingrediet.data.network.AuthState
 import com.thenewkenya.ingrediet.data.network.supabase
-import com.thenewkenya.ingrediet.ui.theme.black
-import com.thenewkenya.ingrediet.ui.theme.darkGray
-import com.thenewkenya.ingrediet.ui.theme.darkTeal
 import io.github.jan.supabase.auth.exception.AuthErrorCode
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
 @Composable
 fun LoginScreen(navController: NavController) {
-    var emailValue by remember {
-        mutableStateOf("")
-    }
-
-    var passwordValue by remember {
-        mutableStateOf("")
-    }
-
-    var passwordVisibility by remember {
-        mutableStateOf(false)
-    }
-
+    var emailValue by remember { mutableStateOf("") }
+    var passwordValue by remember { mutableStateOf("") }
+    var passwordVisibility by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val authManager = remember {
-        AuthManager(context)
-    }
+    val authManager = remember { AuthManager(context) }
     val coroutineScope = rememberCoroutineScope()
     var authState by remember { mutableStateOf<AuthState>(AuthState.Success) }
-
     var isGoogleSignInLoading by remember { mutableStateOf(false) }
+
+    val colors = MaterialTheme.colorScheme // Access theme colors
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(black),
+            .background(colors.onBackground),
         contentAlignment = Alignment.Center
     ) {
         Gradient()
@@ -128,12 +115,12 @@ fun LoginScreen(navController: NavController) {
                     modifier = Modifier
                         .weight(1f)
                         .height(1.dp)
-                        .background(Color.White.copy(alpha = 0.2f))
+                        .background(colors.onBackground.copy(alpha = 0.2f))
                 )
 
                 Text(
                     text = "or",
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = colors.onBackground.copy(alpha = 0.7f),
                     modifier = Modifier.padding(horizontal = 10.dp)
                 )
 
@@ -141,7 +128,7 @@ fun LoginScreen(navController: NavController) {
                     modifier = Modifier
                         .weight(1f)
                         .height(1.dp)
-                        .background(Color.White.copy(alpha = 0.2f))
+                        .background(colors.onBackground.copy(alpha = 0.2f))
                 )
             }
 
@@ -150,7 +137,7 @@ fun LoginScreen(navController: NavController) {
             ) {
                 Text(
                     text = "Email",
-                    color = Color.White,
+                    color = colors.onBackground,
                     fontWeight = FontWeight.Bold
                 )
 
@@ -164,15 +151,15 @@ fun LoginScreen(navController: NavController) {
                     placeholder = {
                         Text(
                             text = "john.doe@example.com",
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = colors.onBackground.copy(alpha = 0.7f)
                         )
                     },
                     shape = RoundedCornerShape(10.dp),
                     colors = TextFieldDefaults.colors(
                         unfocusedIndicatorColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
-                        focusedContainerColor = darkGray,
-                        unfocusedContainerColor = darkGray
+                        focusedContainerColor = colors.surface,
+                        unfocusedContainerColor = colors.surface
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -186,7 +173,7 @@ fun LoginScreen(navController: NavController) {
             ) {
                 Text(
                     text = "Password",
-                    color = Color.White,
+                    color = colors.onBackground,
                     fontWeight = FontWeight.Bold
                 )
 
@@ -200,7 +187,7 @@ fun LoginScreen(navController: NavController) {
                     placeholder = {
                         Text(
                             text = "Enter your password",
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = colors.onBackground.copy(alpha = 0.7f)
                         )
                     },
                     visualTransformation = if (passwordVisibility) {
@@ -226,8 +213,8 @@ fun LoginScreen(navController: NavController) {
                     colors = TextFieldDefaults.colors(
                         unfocusedIndicatorColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
-                        focusedContainerColor = darkGray,
-                        unfocusedContainerColor = darkGray
+                        focusedContainerColor = colors.surface,
+                        unfocusedContainerColor = colors.surface
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -257,7 +244,7 @@ fun LoginScreen(navController: NavController) {
                 },
                 enabled = authState != AuthState.Loading,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White
+                    containerColor = colors.primary
                 ),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -265,13 +252,13 @@ fun LoginScreen(navController: NavController) {
                 if (authState == AuthState.Loading) {
                     // Show a loading indicator
                     CircularProgressIndicator(
-                        color = darkTeal,
+                        color = colors.onPrimary,
                         modifier = Modifier.size(24.dp)
                     )
                 } else {
                     Text(
                         text = "Sign In",
-                        color = black,
+                        color = colors.onPrimary,
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
                 }
@@ -299,7 +286,7 @@ fun LoginScreen(navController: NavController) {
                         withStyle(
                             style = SpanStyle(
                                 fontWeight = FontWeight.Light,
-                                color = Color.White.copy(alpha = 0.8f)
+                                color = colors.onBackground.copy(alpha = 0.8f)
                             )
                         ) {
                             append("Don't have an account? ")
@@ -308,7 +295,7 @@ fun LoginScreen(navController: NavController) {
                         withStyle(
                             style = SpanStyle(
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = colors.onBackground
                             )
                         ) {
                             append("Sign Up")
@@ -323,10 +310,12 @@ fun LoginScreen(navController: NavController) {
 
 @Composable
 private fun LoginHeader() {
+    val textColor = MaterialTheme.colorScheme.onBackground
+
     Text(
         text = "Sign In",
         style = MaterialTheme.typography.titleLarge,
-        color = Color.White,
+        color = textColor,
         fontWeight = FontWeight.Bold
     )
 
@@ -335,7 +324,7 @@ private fun LoginHeader() {
     Text(
         text = "Welcome back! Sign in to continue",
         style = MaterialTheme.typography.bodyMedium,
-        color = Color.White
+        color = textColor.copy(alpha = 0.8f)
     )
 }
 
@@ -344,6 +333,9 @@ fun GoogleSignInButton(
     onClick: () -> Unit,
     isLoading: Boolean = false
 ) {
+    val buttonColor = MaterialTheme.colorScheme.primary
+    val textColor = MaterialTheme.colorScheme.onPrimary
+
     OutlinedButton(
         onClick = onClick,
         shape = RoundedCornerShape(10.dp),
@@ -352,7 +344,7 @@ fun GoogleSignInButton(
     ) {
         if (isLoading) {
             CircularProgressIndicator(
-                color = Color.White,
+                color = textColor,
                 modifier = Modifier.size(24.dp)
             )
         } else {
@@ -369,12 +361,13 @@ fun GoogleSignInButton(
 
                 Text(
                     text = "Continue with Google",
-                    color = Color.White,
+                    color = textColor,
                     modifier = Modifier.padding(vertical = 4.dp)
                 )
             }
         }
     }
 }
+
 
 

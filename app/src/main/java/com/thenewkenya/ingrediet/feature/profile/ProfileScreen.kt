@@ -59,9 +59,6 @@ import androidx.navigation.NavController
 import com.thenewkenya.ingrediet.data.model.Profile
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.repository.ProfileRepository
-import com.thenewkenya.ingrediet.ui.theme.black
-import com.thenewkenya.ingrediet.ui.theme.darkGray
-import com.thenewkenya.ingrediet.ui.theme.teal
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,7 +93,7 @@ fun ProfileScreen(navController: NavController) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(black)
+            .background(MaterialTheme.colorScheme.background)
     ) {
         Column(
             modifier = Modifier
@@ -109,7 +106,7 @@ fun ProfileScreen(navController: NavController) {
                     Text(
                         text = "Profile",
                         style = MaterialTheme.typography.titleLarge,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 },
                 navigationIcon = {
@@ -117,41 +114,36 @@ fun ProfileScreen(navController: NavController) {
                         Icon(
                             imageVector = Icons.Default.ArrowBackIosNew,
                             contentDescription = "Back",
-                            tint = Color.White
+                            tint = MaterialTheme.colorScheme.onBackground
                         )
                     }
                 },
                 actions = {
-                    // Show different actions based on edit mode
                     if (isEditMode) {
-                        // Save and Cancel buttons
                         TextButton(
                             onClick = {
                                 isEditMode = false
-                                // Reset to original profile
                                 editableProfile = profile?.copy() ?: Profile()
                             }
                         ) {
-                            Text("Cancel", color = Color.White)
+                            Text("Cancel", color = MaterialTheme.colorScheme.primary)
                         }
 
                         Button(
                             onClick = {
                                 isEditMode = false
                                 profile?.let {
-                                    // Save changes
                                     viewModel.updateProfile(editableProfile)
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = teal)
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
                             Text("Save")
                         }
                     } else {
-                        // Edit button
                         Button(
                             onClick = { isEditMode = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = teal)
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
@@ -166,17 +158,16 @@ fun ProfileScreen(navController: NavController) {
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = black.copy(alpha = 0.9f),
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Edit mode indicator
             if (isEditMode) {
                 Card(
                     colors = CardDefaults.cardColors(
-                        containerColor = teal.copy(alpha = 0.2f)
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -189,12 +180,12 @@ fun ProfileScreen(navController: NavController) {
                         Icon(
                             imageVector = Icons.Default.Edit,
                             contentDescription = null,
-                            tint = teal
+                            tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "You're in edit mode. Make your changes and tap Save.",
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     }
                 }
@@ -202,14 +193,13 @@ fun ProfileScreen(navController: NavController) {
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Main content based on state
             when (profileState) {
                 is ProfileUiState.Loading -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = teal)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 }
 
@@ -222,12 +212,12 @@ fun ProfileScreen(navController: NavController) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "Error: $errorMessage",
-                                color = Color.Red
+                                color = MaterialTheme.colorScheme.error
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Button(
                                 onClick = { viewModel.fetchProfile() },
-                                colors = ButtonDefaults.buttonColors(containerColor = teal)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Text("Retry")
                             }
@@ -253,10 +243,9 @@ fun ProfileScreen(navController: NavController) {
                             }
                         )
                     } ?: run {
-                        // Handle case where profile is null but state is Success
                         Text(
                             text = "No profile data available",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             modifier = Modifier.align(Alignment.CenterHorizontally)
                         )
                     }
@@ -266,6 +255,7 @@ fun ProfileScreen(navController: NavController) {
     }
 }
 
+
 @Composable
 fun ProfileContent(
     profile: Profile,
@@ -274,10 +264,15 @@ fun ProfileContent(
     onSignOut: () -> Unit
 ) {
     val scrollState = rememberScrollState()
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val cardColor = MaterialTheme.colorScheme.surface
+    val textColor = MaterialTheme.colorScheme.onBackground
+    val accentColor = MaterialTheme.colorScheme.primary
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(backgroundColor)
             .verticalScroll(scrollState)
     ) {
         // Profile picture
@@ -291,16 +286,14 @@ fun ProfileContent(
                 modifier = Modifier
                     .size(120.dp)
                     .clip(CircleShape)
-                    .background(darkGray),
+                    .background(cardColor),
                 contentAlignment = Alignment.Center
             ) {
-                // If there's a profile image URL, load it here
-                // For now, use a placeholder icon
                 Icon(
                     imageVector = Icons.Default.Person,
                     contentDescription = "Profile Picture",
                     modifier = Modifier.size(60.dp),
-                    tint = Color.White.copy(alpha = 0.7f)
+                    tint = textColor.copy(alpha = 0.7f)
                 )
             }
 
@@ -312,7 +305,7 @@ fun ProfileContent(
                         .offset(x = (-16).dp, y = (-8).dp)
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(teal)
+                        .background(accentColor)
                         .clickable { /* Handle photo change */ },
                     contentAlignment = Alignment.Center
                 ) {
@@ -331,9 +324,7 @@ fun ProfileContent(
         // Profile information
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = darkGray
-            ),
+            colors = CardDefaults.cardColors(containerColor = cardColor),
             shape = RoundedCornerShape(16.dp)
         ) {
             Column(
@@ -344,37 +335,30 @@ fun ProfileContent(
                 Text(
                     text = "Personal Information",
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = textColor,
                     fontWeight = FontWeight.Bold
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // First Name
                 ProfileTextField(
                     label = "First Name",
                     value = profile.firstName,
-                    onValueChange = {
-                        onProfileValueChange(profile.copy(firstName = it))
-                    },
+                    onValueChange = { onProfileValueChange(profile.copy(firstName = it)) },
                     isEditable = isEditMode
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Last Name
                 ProfileTextField(
                     label = "Last Name",
                     value = profile.lastName,
-                    onValueChange = {
-                        onProfileValueChange(profile.copy(lastName = it))
-                    },
+                    onValueChange = { onProfileValueChange(profile.copy(lastName = it)) },
                     isEditable = isEditMode
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Email (not editable)
                 ProfileTextField(
                     label = "Email",
                     value = profile.email,
@@ -389,9 +373,7 @@ fun ProfileContent(
         // Dietary preferences
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = darkGray
-            ),
+            colors = CardDefaults.cardColors(containerColor = cardColor),
             shape = RoundedCornerShape(16.dp)
         ) {
             Column(
@@ -402,25 +384,21 @@ fun ProfileContent(
                 Text(
                     text = "Diet & Nutrition",
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = textColor,
                     fontWeight = FontWeight.Bold
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Weight Goal
                 ProfileTextField(
                     label = "Weight Goal",
                     value = profile.weightGoal,
-                    onValueChange = {
-                        onProfileValueChange(profile.copy(weightGoal = it))
-                    },
+                    onValueChange = { onProfileValueChange(profile.copy(weightGoal = it)) },
                     isEditable = isEditMode
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Calorie Target
                 ProfileTextField(
                     label = "Daily Calorie Target",
                     value = profile.calorieTarget.toString(),
@@ -432,12 +410,11 @@ fun ProfileContent(
                     keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
                 )
 
-                // Dietary Preferences (could be improved with a multi-select component)
                 if (isEditMode) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "Dietary Preferences (coming soon)",
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = textColor.copy(alpha = 0.7f),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -450,7 +427,7 @@ fun ProfileContent(
         Button(
             onClick = onSignOut,
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.7f))
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -481,10 +458,15 @@ fun ProfileTextField(
     isEditable: Boolean,
     keyboardType: androidx.compose.ui.text.input.KeyboardType = androidx.compose.ui.text.input.KeyboardType.Text
 ) {
+    val textColor = MaterialTheme.colorScheme.onBackground
+    val borderColor = MaterialTheme.colorScheme.primary
+    val placeholderColor = textColor.copy(alpha = 0.3f)
+    val fieldBackground = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
+
     Column {
         Text(
             text = label,
-            color = Color.White.copy(alpha = 0.7f),
+            color = placeholderColor,
             style = MaterialTheme.typography.bodySmall
         )
 
@@ -500,23 +482,20 @@ fun ProfileTextField(
                 colors = OutlinedTextFieldDefaults.colors(
                     unfocusedContainerColor = Color.Transparent,
                     focusedContainerColor = Color.Transparent,
-                    unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
-                    focusedBorderColor = teal
+                    unfocusedBorderColor = placeholderColor,
+                    focusedBorderColor = borderColor
                 ),
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(8.dp),
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.White)
+                textStyle = androidx.compose.ui.text.TextStyle(color = textColor)
             )
         } else {
             Text(
                 text = value.ifEmpty { "Not set" },
-                color = if (value.isEmpty()) Color.White.copy(alpha = 0.3f) else Color.White,
+                color = if (value.isEmpty()) placeholderColor else textColor,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        Color.White.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(8.dp)
-                    )
+                    .background(fieldBackground, shape = RoundedCornerShape(8.dp))
                     .padding(16.dp)
             )
         }

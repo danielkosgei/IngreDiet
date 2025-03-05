@@ -16,6 +16,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 
 class RecipeRepository {
 
@@ -311,46 +312,28 @@ class RecipeRepository {
                     }
 
                     limit(limit.toLong())
-                    order("id", Order.DESCENDING) // false for descending
+                    order("id", Order.DESCENDING)
                 }
                 .decodeList<RecipeListItemDto>()
 
-            Log.d("RecipeRepository", "Found ${recipes.size} recipes matching criteria")
-
-            // Process each recipe and its nutrition separately
-            val results = recipes.map { recipe ->
-                val calories = try {
-                    val nutritionData = supabase.from("recipe_nutrition")
-                        .select(columns = Columns.list("calories")) {
-                            filter { eq("recipe_id", recipe.id) }
-                        }
-                        .decodeList<NutritiondataDto>()
-                        .firstOrNull()
-
-                    nutritionData?.calories ?: 0
-                } catch (e: Exception) {
-                    Log.e("RecipeRepository", "Error fetching nutrition for recipe ${recipe.id}: ${e.message}", e)
-                    0
-                }
-
+            // Map DTOs to domain objects
+            val recipeItems = recipes.map { dto ->
                 RecipeListItem(
-                    id = recipe.id,
-                    name = recipe.name,
-                    imageUrl = recipe.image_url ?: "",
-                    time = "${(recipe.preparation_time ?: 0) + (recipe.cooking_time ?: 0)} min",
-                    calories = calories,
-                    category = recipe.tags?.firstOrNull() ?: ""
+                    id = dto.id,
+                    name = dto.name,
+                    imageUrl = dto.imageUrl,
+                    time = "${dto.preparationTime + dto.cookingTime} min",
+                    calories = 0, // We'll need to fetch this from nutrition facts table
+                    category = dto.tags.firstOrNull() ?: "",
+                    rating = 0f, // Default rating since we don't have it in the database yet
+                    dietaryInfo = emptyList() // Default empty list since we don't have it in the database yet
                 )
             }
-
-            emit(Result.success(results))
+            emit(Result.success(recipeItems))
         } catch (e: Exception) {
-            Log.e("RecipeRepository", "Error fetching recipes", e)
             emit(Result.failure(e))
         }
     }
-
-
 
     // DTO classes for deserialization
     @Serializable
@@ -358,28 +341,31 @@ class RecipeRepository {
         val id: Int,
         val name: String,
         val description: String?,
-        val image_url: String?,
-        val preparation_time: Int?,
-        val cooking_time: Int?,
+        @SerialName("image_url") val image_url: String?,
+        @SerialName("preparation_time") val preparation_time: Int?,
+        @SerialName("cooking_time") val cooking_time: Int?,
         val servings: Int?,
         val difficulty: String?,
         val tags: List<String>?
     )
 
+    @Serializable
     data class RecipeListItem(
         val id: Int,
         val name: String,
         val imageUrl: String,
         val time: String,
         val calories: Int,
-        val category: String
+        val category: String,
+        val rating: Float = 0f,
+        val dietaryInfo: List<String> = emptyList()
     )
 
     @Serializable
     private data class RecipeIngredientDto(
         val id: Int,
-        val recipe_id: Int,
-        val ingredient_id: Int,
+        @SerialName("recipe_id") val recipe_id: Int,
+        @SerialName("ingredient_id") val ingredient_id: Int,
         val quantity: Float,
         val unit: String,
         //val ingredients: IngredientDto
@@ -394,15 +380,15 @@ class RecipeRepository {
     @Serializable
     private data class RecipeInstructionDto(
         val id: Int,
-        val recipe_id: Int,
-        val step_number: Int,
+        @SerialName("recipe_id") val recipe_id: Int,
+        @SerialName("step_number") val step_number: Int,
         val instruction: String
     )
 
     @Serializable
     private data class RecipeNutritionDto(
         val id: Int,
-        val recipe_id: Int,
+        @SerialName("recipe_id") val recipe_id: Int,
         val calories: Int?,
         val protein: Float?,
         val carbs: Float?,
@@ -415,23 +401,23 @@ class RecipeRepository {
     private data class RecipeListItemDto(
         val id: Int,
         val name: String,
-        val image_url: String?,
-        val preparation_time: Int?,
-        val cooking_time: Int?,
-        val difficulty: String?,
-        val tags: List<String>?
+        @SerialName("image_url") val imageUrl: String,
+        @SerialName("preparation_time") val preparationTime: Int,
+        @SerialName("cooking_time") val cookingTime: Int,
+        val difficulty: String,
+        val tags: List<String>
     )
 
     @Serializable
     private data class RecipeNutritionSimpleDto(
-        val recipe_id: Int,
+        @SerialName("recipe_id") val recipe_id: Int,
         val calories: Int
     )
 
     @Serializable
     private data class UserFavoriteDto(
-        val user_id: String,
-        val recipe_id: Int
+        @SerialName("user_id") val user_id: String,
+        @SerialName("recipe_id") val recipe_id: Int
     )
 
     @Serializable

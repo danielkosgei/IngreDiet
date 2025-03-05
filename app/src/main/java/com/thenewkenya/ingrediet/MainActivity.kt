@@ -51,9 +51,7 @@ import com.thenewkenya.ingrediet.feature.navigation.LoadingScreen
 import com.thenewkenya.ingrediet.feature.profile.ProfileScreen
 import com.thenewkenya.ingrediet.feature.recipe.RecipeDetailScreen
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
-import com.thenewkenya.ingrediet.ui.theme.black
-import com.thenewkenya.ingrediet.ui.theme.darkTeal
-import com.thenewkenya.ingrediet.ui.theme.teal
+
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.launch
@@ -176,6 +174,8 @@ fun AppNavigation() {
 
 @Composable
 fun Gradient() {
+    val colors = MaterialTheme.colorScheme
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -183,23 +183,26 @@ fun Gradient() {
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        teal,
-                        darkTeal,
-                        black
+                        colors.primary,
+                        colors.secondary,
+                        colors.background
                     )
                 )
-        )
+            )
     )
 }
+
 
 @Composable
 fun SplashScreen(
     navController: NavHostController? = null,
     isLoading: Boolean = false
 ) {
+    val colors = MaterialTheme.colorScheme // Access current theme colors
+
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = black
+        color = colors.background // Use dynamic background color
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -212,7 +215,7 @@ fun SplashScreen(
                 Text(
                     text = "IngreDiet",
                     style = MaterialTheme.typography.headlineLarge,
-                    color = Color.White,
+                    color = colors.onBackground, // Ensure readability
                     fontWeight = FontWeight.Bold
                 )
 
@@ -223,7 +226,7 @@ fun SplashScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         CircularProgressIndicator(
-                            color = teal,
+                            color = colors.primary, // Use primary color for the loader
                             modifier = Modifier.size(48.dp)
                         )
 
@@ -232,7 +235,7 @@ fun SplashScreen(
                         Text(
                             text = "Restoring session...",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = colors.onBackground.copy(alpha = 0.7f) // Adjusted for readability
                         )
                     }
                 }
