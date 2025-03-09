@@ -112,8 +112,6 @@ import com.thenewkenya.ingrediet.R
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
-import com.thenewkenya.ingrediet.ui.components.BackdropBlur
-import com.thenewkenya.ingrediet.ui.components.FrostedGlassBox
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
