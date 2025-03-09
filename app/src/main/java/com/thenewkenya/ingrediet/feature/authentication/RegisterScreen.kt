@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -110,6 +111,7 @@ fun RegisterScreen(navController: NavController) {
                         .onEach { result ->
                             if (result is AuthResponse.Success) {
                                 Log.d("auth", "Google Success")
+                                Toast.makeText(context, "Google sign-up successful!", Toast.LENGTH_SHORT).show()
                             } else {
                                 Log.e("auth", "Google Error")
                             }
@@ -246,6 +248,7 @@ fun RegisterScreen(navController: NavController) {
                         .onEach { result ->
                             if (result is AuthResponse.Success) {
                                 authState = AuthState.Success
+                                Toast.makeText(context, "Registration successful!", Toast.LENGTH_SHORT).show()
                                 Log.d("auth", "Email Success")
                             } else {
                                 authState = AuthState.Error(AuthErrorCode.InvalidCredentials)

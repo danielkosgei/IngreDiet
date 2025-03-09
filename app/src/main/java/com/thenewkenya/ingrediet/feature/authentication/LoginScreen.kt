@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -135,6 +136,7 @@ fun LoginScreen(navController: NavController) {
                             isGoogleSignInLoading = false
                             if (result is AuthResponse.Success) {
                                 Log.d("auth", "Google Success")
+                                Toast.makeText(context, "Google sign-in successful!", Toast.LENGTH_SHORT).show()
                             } else {
                                 Log.e("auth", "Google Error")
                             }
@@ -298,6 +300,7 @@ fun LoginScreen(navController: NavController) {
                                         authState = AuthState.Success
                                         errorMessage = null
                                         errorType = null
+                                        Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
                                         navController.navigate("home")
                                     }
                                     is AuthResponse.Loading -> {
