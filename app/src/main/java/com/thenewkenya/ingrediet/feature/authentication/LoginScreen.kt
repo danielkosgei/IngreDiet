@@ -29,6 +29,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,17 +57,34 @@ import com.thenewkenya.ingrediet.data.network.supabase
 import io.github.jan.supabase.auth.exception.AuthErrorCode
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+
+enum class LoginError {
+    EMPTY_FIELDS,
+    INVALID_EMAIL,
+    WRONG_PASSWORD,
+    NETWORK_ERROR,
+    TOO_MANY_REQUESTS,
+    UNKNOWN_ERROR
+}
 
 @Composable
 fun LoginScreen(navController: NavController) {
     var emailValue by remember { mutableStateOf("") }
     var passwordValue by remember { mutableStateOf("") }
     var passwordVisibility by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var errorType by remember { mutableStateOf<LoginError?>(null) }
     val context = LocalContext.current
-    val authManager = remember { AuthManager(context) }
+    var authManager by remember { mutableStateOf(AuthManager(context)) }
     val coroutineScope = rememberCoroutineScope()
     var authState by remember { mutableStateOf<AuthState>(AuthState.Success) }
     var isGoogleSignInLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(emailValue, passwordValue) {
+        errorMessage = null
+        errorType = null
+    }
 
     val colors = MaterialTheme.colorScheme // Access theme colors
 
@@ -147,6 +165,7 @@ fun LoginScreen(navController: NavController) {
                     value = emailValue,
                     onValueChange = { newValue ->
                         emailValue = newValue
+                        errorMessage = null // Clear error on input change
                     },
                     placeholder = {
                         Text(
@@ -164,6 +183,15 @@ fun LoginScreen(navController: NavController) {
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage!!,
+                        color = Color.Red,
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .fillMaxWidth()
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -222,32 +250,57 @@ fun LoginScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(35.dp))
 
-            var authState by remember {
-                mutableStateOf<AuthState>(AuthState.Success)
-            }
-
             Button(
                 onClick = {
-                    authState = AuthState.Loading
-                    authManager.signInWithEmail(emailValue, passwordValue)
-                        .onEach { result ->
-                            if (result is AuthResponse.Success) {
-                                authState = AuthState.Success
-                                Log.d("auth", "Email Success")
-                            } else {
-                                authState = AuthState.Error(AuthErrorCode.InvalidCredentials)
-                                Log.e("auth", "Email Error")
+                    if (emailValue.isEmpty() || passwordValue.isEmpty()) {
+                        errorType = LoginError.EMPTY_FIELDS
+                        errorMessage = "Please fill in all fields"
+                    } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(emailValue).matches()) {
+                        errorType = LoginError.INVALID_EMAIL
+                        errorMessage = "Please enter a valid email address"
+                    } else {
+                        authState = AuthState.Loading
+                        authManager.signInWithEmail(emailValue, passwordValue)
+                            .onEach { result ->
+                                when (result) {
+                                    is AuthResponse.Success -> {
+                                        Log.d("auth", "Login success, clearing error message")
+                                        authState = AuthState.Success
+                                        errorMessage = null
+                                        errorType = null
+                                        navController.navigate("home")
+                                    }
+                                    is AuthResponse.Loading -> {
+                                        // Handle loading state if needed
+                                    }
+                                    is AuthResponse.Error -> {
+                                        val error = result.mesasage ?: "Unknown error"
+                                        authState = AuthState.Error(AuthErrorCode.InvalidCredentials)
+                                        errorType = when {
+                                            error.contains("Invalid login credentials", ignoreCase = true) -> LoginError.WRONG_PASSWORD
+                                            error.contains("network", ignoreCase = true) -> LoginError.NETWORK_ERROR
+                                            else -> LoginError.UNKNOWN_ERROR
+                                        }
+                                        errorMessage = when (errorType) {
+                                            LoginError.WRONG_PASSWORD -> "Incorrect email or password. Please try again."
+                                            LoginError.NETWORK_ERROR -> "Network error. Please check your connection."
+                                            else -> "Login failed. Please try again."
+                                        }
+                                    }
+                                }
                             }
-
-                        }
-                        .launchIn(coroutineScope)
+                            .launchIn(coroutineScope)
+                    }
                 },
                 enabled = authState != AuthState.Loading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.primary
+                    containerColor = colors.primary,
+                    contentColor = colors.onPrimary
                 ),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.fillMaxWidth()
+                shape = RoundedCornerShape(10.dp)
             ) {
                 if (authState == AuthState.Loading) {
                     // Show a loading indicator
@@ -262,16 +315,6 @@ fun LoginScreen(navController: NavController) {
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
                 }
-            }
-
-            // Show error message if login fails
-            if (authState is AuthState.Error) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Invalid credentials. Please try again.",
-                    color = Color.Red,
-                    style = MaterialTheme.typography.bodySmall
-                )
             }
 
             Spacer(modifier = Modifier.height(25.dp))
@@ -368,6 +411,3 @@ fun GoogleSignInButton(
         }
     }
 }
-
-
-
