@@ -1,5 +1,8 @@
 package com.thenewkenya.ingrediet.feature.authentication
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
 import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -80,10 +83,27 @@ fun LoginScreen(navController: NavController) {
     val coroutineScope = rememberCoroutineScope()
     var authState by remember { mutableStateOf<AuthState>(AuthState.Success) }
     var isGoogleSignInLoading by remember { mutableStateOf(false) }
+    var isOnline by remember { mutableStateOf(true) }
 
     LaunchedEffect(emailValue, passwordValue) {
         errorMessage = null
         errorType = null
+    }
+
+    LaunchedEffect(Unit) {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val activeNetwork = connectivityManager.activeNetworkInfo
+        isOnline = activeNetwork?.isConnectedOrConnecting == true
+
+        val networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                isOnline = true
+            }
+            override fun onLost(network: Network) {
+                isOnline = false
+            }
+        }
+        connectivityManager.registerDefaultNetworkCallback(networkCallback)
     }
 
     val colors = MaterialTheme.colorScheme // Access theme colors
@@ -250,6 +270,16 @@ fun LoginScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(35.dp))
 
+            if (!isOnline) {
+                Text(
+                    text = "You are offline. Please check your internet connection.",
+                    color = Color.Red,
+                    modifier = Modifier
+                        .padding(bottom = 8.dp)
+                        .fillMaxWidth()
+                )
+            }
+
             Button(
                 onClick = {
                     if (emailValue.isEmpty() || passwordValue.isEmpty()) {
@@ -292,7 +322,7 @@ fun LoginScreen(navController: NavController) {
                             .launchIn(coroutineScope)
                     }
                 },
-                enabled = authState != AuthState.Loading,
+                enabled = isOnline && emailValue.isNotEmpty() && passwordValue.isNotEmpty() && authState != AuthState.Loading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),

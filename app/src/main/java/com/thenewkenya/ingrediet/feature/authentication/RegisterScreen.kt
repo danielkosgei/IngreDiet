@@ -1,5 +1,8 @@
 package com.thenewkenya.ingrediet.feature.authentication
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -26,6 +29,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,20 +53,37 @@ import com.thenewkenya.ingrediet.data.network.AuthResponse
 import com.thenewkenya.ingrediet.data.network.AuthState
 import io.github.jan.supabase.auth.exception.AuthErrorCode
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.onEach
-
 
 @Composable
 fun RegisterScreen(navController: NavController) {
     var emailValue by remember { mutableStateOf("") }
     var passwordValue by remember { mutableStateOf("") }
     var passwordVisibility by remember { mutableStateOf(false) }
+    var isOnline by remember { mutableStateOf(true) }
 
     val context = LocalContext.current
     val authManager = remember { AuthManager(context) }
     val coroutineScope = rememberCoroutineScope()
 
     val colors = MaterialTheme.colorScheme // Access current theme colors
+
+    LaunchedEffect(Unit) {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val activeNetwork = connectivityManager.activeNetworkInfo
+        isOnline = activeNetwork?.isConnectedOrConnecting == true
+
+        val networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                isOnline = true
+            }
+            override fun onLost(network: Network) {
+                isOnline = false
+            }
+        }
+        connectivityManager.registerDefaultNetworkCallback(networkCallback)
+    }
 
     Box(
         modifier = Modifier
@@ -119,6 +140,16 @@ fun RegisterScreen(navController: NavController) {
                         .weight(1f)
                         .height(1.dp)
                         .background(colors.onBackground.copy(alpha = 0.2f))
+                )
+            }
+
+            if (!isOnline) {
+                Text(
+                    text = "You are offline. Please check your internet connection.",
+                    color = Color.Red,
+                    modifier = Modifier
+                        .padding(bottom = 8.dp)
+                        .fillMaxWidth()
                 )
             }
 
@@ -223,7 +254,7 @@ fun RegisterScreen(navController: NavController) {
                         }
                         .launchIn(coroutineScope)
                 },
-                enabled = authState != AuthState.Loading, // Disable button while loading
+                enabled = isOnline && emailValue.isNotEmpty() && passwordValue.isNotEmpty(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = colors.primary // Use dynamic theme color
                 ),
@@ -270,7 +301,6 @@ fun RegisterScreen(navController: NavController) {
         }
     }
 }
-
 
 @Composable
 private fun RegisterHeader() {
