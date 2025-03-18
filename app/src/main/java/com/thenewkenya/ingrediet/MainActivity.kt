@@ -153,10 +153,10 @@ fun AppNavigation() {
             composable("register") { RegisterScreen(navController) }
             composable("home") { HomeScreen(navController) }
             composable("loading") { LoadingScreen() }
-            composable("splash") { SplashScreen(navController) }
+            composable("splash") { SplashScreen() }
             composable("profile") { ProfileScreen(navController) }
 
-            // recipe detail route with parameter
+            // Recipe details route with parameter
             composable(
                 route = "recipe/{recipeId}",
                 arguments = listOf(
@@ -164,7 +164,7 @@ fun AppNavigation() {
                 )
             ) { backStackEntry ->
                 val recipeId = backStackEntry.arguments?.getInt("recipeId") ?: 1
-                RecipeDetailScreen(navController, recipeId)
+                RecipeDetailScreen(navController = navController, recipeId = recipeId)
             }
         }
     }
@@ -195,7 +195,6 @@ fun Gradient() {
 
 @Composable
 fun SplashScreen(
-    navController: NavHostController? = null,
     isLoading: Boolean = false
 ) {
     val colors = MaterialTheme.colorScheme // Access current theme colors

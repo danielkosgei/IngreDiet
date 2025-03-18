@@ -1,9 +1,11 @@
 package com.thenewkenya.ingrediet.feature.navigation
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -58,6 +61,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import com.thenewkenya.ingrediet.feature.components.NutritionItem
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -101,6 +105,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -108,10 +118,13 @@ import androidx.navigation.compose.rememberNavController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import coil3.request.ErrorResult
+import coil3.request.SuccessResult
 import com.thenewkenya.ingrediet.R
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
+
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -138,7 +151,7 @@ data class Category(
 fun HomeScreen(navController: NavController) {
     val context = LocalContext.current
     val authManager = remember { AuthManager(context) }
-    val recipeRepository = remember { RecipeRepository() }
+    val recipeRepository = remember { RecipeRepository(context) }
     val coroutineScope = rememberCoroutineScope()
     val user = supabase.auth.currentUserOrNull()
 
@@ -279,29 +292,128 @@ fun HomeScreen(navController: NavController) {
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Search bar
-                    TextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp)),
-                        placeholder = { Text("Search recipes...") },
-                        leadingIcon = { 
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    // Search bar with suggestions
+                    var tempSearchQuery by remember { mutableStateOf("") }
+                    var showSuggestions by remember { mutableStateOf(false) }
+                    var searchSuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+                    
+                    // Get the current context for repository access
+                    val currentContext = LocalContext.current
+                    
+                    // Function to get search suggestions safely without composable dependencies
+                    suspend fun getSuggestions(appContext: Context, query: String): List<String> {
+                        return try {
+                            val recipeRepo = RecipeRepository(appContext)
+                            recipeRepo.getSearchSuggestions(query)
+                        } catch (e: Exception) {
+                            Log.e("HomeScreen", "Error getting search suggestions: ${e.message}", e)
+                            // Fallback to basic filtering if repository fails
+                            // Include Kenyan foods in the suggestions
+                            val allSuggestions = listOf(
+                                // International foods
+                                "Pasta", "Pizza", "Pancakes", "Chicken", "Beef", "Vegetarian",
+                                "Salad", "Soup", "Breakfast", "Dessert", "Quick meal", "Healthy",
+                                
+                                // Kenyan foods
+                                "Ugali", "Nyama Choma", "Sukuma Wiki", "Githeri", "Pilau", 
+                                "Chapati", "Mandazi", "Mukimo", "Irio", "Matoke", "Bhajia",
+                                "Samosa", "Kachumbari", "Mutura", "Mahindi Choma", "Mahamri",
+                                "Viazi Karai", "Mbaazi", "Uji", "Omena", "Tilapia", "Mursik"
                             )
-                        },
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent
-                        ),
-                        singleLine = true
-                    )
+                            allSuggestions.filter { 
+                                it.contains(query, ignoreCase = true) 
+                            }.take(5)
+                        }
+                    }
+                    
+                    // Effect to update suggestions when search query changes
+                    LaunchedEffect(tempSearchQuery) {
+                        if (tempSearchQuery.length >= 2) {
+                            // Get suggestions from the helper function, passing context explicitly
+                            searchSuggestions = getSuggestions(currentContext, tempSearchQuery)
+                            showSuggestions = searchSuggestions.isNotEmpty()
+                        } else {
+                            searchSuggestions = emptyList()
+                            showSuggestions = false
+                        }
+                    }
+                    
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        TextField(
+                            value = tempSearchQuery,
+                            onValueChange = { tempSearchQuery = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp)),
+                            placeholder = { Text("Search recipes...") },
+                            leadingIcon = { 
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            ),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = {
+                                searchQuery = tempSearchQuery
+                                showSuggestions = false
+                            })
+                        )
+                        
+                        // Suggestions dropdown
+                        if (showSuggestions) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(top = 60.dp) // Position below search field
+                                    .fillMaxWidth()
+                                    .align(Alignment.TopStart)
+                            ) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .shadow(4.dp, RoundedCornerShape(8.dp)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surface
+                                ) {
+                                    Column(modifier = Modifier.heightIn(max = 200.dp)) {
+                                        searchSuggestions.forEach { suggestion ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        tempSearchQuery = suggestion
+                                                        searchQuery = suggestion
+                                                        showSuggestions = false
+                                                    }
+                                                    .padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Search,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Text(
+                                                    text = suggestion,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -410,7 +522,7 @@ fun HomeScreen(navController: NavController) {
 }
 
 @Composable
-private fun SignOutDialog(
+fun SignOutDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -453,43 +565,7 @@ private fun SignOutDialog(
     )
 }
 
-@Composable
-fun NutritionItem(title: String, value: String, target: String, progress: Float) {
-    val colors = MaterialTheme.colorScheme
-    val typography = MaterialTheme.typography
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(80.dp)
-                .padding(8.dp)
-        ) {
-            CircularProgressIndicator(
-                progress = { progress },
-                color = colors.primary,
-                strokeWidth = 4.dp,
-                modifier = Modifier.size(64.dp)
-            )
-            Text(
-                text = value,
-                style = typography.bodyLarge,
-                color = colors.onBackground,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Text(
-            text = title,
-            style = typography.bodySmall,
-            color = colors.onBackground.copy(alpha = 0.7f)
-        )
-        Text(
-            text = "/$target",
-            style = typography.bodySmall,
-            color = colors.onBackground.copy(alpha = 0.5f)
-        )
-    }
-}
 
 @Composable
 fun CategoryItem(
@@ -497,7 +573,7 @@ fun CategoryItem(
     isSelected: Boolean,
     onCategorySelected: (String) -> Unit
 ) {
-    val colors = MaterialTheme.colorScheme
+    val categoryColors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
 
     Box(
@@ -518,13 +594,13 @@ fun CategoryItem(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(colors.onPrimary.copy(alpha = 0.2f)),
+                    .background(categoryColors.onPrimary.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = category.icon,
                     contentDescription = null,
-                    tint = colors.onPrimary
+                    tint = categoryColors.onPrimary
                 )
             }
 
@@ -532,7 +608,7 @@ fun CategoryItem(
 
             Text(
                 text = category.name,
-                color = colors.onPrimary,
+                color = categoryColors.onPrimary,
                 style = typography.bodyMedium,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                 textAlign = TextAlign.Center
@@ -549,7 +625,10 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .height(140.dp)
             .clip(RoundedCornerShape(16.dp))
-            .clickable { navController.navigate("recipe/${recipe.id}") },
+            .clickable {
+                Log.d("RecipeCard", "Navigating to recipe ${recipe.id}")
+                navController.navigate("recipe/${recipe.id}")
+            },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
         ),
@@ -565,15 +644,76 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
                     .width(140.dp)
                     .fillMaxHeight()
             ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(recipe.imageUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    var isLoading by remember { mutableStateOf(true) }
+                    var isError by remember { mutableStateOf(false) }
+                    
+                    if (recipe.imageUrl.isNotEmpty()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(recipe.imageUrl)
+                                .crossfade(true)
+                                .listener(object : ImageRequest.Listener {
+                                    override fun onStart(request: ImageRequest) {
+                                        isLoading = true
+                                    }
+                                    override fun onSuccess(request: ImageRequest, result: SuccessResult) {
+                                        isLoading = false
+                                    }
+                                    override fun onError(request: ImageRequest, result: ErrorResult) {
+                                        isLoading = false
+                                        isError = true
+                                    }
+                                })
+                                .build(),
+                            contentDescription = "Recipe image for ${recipe.name}",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Restaurant,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    
+                    if (isError) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Restaurant,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    
+                    if (isLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(32.dp),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
                 // Gradient overlay
                 Box(
                     modifier = Modifier
@@ -587,33 +727,6 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
                             )
                         )
                 )
-                
-                // Show a sample rating badge
-                Surface(
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .align(Alignment.TopStart),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Star,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = Color.White
-                        )
-                        Text(
-                            text = "4.5",  // Sample rating
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White
-                        )
-                    }
-                }
             }
             
             // Recipe Details
@@ -631,11 +744,13 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 
-                // Category and sample dietary tag
+                // Category and dietary info
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.horizontalScroll(rememberScrollState())
                 ) {
+                    // Category tag
                     Surface(
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
                         shape = RoundedCornerShape(4.dp)
@@ -647,17 +762,20 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     }
-                    // Sample dietary tag
-                    Surface(
-                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
-                        Text(
-                            text = "Vegetarian",  // Sample dietary info
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
+                    
+                    // Display dietary info
+                    recipe.dietaryInfo.take(3).forEach { info ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = info,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
                     }
                 }
                 
@@ -710,13 +828,13 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
 }
 
 @Composable
-private fun NavItem(
+fun NavItem(
     icon: ImageVector,
     label: String,
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val colors = MaterialTheme.colorScheme
+    val navColors = MaterialTheme.colorScheme
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.clickable(onClick = onClick)
@@ -724,14 +842,14 @@ private fun NavItem(
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = if (selected) colors.primary else colors.onSurface.copy(alpha = 0.7f),
+            tint = if (selected) navColors.primary else navColors.onSurface.copy(alpha = 0.7f),
             modifier = Modifier.size(24.dp)
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (selected) colors.primary else colors.onSurface.copy(alpha = 0.7f)
+            color = if (selected) navColors.primary else navColors.onSurface.copy(alpha = 0.7f)
         )
     }
 }

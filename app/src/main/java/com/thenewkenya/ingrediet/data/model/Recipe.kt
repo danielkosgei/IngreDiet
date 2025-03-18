@@ -50,4 +50,20 @@ data class NutritionFacts(
     val vitamins: Map<String, Float> = emptyMap(),
     val minerals: Map<String, Float> = emptyMap(),
     val dailyValuePercentage: Map<String, Int> = emptyMap()
-)
+) {
+    // Calculate progress for each nutrient, ensuring values are between 0 and 1
+    fun getCaloriesProgress(): Float = (calories.toFloat() / 2000).coerceIn(0f, 1f)
+    fun getProteinProgress(): Float = (protein / 50).coerceIn(0f, 1f)
+    fun getCarbsProgress(): Float = (carbs / 300).coerceIn(0f, 1f)
+    fun getFatProgress(): Float = (fat / 65).coerceIn(0f, 1f)
+    fun getFiberProgress(): Float = (fiber?.div(25) ?: 0f).coerceIn(0f, 1f)
+    fun getSugarProgress(): Float = (sugar?.div(25) ?: 0f).coerceIn(0f, 1f)
+    
+    // Format values for display
+    fun getFormattedCalories(): String = calories.toString()
+    fun getFormattedProtein(): String = "${protein.toInt()}g"
+    fun getFormattedCarbs(): String = "${carbs.toInt()}g"
+    fun getFormattedFat(): String = "${fat.toInt()}g"
+    fun getFormattedFiber(): String? = fiber?.let { "${it.toInt()}g" }
+    fun getFormattedSugar(): String? = sugar?.let { "${it.toInt()}g" }
+}

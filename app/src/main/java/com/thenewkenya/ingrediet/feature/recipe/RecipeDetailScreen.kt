@@ -48,6 +48,7 @@ import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import com.thenewkenya.ingrediet.feature.components.NutritionItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -73,12 +74,100 @@ import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
 
+@Composable
+fun IngredientListItem(ingredient: IngredientItem) {
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(
+            checked = false,
+            onCheckedChange = { /* Toggle ingredient checked state */ },
+            colors = CheckboxDefaults.colors(
+                checkedColor = colors.primary,
+                uncheckedColor = colors.onSurface.copy(alpha = 0.6f)
+            )
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Column {
+            Text(
+                text = ingredient.name,
+                style = typography.bodyLarge,
+                color = colors.onSurface
+            )
+
+            Row {
+                Text(
+                    text = "${ingredient.quantity} ${ingredient.unit}",
+                    style = typography.bodyMedium,
+                    color = colors.onSurface.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun InstructionStep(stepNumber: Int, instruction: String) {
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        // Step number circle
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(colors.primary),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = stepNumber.toString(),
+                color = colors.onPrimary,
+                style = typography.bodyLarge,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        // Instruction text
+        Text(
+            text = instruction,
+            style = typography.bodyLarge,
+            color = colors.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun getProgressColor(progress: Float): Color {
+    return when {
+        progress < 0.25f -> MaterialTheme.colorScheme.primary
+        progress < 0.5f -> MaterialTheme.colorScheme.secondary
+        progress < 0.75f -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.error
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecipeDetailScreen(navController: NavController, recipeId: Int) {
-    val recipeRepository = remember { RecipeRepository() }
-    val viewModel = remember { RecipeDetailViewModel(recipeRepository) }
     val context = LocalContext.current
+    val recipeRepository = remember { RecipeRepository(context) }
+    val viewModel = remember { RecipeDetailViewModel(recipeRepository) }
 
     // Load the recipe when the screen is first displayed
     LaunchedEffect(recipeId) {
@@ -296,24 +385,29 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Tags
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        recipe.tags.take(3).forEach { tag ->
-                            SuggestionChip(
-                                onClick = { /* Navigate to tag */ },
-                                label = { Text(tag, color = colors.onPrimary) },
-                                colors = SuggestionChipDefaults.suggestionChipColors(
-                                    containerColor = colors.primary.copy(alpha = 0.7f)
+                    // Additional Tags (excluding category and cuisine type)
+                    val additionalTags = recipe.tags.filter { tag ->
+                        tag != recipe.category && tag != recipe.cuisineType
+                    }
+                    if (additionalTags.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            additionalTags.take(3).forEach { tag ->
+                                SuggestionChip(
+                                    onClick = { /* Navigate to tag */ },
+                                    label = { Text(tag, color = colors.onPrimary) },
+                                    colors = SuggestionChipDefaults.suggestionChipColors(
+                                        containerColor = colors.primary.copy(alpha = 0.7f)
+                                    )
                                 )
-                            )
-                        }
+                            }
 
-                        if (recipe.tags.size > 3) {
-                            Text(
-                                text = "+${recipe.tags.size - 3} more",
-                                color = colors.onSurfaceVariant,
-                                modifier = Modifier.align(Alignment.CenterVertically)
-                            )
+                            if (additionalTags.size > 3) {
+                                Text(
+                                    text = "+${additionalTags.size - 3} more",
+                                    color = colors.onSurfaceVariant,
+                                    modifier = Modifier.align(Alignment.CenterVertically)
+                                )
+                            }
                         }
                     }
                 }
@@ -331,6 +425,7 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Recipe metrics
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -339,6 +434,31 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
                     RecipeMetricItem(Icons.Filled.Fireplace, "Cook Time", "${recipe.cookingTime} min")
                     RecipeMetricItem(Icons.Filled.Person, "Servings", recipe.servings.toString())
                     RecipeMetricItem(Icons.Filled.Stars, "Difficulty", recipe.difficulty)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Category and cuisine type
+                if (recipe.category.isNotEmpty() || recipe.cuisineType.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        if (recipe.category.isNotEmpty()) {
+                            RecipeMetricItem(
+                                icon = Icons.Filled.Restaurant,
+                                label = "Category",
+                                value = recipe.category
+                            )
+                        }
+                        if (recipe.cuisineType.isNotEmpty()) {
+                            RecipeMetricItem(
+                                icon = Icons.Filled.Share,
+                                label = "Cuisine",
+                                value = recipe.cuisineType
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -374,7 +494,7 @@ fun RecipeDetailContent(recipe: DetailedRecipe) {
                         Spacer(modifier = Modifier.height(12.dp))
 
                         recipe.ingredients.forEach { ingredient ->
-                            IngredientItem(ingredient)
+                            IngredientListItem(ingredient)
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 8.dp),
                                 color = colors.onSurface.copy(alpha = 0.1f)
@@ -480,132 +600,84 @@ fun NutritionFactsCard(nutritionFacts: com.thenewkenya.ingrediet.data.model.Nutr
     val cardBackground = MaterialTheme.colorScheme.surfaceVariant
     val textColor = MaterialTheme.colorScheme.onSurface
 
+
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = cardBackground),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                NutritionFactItem("Calories", "${nutritionFacts.calories}", "kcal", textColor)
-                NutritionFactItem("Protein", "${nutritionFacts.protein}", "g", textColor)
-                NutritionFactItem("Carbs", "${nutritionFacts.carbs}", "g", textColor)
-                NutritionFactItem("Fat", "${nutritionFacts.fat}", "g", textColor)
-            }
+            Text(
+                text = "Nutrition Facts",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = textColor
+            )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Optional nutrients (only shown if present)
+            // Display nutrition facts with circular progress indicators
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                nutritionFacts.fiber?.let {
-                    NutritionFactItem("Fiber", "$it", "g", textColor)
-                }
-
-                nutritionFacts.sugar?.let {
-                    NutritionFactItem("Sugar", "$it", "g", textColor)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun NutritionFactItem(label: String, value: String, unit: String, textColor: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyLarge,
-            color = textColor,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "$label ($unit)",
-            style = MaterialTheme.typography.bodySmall,
-            color = textColor.copy(alpha = 0.7f)
-        )
-    }
-}
-
-@Composable
-fun IngredientItem(ingredient: IngredientItem) {
-    val colors = MaterialTheme.colorScheme
-    val typography = MaterialTheme.typography
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Checkbox(
-            checked = false,
-            onCheckedChange = { /* Toggle ingredient checked state */ },
-            colors = CheckboxDefaults.colors(
-                checkedColor = colors.primary,
-                uncheckedColor = colors.onSurface.copy(alpha = 0.6f)
-            )
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        Column {
-            Text(
-                text = ingredient.name,
-                style = typography.bodyLarge,
-                color = colors.onSurface
-            )
-
-            Row {
-                Text(
-                    text = "${ingredient.quantity} ${ingredient.unit}",
-                    style = typography.bodyMedium,
-                    color = colors.onSurface.copy(alpha = 0.7f)
+                NutritionItem(
+                    title = "Calories",
+                    value = nutritionFacts.getFormattedCalories(),
+                    target = "2000",
+                    progress = nutritionFacts.getCaloriesProgress(),
+                    color = getProgressColor(nutritionFacts.getCaloriesProgress())
+                )
+                NutritionItem(
+                    title = "Protein",
+                    value = nutritionFacts.getFormattedProtein(),
+                    target = "50g",
+                    progress = nutritionFacts.getProteinProgress(),
+                    color = getProgressColor(nutritionFacts.getProteinProgress())
+                )
+                NutritionItem(
+                    title = "Carbs",
+                    value = nutritionFacts.getFormattedCarbs(),
+                    target = "300g",
+                    progress = nutritionFacts.getCarbsProgress(),
+                    color = getProgressColor(nutritionFacts.getCarbsProgress())
                 )
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Additional nutrition info
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                NutritionItem(
+                    title = "Fat",
+                    value = nutritionFacts.getFormattedFat(),
+                    target = "65g",
+                    progress = nutritionFacts.getFatProgress(),
+                    color = getProgressColor(nutritionFacts.getFatProgress())
+                )
+                nutritionFacts.getFormattedFiber()?.let { fiberValue ->
+                    NutritionItem(
+                        title = "Fiber",
+                        value = fiberValue,
+                        target = "25g",
+                        progress = nutritionFacts.getFiberProgress(),
+                        color = getProgressColor(nutritionFacts.getFiberProgress())
+                    )
+                }
+                nutritionFacts.getFormattedSugar()?.let { sugarValue ->
+                    NutritionItem(
+                        title = "Sugar",
+                        value = sugarValue,
+                        target = "25g",
+                        progress = nutritionFacts.getSugarProgress(),
+                        color = getProgressColor(nutritionFacts.getSugarProgress())
+                    )
+                }
+            }
         }
-    }
-}
-
-@Composable
-fun InstructionStep(stepNumber: Int, instruction: String) {
-    val colors = MaterialTheme.colorScheme
-    val typography = MaterialTheme.typography
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        // Step number circle
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(colors.primary),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = stepNumber.toString(),
-                color = colors.onPrimary,
-                style = typography.bodyLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        // Instruction text
-        Text(
-            text = instruction,
-            style = typography.bodyLarge,
-            color = colors.onSurface,
-            modifier = Modifier.padding(top = 6.dp)
-        )
     }
 }
