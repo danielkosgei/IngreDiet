@@ -57,7 +57,7 @@ IngreDiet is currently in active alpha development. Core features are being impl
 
 1. Clone the repository
 ```
-git clone https://github.com/username/IngreDiet.git
+git clone https://github.com/danielkosgei/IngreDiet.git
 ```
 
 2. Open the project in Android Studio
