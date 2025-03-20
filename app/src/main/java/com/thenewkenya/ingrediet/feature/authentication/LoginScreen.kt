@@ -273,17 +273,22 @@ fun LoginScreen(navController: NavController) {
                 onClick = {
                     isGoogleSignInLoading = true
                     coroutineScope.launch {
-                        val response = authManager.loginGoogleuser()
-                        isGoogleSignInLoading = false
-                        when (response) {
-                            is AuthResponse.Success -> {
-                                navController.navigate("home") {
-                                    popUpTo("login") { inclusive = true }
+                        authManager.loginGoogleuser().collect { response ->
+                            when (response) {
+                                is AuthResponse.Loading -> {
+                                    // Keep showing loading state
                                 }
-                            }
-                            is AuthResponse.Error -> {
-                                errorMessage = response.message
-                                errorType = LoginError.UNKNOWN_ERROR
+                                is AuthResponse.Success -> {
+                                    isGoogleSignInLoading = false
+                                    navController.navigate("home") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
+                                }
+                                is AuthResponse.Error -> {
+                                    isGoogleSignInLoading = false
+                                    errorMessage = response.message ?: "Failed to sign in with Google"
+                                    errorType = LoginError.UNKNOWN_ERROR
+                                }
                             }
                         }
                     }

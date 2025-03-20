@@ -136,6 +136,11 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
 
 data class Recipe(
     val id: Int,
@@ -153,18 +158,24 @@ data class Category(
     val gradient: Brush
 )
 
+// Define a local composition provider for NavController
+val LocalNavController = staticCompositionLocalOf<NavController> {
+    error("No NavController provided")
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(navController: NavController) {
+fun HomeScreenContent(navController: NavController) {
     val context = LocalContext.current
     val authManager = remember { AuthManager(context) }
     val recipeRepository = remember { RecipeRepository(context) }
     val coroutineScope = rememberCoroutineScope()
     val user = supabase.auth.currentUserOrNull()
+    val focusManager = LocalFocusManager.current
 
     var isSigningOut by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All Recipes") }
-    var selectedNavItem by remember { mutableStateOf(0) }
     var isSearchExpanded by remember { mutableStateOf(false) }
 
     // Recipes state
@@ -211,46 +222,33 @@ fun HomeScreen(navController: NavController) {
         )
     )
 
-    // Navigation items
-    val navItems = listOf(
-        Triple(Icons.Filled.Home, Icons.Outlined.Home, "Home"),
-        Triple(Icons.Filled.RestaurantMenu, Icons.Outlined.RestaurantMenu, "Meal Planner"),
-        Triple(Icons.Filled.Add, Icons.Outlined.Add, "Create"),
-        Triple(Icons.Filled.ShoppingCart, Icons.Outlined.ShoppingCart, "Shopping"),
-        Triple(Icons.Filled.AccountCircle, Icons.Outlined.AccountCircle, "Profile")
-    )
-
     // Fetch recipes when search query or category changes
     LaunchedEffect(searchQuery, selectedCategory) {
         isLoading = true
         errorMessage = null
         
         try {
-            // Create a new coroutine for each collection to prevent cancellation issues
-            val result = recipeRepository.getRecipes(
+            // Use coroutineScope.launch to collect the flow properly
+            recipeRepository.getRecipes(
                 query = searchQuery.takeIf { it.isNotEmpty() },
                 category = selectedCategory.takeIf { it != "All Recipes" }
             ).collect { result ->
-                // Ensure we're still active before updating state
-                if (isActive) {
-                    isLoading = false
-                    result.fold(
-                        onSuccess = { recipesList -> 
-                            recipes = recipesList.sortedByDescending { it.rating }
-                        },
-                        onFailure = { error -> 
-                            errorMessage = error.message ?: "Failed to load recipes" 
-                        }
-                    )
-                }
+                isLoading = false
+                result.fold(
+                    onSuccess = { recipesList -> 
+                        recipes = recipesList.sortedByDescending { it.rating }
+                        Log.d("HomeScreen", "Loaded ${recipes.size} recipes")
+                    },
+                    onFailure = { error -> 
+                        errorMessage = error.message ?: "Failed to load recipes"
+                        Log.e("HomeScreen", "Error loading recipes", error)
+                    }
+                )
             }
         } catch (e: Exception) {
-            // Only update state if the coroutine is still active
-            if (isActive) {
-                isLoading = false
-                errorMessage = e.message ?: "An unexpected error occurred"
-                Log.e("HomeScreen", "Error loading recipes", e)
-            }
+            isLoading = false
+            errorMessage = e.message ?: "An unexpected error occurred"
+            Log.e("HomeScreen", "Error loading recipes", e)
         }
     }
 
@@ -268,417 +266,443 @@ fun HomeScreen(navController: NavController) {
         )
     }
 
-    Scaffold(
-        modifier = Modifier.background(BackgroundColor),
-        bottomBar = {
-            Box(
+    // Provide the navController to the composition
+    CompositionLocalProvider(LocalNavController provides navController) {
+        Box(
+            modifier = Modifier
+                .background(BackgroundColor)
+                .fillMaxSize()
+        ) {
+            LazyColumn(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .background(
-                        colors.surfaceVariant,
-                        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-                    )
+                    .background(BackgroundColor)
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(
+                    top = 24.dp,
+                    start = 0.dp,
+                    end = 0.dp,
+                    bottom = 16.dp
+                )
             ) {
-                NavigationBar(
-                    modifier = Modifier.fillMaxWidth(),
-                    containerColor = Color.Transparent,
-                    tonalElevation = 0.dp
-                ) {
-                    navItems.forEachIndexed { index, (selectedIcon, unselectedIcon, label) ->
-                        NavigationBarItem(
-                            icon = {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = if (selectedNavItem == index) selectedIcon else unselectedIcon,
-                                        contentDescription = label,
-                                        modifier = Modifier.size(24.dp),
-                                        tint = if (selectedNavItem == index) 
-                                            colors.primary
-                                        else colors.onSurfaceVariant
-                                    )
-                                    if (selectedNavItem == index) {
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Box(
-                                            modifier = Modifier
-                                                .size(4.dp)
-                                                .background(
-                                                    colors.primary,
-                                                    CircleShape
-                                                )
-                                        )
-                                    }
-                                }
-                            },
-                            label = null,
-                            selected = selectedNavItem == index,
-                            onClick = {
-                                selectedNavItem = index
-                                when (index) {
-                                    0 -> { /* Home - already on home screen */ }
-                                    1 -> navController.navigate("mealplanner")
-                                    2 -> navController.navigate("create")
-                                    3 -> navController.navigate("shopping")
-                                    4 -> navController.navigate("profile")
-                                }
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = colors.primary,
-                                unselectedIconColor = colors.onSurfaceVariant,
-                                indicatorColor = Color.Transparent
-                            )
+                // Header section
+                item {
+                    HomeHeader(
+                        navController = navController,
+                        userName = user?.email?.substringBefore('@') ?: "Guest",
+                        userPhotoUrl = getUserPhotoUrl(user),
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = { searchQuery = it },
+                        focusManager = focusManager,
+                        colors = colors,
+                        typography = typography
+                    )
+                }
+
+                // Stats Grid
+                item {
+                    StatsGrid(
+                        categories = categories,
+                        AccentGreen = AccentGreen,
+                        CardBackground = CardBackground,
+                        TextPrimary = TextPrimary,
+                        TextSecondary = TextSecondary
+                    )
+                }
+                
+                item {
+                    Spacer(modifier = Modifier.height(32.dp))
+                }
+
+                // Search results section (shown if search query is not empty)
+                if (searchQuery.isNotEmpty()) {
+                    item {
+                        SearchResultsSection(
+                            searchQuery = searchQuery,
+                            isLoading = isLoading,
+                            errorMessage = errorMessage,
+                            recipes = recipes,
+                            colors = colors,
+                            TextPrimary = TextPrimary,
+                            TextSecondary = TextSecondary
                         )
                     }
                 }
-            }
-        }
-    ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .background(BackgroundColor)
-                .padding(paddingValues),
-            contentPadding = PaddingValues(bottom = 16.dp)
-        ) {
-            // Header section
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp)
-                ) {
-                    // Profile section with updated design
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (!isSearchExpanded) {
-                            Column {
-                                Text(
-                                    text = "Hi ${user?.email?.substringBefore('@') ?: "Guest"}!",
-                                    style = typography.titleLarge.copy(
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                    color = colors.onBackground
-                                )
-                                Text(
-                                    text = "Your boards looks so good",
-                                    style = typography.bodyLarge,
-                                    color = colors.onBackground.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
-                        
-                        // Action buttons or Search bar
-                        if (isSearchExpanded) {
-                            // Expanded search bar
-                            TextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp),
-                                placeholder = { Text("Search recipes...") },
-                                leadingIcon = { 
-                                    Icon(
-                                        imageVector = Icons.Filled.Search,
-                                        contentDescription = "Search",
-                                        tint = colors.primary
-                                    )
-                                },
-                                trailingIcon = {
-                                    IconButton(onClick = { 
-                                        isSearchExpanded = false
-                                        searchQuery = ""
-                                    }) {
-                                        Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = "Close Search",
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-                                },
-                                singleLine = true,
-                                shape = RoundedCornerShape(16.dp),
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = colors.surfaceVariant,
-                                    unfocusedContainerColor = colors.surfaceVariant,
-                                    disabledContainerColor = colors.surfaceVariant,
-                                    focusedIndicatorColor = Color.Transparent,
-                                    unfocusedIndicatorColor = Color.Transparent
-                                ),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                keyboardActions = KeyboardActions(
-                                    onSearch = {
-                                        // Just leave the keyboard handling to the system
-                                        // No need to manually dismiss the keyboard
-                                    }
-                                )
-                            )
-                        } else {
-                            // Action buttons
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Search button
-                                IconButton(
-                                    onClick = { isSearchExpanded = true },
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(colors.surfaceVariant)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Search,
-                                        contentDescription = "Search",
-                                        tint = colors.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                                
-                                // Favorites button
-                                IconButton(
-                                    onClick = { navController.navigate("favorites") },
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(colors.surfaceVariant)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Favorite,
-                                        contentDescription = "Favorites",
-                                        tint = colors.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                                
-                                // Profile button
-                                IconButton(
-                                    onClick = { navController.navigate("profile") },
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(colors.surfaceVariant)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.AccountCircle,
-                                        contentDescription = "Profile",
-                                        tint = colors.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Stats Grid
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(categories) { category ->
-                            Card(
-                                modifier = Modifier
-                                    .width(160.dp)
-                                    .height(120.dp),
-                                colors = CardDefaults.cardColors(containerColor = CardBackground),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp),
-                                    verticalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Icon(
-                                        imageVector = category.icon,
-                                        contentDescription = null,
-                                        tint = AccentGreen,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Column {
-                                        Text(
-                                            text = category.name,
-                                            style = MaterialTheme.typography.titleMedium.copy(
-                                                color = TextPrimary,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                        )
-                                        when (category.name) {
-                                            "Calories" -> Text(
-                                                text = "1480 kcal",
-                                                style = MaterialTheme.typography.bodyMedium.copy(
-                                                    color = TextSecondary
-                                                )
-                                            )
-                                            "Water" -> Text(
-                                                text = "1.5L",
-                                                style = MaterialTheme.typography.bodyMedium.copy(
-                                                    color = TextSecondary
-                                                )
-                                            )
-                                            "Sleep" -> Text(
-                                                text = "7.5h",
-                                                style = MaterialTheme.typography.bodyMedium.copy(
-                                                    color = TextSecondary
-                                                )
-                                            )
-                                            "Training" -> Text(
-                                                text = "5500 steps",
-                                                style = MaterialTheme.typography.bodyMedium.copy(
-                                                    color = TextSecondary
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Search results section (shown if search query is not empty)
-                    if (searchQuery.isNotEmpty()) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "Search Results",
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    color = TextPrimary,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                modifier = Modifier.padding(bottom = 16.dp)
-                            )
-                            
-                            if (isLoading) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(200.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(color = colors.primary)
-                                }
-                            } else if (errorMessage != null) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(200.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = errorMessage ?: "Error loading recipes",
-                                        color = colors.error
-                                    )
-                                }
-                            } else if (recipes.isEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(200.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "No recipes found for '$searchQuery'",
-                                        color = TextSecondary
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Today's Meals Section (only shown if not searching)
-                    if (searchQuery.isEmpty()) {
+                
+                // Today's Meals Section (only shown if not searching)
+                if (searchQuery.isEmpty()) {
+                    item {
                         Text(
                             text = "Today's Meals",
                             style = MaterialTheme.typography.titleLarge.copy(
                                 color = TextPrimary,
                                 fontWeight = FontWeight.Bold
                             ),
-                            modifier = Modifier.padding(bottom = 16.dp)
+                            modifier = Modifier
+                                .padding(horizontal = 24.dp)
+                                .padding(bottom = 16.dp)
                         )
+                    }
+                    
+                    // Display the recipes in the LazyColumn
+                    if (isLoading) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = colors.primary)
+                            }
+                        }
+                    } else if (errorMessage != null) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = errorMessage ?: "Unknown error",
+                                    color = colors.error
+                                )
+                            }
+                        }
+                    } else if (recipes.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No recipes available. Try searching for something!",
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                    } else {
+                        items(recipes) { recipe ->
+                            RecipeCard(recipe = recipe, navController = navController)
+                        }
                     }
                 }
             }
+        }
+    }
+}
 
-            // Recipes list with updated design
-            if (searchQuery.isEmpty()) {
-                // Show regular recipe list when not searching
-                items(recipes) { recipe ->
-                    Card(
+private fun getUserPhotoUrl(user: io.github.jan.supabase.auth.user.UserInfo?): String? {
+    if (user == null) return null
+    
+    try {
+        // Approach 1: Direct access with type cast
+        val metadata = user.userMetadata
+        var userPhotoUrl = metadata?.get("avatar_url") as? String
+        
+        // Approach 2: If that fails, try to get it from raw JSON
+        if (userPhotoUrl == null && metadata != null) {
+            val jsonMetadata = metadata.toString()
+            Log.d("UserProfile", "Raw metadata JSON: $jsonMetadata")
+            
+            // Look for avatar_url pattern in the JSON string
+            val regex = "\"avatar_url\"\\s*:\\s*\"([^\"]+)\"".toRegex()
+            val matchResult = regex.find(jsonMetadata)
+            userPhotoUrl = matchResult?.groupValues?.getOrNull(1)
+        }
+        
+        Log.d("UserProfile", "Extracted photo URL: $userPhotoUrl")
+        return userPhotoUrl
+    } catch (e: Exception) {
+        Log.e("UserProfile", "Error extracting profile image URL", e)
+        return null
+    }
+}
+
+@Composable
+private fun HomeHeader(
+    navController: NavController,
+    userName: String,
+    userPhotoUrl: String?,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    focusManager: FocusManager,
+    colors: androidx.compose.material3.ColorScheme,
+    typography: androidx.compose.material3.Typography
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp)
+    ) {
+        // Profile section with updated design
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (userPhotoUrl != null) {
+                    // User avatar
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 8.dp)
-                            .height(80.dp)
-                            .clickable { navController.navigate("recipe/${recipe.id}") },
-                        colors = CardDefaults.cardColors(containerColor = CardBackground),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable { navController.navigate("profile") }
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                // Recipe image
-                                Box(
-                                    modifier = Modifier
-                                        .size(56.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(SurfaceLight)
-                                ) {
-                                    AsyncImage(
-                                        model = recipe.imageUrl,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
-                                // Recipe details
-                                Column {
-                                    Text(
-                                        text = recipe.name,
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            color = TextPrimary,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    )
-                                    Text(
-                                        text = "${recipe.calories} kcal",
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            color = TextSecondary
-                                        )
-                                    )
-                                }
-                            }
-                            // Arrow indicator
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "View Recipe",
-                                tint = AccentGreen,
-                                modifier = Modifier.size(24.dp)
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(userPhotoUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "Profile picture",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                } else {
+                    // Default profile icon
+                    IconButton(
+                        onClick = { navController.navigate("profile") },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(colors.surfaceVariant)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AccountCircle,
+                            contentDescription = "Profile",
+                            tint = colors.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+                
+                Column {
+                    Text(
+                        text = "Hi $userName!",
+                        style = typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = colors.onBackground
+                    )
+                    Text(
+                        text = "Your boards looks so good",
+                        style = typography.bodyLarge,
+                        color = colors.onBackground.copy(alpha = 0.7f)
+                    )
+                }
+            }
+            
+            // Notification icon
+            IconButton(
+                onClick = { /* Handle notifications */ },
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(colors.surfaceVariant)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Notifications,
+                    contentDescription = "Notifications",
+                    tint = colors.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+        
+        // Search bar below profile section
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            placeholder = { Text("Search recipes...") },
+            leadingIcon = { 
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Search"
+                )
+            },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { onSearchQueryChange("") }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear search"
+                        )
+                    }
+                }
+            },
+            shape = RoundedCornerShape(16.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = colors.surfaceVariant,
+                unfocusedContainerColor = colors.surfaceVariant,
+                disabledContainerColor = colors.surfaceVariant,
+                focusedIndicatorColor = colors.primary,
+                unfocusedIndicatorColor = Color.Transparent
+            ),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Search
+            ),
+            keyboardActions = KeyboardActions(
+                onSearch = {
+                    // Handle search action
+                    focusManager.clearFocus()
+                    if (searchQuery.isNotEmpty()) {
+                        navController.navigate("search/$searchQuery")
+                    }
+                }
+            )
+        )
+    }
+}
+
+@Composable
+private fun StatsGrid(
+    categories: List<Category>,
+    AccentGreen: Color,
+    CardBackground: Color,
+    TextPrimary: Color,
+    TextSecondary: Color
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(horizontal = 24.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        items(categories) { category ->
+            Card(
+                modifier = Modifier
+                    .width(160.dp)
+                    .height(120.dp),
+                colors = CardDefaults.cardColors(containerColor = CardBackground),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Icon(
+                        imageVector = category.icon,
+                        contentDescription = null,
+                        tint = AccentGreen,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Column {
+                        Text(
+                            text = category.name,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+                        when (category.name) {
+                            "Calories" -> Text(
+                                text = "1480 kcal",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = TextSecondary
+                                )
+                            )
+                            "Water" -> Text(
+                                text = "1.5L",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = TextSecondary
+                                )
+                            )
+                            "Sleep" -> Text(
+                                text = "7.5h",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = TextSecondary
+                                )
+                            )
+                            "Training" -> Text(
+                                text = "5500 steps",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = TextSecondary
+                                )
                             )
                         }
                     }
                 }
-            } else if (!isLoading && errorMessage == null && recipes.isNotEmpty()) {
-                // Show search results when searching and there are results
-                items(recipes) { recipe ->
-                    RecipeCard(recipe = recipe, navController = navController)
-                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchResultsSection(
+    searchQuery: String,
+    isLoading: Boolean,
+    errorMessage: String?,
+    recipes: List<RecipeRepository.RecipeListItem>,
+    colors: androidx.compose.material3.ColorScheme,
+    TextPrimary: Color,
+    TextSecondary: Color
+) {
+    val navController = LocalNavController.current
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+    ) {
+        Text(
+            text = "Search Results",
+            style = MaterialTheme.typography.titleLarge.copy(
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold
+            ),
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = colors.primary)
+            }
+        } else if (errorMessage != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = errorMessage,
+                    color = colors.error
+                )
+            }
+        } else if (recipes.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No recipes found for '$searchQuery'",
+                    color = TextSecondary
+                )
+            }
+        } else {
+            // Display the found recipes
+            recipes.forEach { recipe ->
+                RecipeCard(recipe = recipe, navController = navController)
             }
         }
     }

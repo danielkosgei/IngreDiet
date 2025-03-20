@@ -2,6 +2,9 @@ package com.thenewkenya.ingrediet.data.network
 
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -12,11 +15,14 @@ import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.providers.builtin.IDToken
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 import java.util.UUID
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 class AuthManager(private val context: Context) {
     private val sessionManager = SessionManager(context)
@@ -178,18 +184,45 @@ class AuthManager(private val context: Context) {
                 .createFrom(result.credential.data)
 
             val googleIdToken = googleIdTokenCredential.idToken
+            
+            // Extract profile information
+            val displayName = googleIdTokenCredential.displayName
+            val profilePictureUrl = googleIdTokenCredential.profilePictureUri?.toString()
+            
+            Log.d("GoogleSignIn", "Got user info - Name: $displayName, Picture: $profilePictureUrl")
 
+            // Sign in with Supabase using the ID token
             supabase.auth.signInWith(IDToken) {
                 idToken = googleIdToken
                 provider = Google
             }
-
+            
+            // Wait briefly for the session to be created
+            kotlinx.coroutines.delay(500)
+            
+            // Save session data
             saveCurrentSession()
+            
+            // Store profile picture URL in user metadata
+            try {
+                val currentUser = supabase.auth.currentUserOrNull()
+                if (currentUser != null && profilePictureUrl != null) {
+                    // Update user metadata with avatar URL
+                    supabase.auth.updateUser {
+                        data = kotlinx.serialization.json.buildJsonObject {
+                            put("avatar_url", profilePictureUrl)
+                        }
+                    }
+                    Log.d("GoogleSignIn", "Updated user metadata with avatar URL")
+                }
+            } catch (e: Exception) {
+                // Non-fatal error, just log it
+                Log.e("GoogleSignIn", "Failed to update user metadata with avatar", e)
+            }
 
             emit(AuthResponse.Success)
         } catch (e: Exception) {
             emit(AuthResponse.Error(e.localizedMessage))
-
         }
     }
 }

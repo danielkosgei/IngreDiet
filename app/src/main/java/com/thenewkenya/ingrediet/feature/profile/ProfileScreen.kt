@@ -1,5 +1,6 @@
 package com.thenewkenya.ingrediet.feature.profile
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -53,13 +54,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
 import com.thenewkenya.ingrediet.data.model.Profile
 import com.thenewkenya.ingrediet.data.network.AuthManager
+import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.data.repository.ProfileRepository
+import io.github.jan.supabase.auth.auth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -218,6 +224,34 @@ fun ProfileContent(
 ) {
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
+    
+    // Get the current user to access metadata
+    val currentUser = supabase.auth.currentUserOrNull()
+    
+    // Try to extract profile picture URL from user metadata
+    var profileImageUrl by remember { mutableStateOf<String?>(null) }
+    
+    LaunchedEffect(currentUser) {
+        try {
+            // Try different approaches to extract the avatar URL
+            val metadata = currentUser?.userMetadata
+            val jsonMetadata = metadata?.toString()
+            
+            // Log the raw metadata for debugging
+            Log.d("ProfileScreen", "Raw metadata: $jsonMetadata")
+            
+            // Try to extract using regex
+            if (jsonMetadata != null) {
+                val regex = "\"avatar_url\"\\s*:\\s*\"([^\"]+)\"".toRegex()
+                val matchResult = regex.find(jsonMetadata)
+                profileImageUrl = matchResult?.groupValues?.getOrNull(1)
+                
+                Log.d("ProfileScreen", "Extracted profile image URL: $profileImageUrl")
+            }
+        } catch (e: Exception) {
+            Log.e("ProfileScreen", "Failed to get profile image URL", e)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -225,7 +259,7 @@ fun ProfileContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // Profile Picture
+        // Profile Picture - Now with AsyncImage if URL is available
         Box(
             modifier = Modifier
                 .size(120.dp)
@@ -233,12 +267,23 @@ fun ProfileContent(
                 .background(colors.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = null,
-                tint = colors.onSurfaceVariant,
-                modifier = Modifier.size(60.dp)
-            )
+            if (profileImageUrl != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(profileImageUrl)
+                        .build(),
+                    contentDescription = "Profile picture",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = colors.onSurfaceVariant,
+                    modifier = Modifier.size(60.dp)
+                )
+            }
         }
 
         // Profile Fields

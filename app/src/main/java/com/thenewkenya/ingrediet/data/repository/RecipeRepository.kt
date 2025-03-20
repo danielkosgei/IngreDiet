@@ -7,6 +7,7 @@ import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.data.model.NutritionFacts
 import com.thenewkenya.ingrediet.data.model.Recipe
 import com.thenewkenya.ingrediet.data.network.CacheManager
+import com.thenewkenya.ingrediet.data.network.SpoonacularCacheService
 import com.thenewkenya.ingrediet.data.network.api.KenyanFoodsService
 import com.thenewkenya.ingrediet.data.network.api.OpenFoodFactsService
 import com.thenewkenya.ingrediet.data.network.api.RecipeService
@@ -29,6 +30,7 @@ class RecipeRepository(context: Context) {
     private val recipeService = RecipeService()
     private val openFoodFactsService = OpenFoodFactsService()
     private val kenyanFoodsService = KenyanFoodsService()
+    private val spoonacularCacheService by lazy { SpoonacularCacheService(context) }
     
     // Schedule periodic cache cleanup
     init {
@@ -158,23 +160,34 @@ class RecipeRepository(context: Context) {
 
             if (recipeList.isEmpty()) {
                 // Not in Supabase, try API
-                Log.d("RecipeRepository", "Recipe not in Supabase, trying API")
-                val apiRecipe = recipeService.getRecipeById(recipeId.toString(), "mealdb")
+                Log.d("RecipeRepository", "Recipe not in Supabase, trying APIs")
                 
-                if (apiRecipe != null) {
-                    Log.d("RecipeRepository", "Found recipe $recipeId in API")
+                // First try SpoonacularCacheService for Spoonacular API
+                val spoonacularRecipe = spoonacularCacheService.getAndCacheRecipeById(recipeId)
+                
+                if (spoonacularRecipe != null) {
+                    Log.d("RecipeRepository", "Found recipe $recipeId in Spoonacular API")
+                    emit(Result.success(spoonacularRecipe))
+                    return@flow
+                }
+                
+                // If not found in Spoonacular, try TheMealDB API
+                val mealDbRecipe = recipeService.getRecipeById(recipeId.toString(), "mealdb")
+                
+                if (mealDbRecipe != null) {
+                    Log.d("RecipeRepository", "Found recipe $recipeId in TheMealDB API")
                     // Cache the recipe
-                    cacheManager.cacheRecipe(apiRecipe)
+                    cacheManager.cacheRecipe(mealDbRecipe)
                     
                     // Optionally store in Supabase for future use
                     try {
-                        storeRecipeInSupabase(apiRecipe)
+                        storeRecipeInSupabase(mealDbRecipe)
                     } catch (e: Exception) {
                         Log.e("RecipeRepository", "Error storing API recipe in Supabase: ${e.message}", e)
                         // Continue even if Supabase storage fails
                     }
                     
-                    emit(Result.success(apiRecipe))
+                    emit(Result.success(mealDbRecipe))
                 } else {
                     emit(Result.failure(Exception("Recipe not found in any source")))
                 }
@@ -312,7 +325,7 @@ class RecipeRepository(context: Context) {
     /**
      * Store a recipe from API in Supabase for future use
      */
-    private suspend fun storeRecipeInSupabase(recipe: DetailedRecipe) {
+    suspend fun storeRecipeInSupabase(recipe: DetailedRecipe) {
         try {
             // Check if user is authenticated
             val currentUser = supabase.auth.currentUserOrNull()
@@ -340,24 +353,38 @@ class RecipeRepository(context: Context) {
             
             // 2. Store ingredients
             recipe.ingredients.forEach { ingredient ->
-                // First ensure the ingredient exists
-                val ingredientDto = IngredientDto(
-                    id = ingredient.id,
-                    name = ingredient.name
-                )
-                
-                supabase.from("ingredients").upsert(ingredientDto)
-                
-                // Then link to recipe
-                val recipeIngredientDto = RecipeIngredientDto(
-                    id = 0, // Will be auto-assigned
-                    recipe_id = recipe.id,
-                    ingredient_id = ingredient.id,
-                    quantity = ingredient.quantity,
-                    unit = ingredient.unit
-                )
-                
-                supabase.from("recipe_ingredients").upsert(recipeIngredientDto)
+                try {
+                    // First ensure the ingredient exists
+                    val ingredientDto = IngredientDto(
+                        id = ingredient.id,
+                        name = ingredient.name
+                    )
+                    
+                    try {
+                        supabase.from("ingredients").upsert(ingredientDto)
+                    } catch (e: Exception) {
+                        // Log but continue - the ingredient might already exist
+                        // or there might be an RLS policy issue
+                        Log.w("RecipeRepository", "Could not insert ingredient ${ingredient.id}: ${e.message}")
+                    }
+                    
+                    // Then link to recipe - this might still work even if the ingredient insert failed
+                    try {
+                        val recipeIngredientDto = RecipeIngredientDto(
+                            id = 0, // Will be auto-assigned
+                            recipe_id = recipe.id,
+                            ingredient_id = ingredient.id,
+                            quantity = ingredient.quantity,
+                            unit = ingredient.unit
+                        )
+                        
+                        supabase.from("recipe_ingredients").upsert(recipeIngredientDto)
+                    } catch (e: Exception) {
+                        Log.e("RecipeRepository", "Error linking ingredient to recipe: ${e.message}")
+                    }
+                } catch (e: Exception) {
+                    Log.e("RecipeRepository", "Error processing ingredient ${ingredient.id}: ${e.message}")
+                }
             }
             
             // 3. Store instructions
@@ -428,25 +455,25 @@ class RecipeRepository(context: Context) {
             
             // Then search in both APIs
             try {
-                val apiResults = recipeService.searchRecipes(query)
-                    .collect { recipes ->
-                        (recipes as? List<com.thenewkenya.ingrediet.data.model.Recipe>)?.forEach { recipe ->
-                            if (results.none { it.id == recipe.id }) {
-                                results.add(recipe.toDetailedRecipe())
-                            }
+                // Use SpoonacularCacheService for Spoonacular API calls
+                spoonacularCacheService.searchAndCacheRecipes(query, 10).collect { recipes ->
+                    recipes.forEach { recipe ->
+                        if (results.none { it.id == recipe.id }) {
+                            results.add(recipe)
                         }
                     }
-                Log.d("RecipeRepository", "Found ${apiResults} recipes from APIs")
+                }
                 
-                // Cache API results
-                (apiResults as? List<com.thenewkenya.ingrediet.data.model.Recipe>)?.forEach { recipe ->
-                    cacheManager.cacheRecipe(recipe.toDetailedRecipe())
-                    
-                    // Only add if not already in results
-                    if (results.none { existingRecipe -> existingRecipe.id == recipe.id }) {
-                        results.add(recipe.toDetailedRecipe())
+                // Still use recipeService for TheMealDB API calls
+                recipeService.searchRecipes(query).collect { recipes ->
+                    (recipes as? List<com.thenewkenya.ingrediet.data.model.Recipe>)?.forEach { recipe ->
+                        if (results.none { it.id == recipe.id }) {
+                            results.add(recipe.toDetailedRecipe())
+                        }
                     }
                 }
+                
+                Log.d("RecipeRepository", "Found ${results.size} recipes from APIs")
             } catch (e: Exception) {
                 Log.e("RecipeRepository", "Error searching APIs: ${e.message}", e)
                 // Continue with existing results even if API search fails
@@ -629,10 +656,30 @@ class RecipeRepository(context: Context) {
                     // Track the initial size before adding API results
                     val initialSize = combinedRecipes.size
                     
-                    // List to store recipes that might need caching
+                    // Store relevant recipes for potential caching
                     val relevantRecipesToCache = mutableListOf<DetailedRecipe>()
                     
-                    // Search both APIs
+                    // Use SpoonacularCacheService for Spoonacular API calls
+                    spoonacularCacheService.searchAndCacheRecipes(apiQuery, limit).collect { recipes ->
+                        recipes.forEach { recipe ->
+                            if (combinedRecipes.none { it.id == recipe.id }) {
+                                combinedRecipes.add(
+                                    RecipeListItem(
+                                        id = recipe.id,
+                                        name = recipe.name,
+                                        imageUrl = recipe.imageUrl,
+                                        time = "${recipe.preparationTime + recipe.cookingTime} min",
+                                        calories = recipe.nutritionFacts.calories,
+                                        category = recipe.tags.firstOrNull() ?: "",
+                                        rating = 4.5f,  // Default rating for API recipes
+                                        dietaryInfo = recipe.tags
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Still use recipeService for TheMealDB API calls
                     recipeService.searchRecipes(apiQuery)
                         .collect { recipes ->
                             // Store relevant recipes for potential caching
@@ -935,4 +982,57 @@ class RecipeRepository(context: Context) {
         @SerialName("user_id") val userId: String,
         @SerialName("recipe_id") val recipeId: Int
     )
+
+    /**
+     * Get random recipes from both APIs and cache them
+     * @param count Number of recipes to fetch
+     * @return Flow of results containing detailed recipe lists
+     */
+    fun getRandomRecipes(count: Int = 10): Flow<Result<List<DetailedRecipe>>> = flow {
+        try {
+            Log.d("RecipeRepository", "Fetching random recipes")
+            val results = mutableListOf<DetailedRecipe>()
+            
+            // Get random recipes from Spoonacular and cache them
+            try {
+                spoonacularCacheService.getAndCacheRandomRecipes(count).collect { recipes ->
+                    results.addAll(recipes)
+                }
+                Log.d("RecipeRepository", "Added ${results.size} random recipes from Spoonacular")
+            } catch (e: Exception) {
+                Log.e("RecipeRepository", "Error fetching random recipes from Spoonacular: ${e.message}", e)
+                // Continue with other sources even if Spoonacular fails
+            }
+            
+            // Get random recipes from TheMealDB
+            try {
+                // Use the getRandomRecipes API in RecipeService that invokes MealDB's random meal endpoint
+                recipeService.getRandomRecipes(count/2).collect { recipes ->
+                    for (recipe in recipes) {
+                        if (results.none { it.id == recipe.id }) {
+                            results.add(recipe)
+                            // Cache locally
+                            cacheManager.cacheRecipe(recipe)
+                            // Store in Supabase
+                            try {
+                                storeRecipeInSupabase(recipe)
+                            } catch (e: Exception) {
+                                Log.e("RecipeRepository", "Error storing random recipe in Supabase: ${e.message}", e)
+                                // Continue even if Supabase storage fails
+                            }
+                        }
+                    }
+                }
+                Log.d("RecipeRepository", "Added random recipes from TheMealDB")
+            } catch (e: Exception) {
+                Log.e("RecipeRepository", "Error fetching random recipes from TheMealDB: ${e.message}", e)
+                // Continue with existing results even if TheMealDB fails
+            }
+            
+            emit(Result.success(results.take(count)))
+        } catch (e: Exception) {
+            Log.e("RecipeRepository", "Error in getRandomRecipes: ${e.message}", e)
+            emit(Result.failure(e))
+        }
+    }
 }

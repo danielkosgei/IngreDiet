@@ -2,10 +2,12 @@ package com.thenewkenya.ingrediet
 
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -13,9 +15,27 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.RestaurantMenu
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Favorite
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.RestaurantMenu
+import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +54,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -43,10 +65,11 @@ import androidx.navigation.navArgument
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.LocalSupabase
 import com.thenewkenya.ingrediet.data.network.SessionManager
+import com.thenewkenya.ingrediet.data.network.SpoonacularCacheService
 import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.feature.authentication.LoginScreen
 import com.thenewkenya.ingrediet.feature.authentication.RegisterScreen
-import com.thenewkenya.ingrediet.feature.navigation.HomeScreen
+import com.thenewkenya.ingrediet.feature.navigation.HomeScreenContent
 import com.thenewkenya.ingrediet.feature.navigation.LoadingScreen
 import com.thenewkenya.ingrediet.feature.profile.ProfileScreen
 import com.thenewkenya.ingrediet.feature.recipe.RecipeDetailScreen
@@ -56,27 +79,41 @@ import com.thenewkenya.ingrediet.feature.mealplanner.MealPlannerScreen
 import com.thenewkenya.ingrediet.feature.create.CreateRecipeScreen
 import com.thenewkenya.ingrediet.feature.shopping.ShoppingListScreen
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
+import com.thenewkenya.ingrediet.data.repository.RecipeRepository
 
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
+import androidx.navigation.compose.currentBackStackEntryAsState
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Enable edge-to-edge display
         enableEdgeToEdge()
-
+        
+        // Make system bars (status and navigation) draw over our app
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        
         val sessionManager = SessionManager(applicationContext)
+        val authManager = AuthManager(applicationContext)
+        val spoonacularCacheService = SpoonacularCacheService(applicationContext)
+        
+        // Preload a few recipes in the background
+        preloadRecipes()
+        
         setContent {
             IngreDietTheme {
-                // Surface container using the background color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     CompositionLocalProvider(
                         LocalSupabase provides supabase,
-                        LocalSessionManager provides sessionManager
+                        LocalSessionManager provides sessionManager,
+                        LocalAuthManager provides authManager,
+                        LocalSpoonacularCacheService provides spoonacularCacheService
                     ) {
                         AppNavigation()
                     }
@@ -84,12 +121,48 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
+    
+    /**
+     * Preload a few random recipes to ensure we always have content available
+     * This runs in the background and doesn't block app startup
+     */
+    private fun preloadRecipes() {
+        // Start a background thread to avoid blocking the main thread
+        Thread {
+            try {
+                val recipeRepository = RecipeRepository(applicationContext)
+                
+                // Run in a coroutine context
+                kotlinx.coroutines.runBlocking {
+                    // Get 10 random recipes instead of 5
+                    recipeRepository.getRandomRecipes(10).collect { result ->
+                        result.onSuccess { recipes ->
+                            Log.d("MainActivity", "Preloaded ${recipes.size} recipes")
+                        }
+                        result.onFailure { error ->
+                            Log.e("MainActivity", "Error preloading recipes", error)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error preloading recipes", e)
+            }
+        }.start()
+    }
 }
 
 val LocalSessionManager = staticCompositionLocalOf<SessionManager> {
     error("No SessionManager provided")
 }
+
+val LocalAuthManager = staticCompositionLocalOf<AuthManager> {
+    error("No AuthManager provided")
+}
+
+val LocalSpoonacularCacheService = staticCompositionLocalOf<SpoonacularCacheService> {
+    error("No SpoonacularCacheService provided")
+}
+
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
@@ -98,7 +171,7 @@ fun AppNavigation() {
     var isInitializing by remember { mutableStateOf(true) }
     val context = LocalContext.current
     val sessionManager = LocalSessionManager.current
-    val authManager = remember { AuthManager(context) }
+    val authManager = LocalAuthManager.current
     val supabase = LocalSupabase.current
 
     // Check for session directly from SharedPreferences
@@ -153,44 +226,162 @@ fun AppNavigation() {
     if (isInitializing) {
         SplashScreen(isLoading = true)
     } else {
-        NavHost(navController = navController, startDestination = startDestination) {
-            composable("login") { LoginScreen(navController) }
-            composable("register") { RegisterScreen(navController) }
-            composable("home") { HomeScreen(navController) }
-            composable("loading") { LoadingScreen() }
-            composable("splash") { SplashScreen() }
-            composable("profile") { ProfileScreen(navController) }
-            composable("search") { SearchScreen(navController) }
-            composable("favorites") { FavoritesScreen(navController) }
-            composable("mealplanner") { MealPlannerScreen(navController) }
-            composable("create") { CreateRecipeScreen(navController) }
-            composable("shopping") { ShoppingListScreen(navController) }
-
-            // Recipe details route with parameter
-            composable(
-                route = "recipe/{recipeId}",
-                arguments = listOf(
-                    navArgument("recipeId") { type = NavType.IntType }
+        val isMainRoute = remember { mutableStateOf(false) }
+        val currentRoute = currentRoute(navController)
+        
+        // Check if current route is a main route that should show the bottom nav
+        val mainRoutes = listOf("home", "mealplanner", "create", "shopping", "favorites")
+        isMainRoute.value = mainRoutes.contains(currentRoute)
+        
+        // Selected nav item based on current route
+        val selectedNavItem = when (currentRoute) {
+            "home" -> 0
+            "mealplanner" -> 1
+            "create" -> 2
+            "shopping" -> 3
+            "favorites" -> 4
+            else -> 0
+        }
+        
+        Scaffold(
+            bottomBar = {
+                if (isMainRoute.value) {
+                    MainBottomNavigation(navController, selectedNavItem)
+                }
+            }
+        ) { innerPadding ->
+            NavHost(
+                navController = navController, 
+                startDestination = startDestination,
+                modifier = Modifier.padding(
+                    bottom = if (isMainRoute.value) innerPadding.calculateBottomPadding() else 0.dp
                 )
-            ) { backStackEntry ->
-                val recipeId = backStackEntry.arguments?.getInt("recipeId") ?: 1
-                val context = LocalContext.current
-                val viewModel = remember { 
-                    com.thenewkenya.ingrediet.feature.recipe.RecipeDetailViewModel(
-                        com.thenewkenya.ingrediet.data.repository.RecipeRepository(context)
+            ) {
+                composable("login") { LoginScreen(navController) }
+                composable("register") { RegisterScreen(navController) }
+                composable("home") { HomeScreenContent(navController) }
+                composable("loading") { LoadingScreen() }
+                composable("splash") { SplashScreen() }
+                composable("profile") { ProfileScreen(navController) }
+                composable("search") { SearchScreen(navController) }
+                composable("favorites") { FavoritesScreen(navController) }
+                composable("mealplanner") { MealPlannerScreen(navController) }
+                composable("create") { CreateRecipeScreen(navController) }
+                composable("shopping") { ShoppingListScreen(navController) }
+
+                // Recipe details route with parameter
+                composable(
+                    route = "recipe/{recipeId}",
+                    arguments = listOf(
+                        navArgument("recipeId") { type = NavType.IntType }
+                    )
+                ) { backStackEntry ->
+                    val recipeId = backStackEntry.arguments?.getInt("recipeId") ?: 1
+                    val context = LocalContext.current
+                    val viewModel = remember { 
+                        com.thenewkenya.ingrediet.feature.recipe.RecipeDetailViewModel(
+                            com.thenewkenya.ingrediet.data.repository.RecipeRepository(context)
+                        )
+                    }
+                    RecipeDetailScreen(
+                        navController = navController, 
+                        recipeId = recipeId, 
+                        viewModel = viewModel
                     )
                 }
-                RecipeDetailScreen(
-                    navController = navController, 
-                    recipeId = recipeId, 
-                    viewModel = viewModel
+            }
+        }
+    }
+}
+
+@Composable
+fun MainBottomNavigation(navController: NavController, selectedIndex: Int) {
+    val colors = MaterialTheme.colorScheme
+    
+    // Navigation items
+    val navItems = listOf(
+        Triple(Icons.Filled.Home, Icons.Outlined.Home, "Home"),
+        Triple(Icons.Filled.RestaurantMenu, Icons.Outlined.RestaurantMenu, "Meal Planner"),
+        Triple(Icons.Filled.Add, Icons.Outlined.Add, "Create"),
+        Triple(Icons.Filled.ShoppingCart, Icons.Outlined.ShoppingCart, "Shopping"),
+        Triple(Icons.Filled.Favorite, Icons.Outlined.Favorite, "Favorites")
+    )
+    
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.surfaceVariant)
+    ) {
+        NavigationBar(
+            modifier = Modifier.fillMaxWidth(),
+            containerColor = Color.Transparent,
+            tonalElevation = 0.dp
+        ) {
+            navItems.forEachIndexed { index, (selectedIcon, unselectedIcon, label) ->
+                NavigationBarItem(
+                    icon = {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = if (selectedIndex == index) selectedIcon else unselectedIcon,
+                                contentDescription = label,
+                                modifier = Modifier.size(24.dp),
+                                tint = if (selectedIndex == index) 
+                                    colors.primary
+                                else colors.onSurfaceVariant
+                            )
+                            if (selectedIndex == index) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(4.dp)
+                                        .background(
+                                            colors.primary,
+                                            CircleShape
+                                        )
+                                )
+                            }
+                        }
+                    },
+                    label = null,
+                    selected = selectedIndex == index,
+                    onClick = {
+                        when (index) {
+                            0 -> navController.navigate("home") {
+                                popUpTo("home") { inclusive = true }
+                            }
+                            1 -> navController.navigate("mealplanner") {
+                                popUpTo("home")
+                            }
+                            2 -> navController.navigate("create") {
+                                popUpTo("home")
+                            }
+                            3 -> navController.navigate("shopping") {
+                                popUpTo("home")
+                            }
+                            4 -> navController.navigate("favorites") {
+                                popUpTo("home")
+                            }
+                        }
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = colors.primary,
+                        unselectedIconColor = colors.onSurfaceVariant,
+                        indicatorColor = Color.Transparent
+                    )
                 )
             }
         }
     }
 }
 
-
+@Composable
+fun currentRoute(navController: NavController): String {
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    return navBackStackEntry?.destination?.route ?: ""
+}
 
 @Composable
 fun Gradient() {
@@ -211,7 +402,6 @@ fun Gradient() {
             )
     )
 }
-
 
 @Composable
 fun SplashScreen(
