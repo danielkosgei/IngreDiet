@@ -21,8 +21,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ArrowBackIosNew
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -64,36 +65,38 @@ import com.thenewkenya.ingrediet.data.repository.ProfileRepository
 @Composable
 fun ProfileScreen(navController: NavController) {
     val context = LocalContext.current
-    val authManager = remember { AuthManager(context) }
-    val profileRepository = remember { ProfileRepository() }
-
-    // Create ViewModel
-    val viewModel = remember { ProfileViewModel(profileRepository, authManager) }
-
-    val profileState by viewModel.uiState.collectAsState()
-    val profile by viewModel.profile.collectAsState()
-
-    var isEditMode by remember { mutableStateOf(false) }
-
-    // Local editable state for the profile
-    var editableProfile by remember(profile) {
-        mutableStateOf(profile?.copy() ?: Profile())
+    val viewModel = remember { 
+        ProfileViewModel(
+            ProfileRepository(),
+            AuthManager(context)
+        ) 
     }
+    val uiState by viewModel.uiState.collectAsState()
+    var isEditMode by remember { mutableStateOf(false) }
+    var editableProfile by remember { mutableStateOf<Profile?>(null) }
+    var profile by remember { mutableStateOf<Profile?>(null) }
 
-    // Only fetch profile once when the screen is first composed
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+
     LaunchedEffect(Unit) {
         viewModel.fetchProfile()
     }
 
-    // Reset editable profile when profile changes
-    LaunchedEffect(profile) {
-        editableProfile = profile?.copy() ?: Profile()
+    LaunchedEffect(uiState) {
+        when (uiState) {
+            is ProfileUiState.Success -> {
+                profile = (uiState as ProfileUiState.Success).profile
+                editableProfile = profile
+            }
+            else -> {}
+        }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(colors.background)
     ) {
         Column(
             modifier = Modifier
@@ -105,8 +108,8 @@ fun ProfileScreen(navController: NavController) {
                 title = {
                     Text(
                         text = "Profile",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onBackground
+                        style = typography.titleLarge,
+                        color = colors.onBackground
                     )
                 },
                 navigationIcon = {
@@ -114,110 +117,68 @@ fun ProfileScreen(navController: NavController) {
                         Icon(
                             imageVector = Icons.Default.ArrowBackIosNew,
                             contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onBackground
+                            tint = colors.onBackground
                         )
                     }
                 },
                 actions = {
-                    if (isEditMode) {
-                        TextButton(
-                            onClick = {
-                                isEditMode = false
-                                editableProfile = profile?.copy() ?: Profile()
+                    IconButton(
+                        onClick = {
+                            if (isEditMode) {
+                                editableProfile?.let { viewModel.updateProfile(it) }
                             }
-                        ) {
-                            Text("Cancel", color = MaterialTheme.colorScheme.primary)
+                            isEditMode = !isEditMode
                         }
-
-                        Button(
-                            onClick = {
-                                isEditMode = false
-                                profile?.let {
-                                    viewModel.updateProfile(editableProfile)
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                        ) {
-                            Text("Save")
-                        }
-                    } else {
-                        Button(
-                            onClick = { isEditMode = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Edit Profile")
-                            }
-                        }
+                    ) {
+                        Icon(
+                            imageVector = if (isEditMode) Icons.Default.Check else Icons.Default.Edit,
+                            contentDescription = if (isEditMode) "Save" else "Edit",
+                            tint = colors.onBackground
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    containerColor = Color.Transparent
                 )
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (isEditMode) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp, horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "You're in edit mode. Make your changes and tap Save.",
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            when (profileState) {
+            when (uiState) {
                 is ProfileUiState.Loading -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        CircularProgressIndicator(
+                            color = colors.primary
+                        )
                     }
                 }
 
                 is ProfileUiState.Error -> {
-                    val errorMessage = (profileState as ProfileUiState.Error).message
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "Error: $errorMessage",
-                                color = MaterialTheme.colorScheme.error
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Error,
+                                contentDescription = null,
+                                tint = colors.error,
+                                modifier = Modifier.size(48.dp)
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = (uiState as ProfileUiState.Error).message,
+                                style = typography.bodyLarge,
+                                color = colors.error
+                            )
                             Button(
                                 onClick = { viewModel.fetchProfile() },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colors.primary
+                                )
                             ) {
                                 Text("Retry")
                             }
@@ -226,35 +187,27 @@ fun ProfileScreen(navController: NavController) {
                 }
 
                 is ProfileUiState.Success -> {
-                    profile?.let {
-                        ProfileContent(
-                            profile = if (isEditMode) editableProfile else it,
-                            isEditMode = isEditMode,
-                            onProfileValueChange = { updatedProfile ->
-                                if (isEditMode) {
-                                    editableProfile = updatedProfile
-                                }
-                            },
-                            onSignOut = {
-                                viewModel.signOut()
-                                navController.navigate("login") {
-                                    popUpTo("home") { inclusive = true }
-                                }
+                    val currentProfile = (uiState as ProfileUiState.Success).profile
+                    ProfileContent(
+                        profile = currentProfile,
+                        isEditMode = isEditMode,
+                        onProfileValueChange = { updatedProfile ->
+                            if (isEditMode) {
+                                editableProfile = updatedProfile
                             }
-                        )
-                    } ?: run {
-                        Text(
-                            text = "No profile data available",
-                            color = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.align(Alignment.CenterHorizontally)
-                        )
-                    }
+                        },
+                        onSignOut = {
+                            viewModel.signOut()
+                            navController.navigate("login") {
+                                popUpTo("home") { inclusive = true }
+                            }
+                        }
+                    )
                 }
             }
         }
     }
 }
-
 
 @Composable
 fun ProfileContent(
@@ -263,171 +216,62 @@ fun ProfileContent(
     onProfileValueChange: (Profile) -> Unit,
     onSignOut: () -> Unit
 ) {
-    val scrollState = rememberScrollState()
-    val backgroundColor = MaterialTheme.colorScheme.background
-    val cardColor = MaterialTheme.colorScheme.surface
-    val textColor = MaterialTheme.colorScheme.onBackground
-    val accentColor = MaterialTheme.colorScheme.primary
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(backgroundColor)
-            .verticalScroll(scrollState)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // Profile picture
+        // Profile Picture
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp),
+                .size(120.dp)
+                .clip(CircleShape)
+                .background(colors.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(120.dp)
-                    .clip(CircleShape)
-                    .background(cardColor),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "Profile Picture",
-                    modifier = Modifier.size(60.dp),
-                    tint = textColor.copy(alpha = 0.7f)
-                )
-            }
-
-            // Add photo option when in edit mode
-            if (isEditMode) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = (-16).dp, y = (-8).dp)
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(accentColor)
-                        .clickable { /* Handle photo change */ },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Change Photo",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+            Icon(
+                imageVector = Icons.Default.Person,
+                contentDescription = null,
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier.size(60.dp)
+            )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        // Profile Fields
+        ProfileTextField(
+            label = "First Name",
+            value = profile.firstName,
+            onValueChange = { onProfileValueChange(profile.copy(firstName = it)) },
+            isEditable = isEditMode
+        )
 
-        // Profile information
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = cardColor),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = "Personal Information",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = textColor,
-                    fontWeight = FontWeight.Bold
-                )
+        ProfileTextField(
+            label = "Last Name",
+            value = profile.lastName,
+            onValueChange = { onProfileValueChange(profile.copy(lastName = it)) },
+            isEditable = isEditMode
+        )
 
-                Spacer(modifier = Modifier.height(16.dp))
+        ProfileTextField(
+            label = "Email",
+            value = profile.email,
+            onValueChange = { onProfileValueChange(profile.copy(email = it)) },
+            isEditable = isEditMode
+        )
 
-                ProfileTextField(
-                    label = "First Name",
-                    value = profile.firstName,
-                    onValueChange = { onProfileValueChange(profile.copy(firstName = it)) },
-                    isEditable = isEditMode
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                ProfileTextField(
-                    label = "Last Name",
-                    value = profile.lastName,
-                    onValueChange = { onProfileValueChange(profile.copy(lastName = it)) },
-                    isEditable = isEditMode
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                ProfileTextField(
-                    label = "Email",
-                    value = profile.email,
-                    onValueChange = { },
-                    isEditable = false
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Dietary preferences
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = cardColor),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = "Diet & Nutrition",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = textColor,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                ProfileTextField(
-                    label = "Weight Goal",
-                    value = profile.weightGoal,
-                    onValueChange = { onProfileValueChange(profile.copy(weightGoal = it)) },
-                    isEditable = isEditMode
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                ProfileTextField(
-                    label = "Daily Calorie Target",
-                    value = profile.calorieTarget.toString(),
-                    onValueChange = {
-                        val value = it.toIntOrNull() ?: 0
-                        onProfileValueChange(profile.copy(calorieTarget = value))
-                    },
-                    isEditable = isEditMode,
-                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                )
-
-                if (isEditMode) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Dietary Preferences (coming soon)",
-                        color = textColor.copy(alpha = 0.7f),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.weight(1f))
 
         // Sign Out Button
         Button(
             onClick = onSignOut,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            colors = ButtonDefaults.buttonColors(
+                containerColor = colors.error
+            ),
+            modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -441,7 +285,7 @@ fun ProfileContent(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Sign Out",
-                    style = MaterialTheme.typography.bodyLarge
+                    style = typography.bodyLarge
                 )
             }
         }
@@ -458,16 +302,14 @@ fun ProfileTextField(
     isEditable: Boolean,
     keyboardType: androidx.compose.ui.text.input.KeyboardType = androidx.compose.ui.text.input.KeyboardType.Text
 ) {
-    val textColor = MaterialTheme.colorScheme.onBackground
-    val borderColor = MaterialTheme.colorScheme.primary
-    val placeholderColor = textColor.copy(alpha = 0.3f)
-    val fieldBackground = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
 
     Column {
         Text(
             text = label,
-            color = placeholderColor,
-            style = MaterialTheme.typography.bodySmall
+            color = colors.onBackground.copy(alpha = 0.7f),
+            style = typography.bodySmall
         )
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -480,22 +322,23 @@ fun ProfileTextField(
                     keyboardType = keyboardType
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedBorderColor = placeholderColor,
-                    focusedBorderColor = borderColor
+                    unfocusedContainerColor = colors.surfaceVariant,
+                    focusedContainerColor = colors.surfaceVariant,
+                    unfocusedBorderColor = colors.onSurfaceVariant,
+                    focusedBorderColor = colors.primary
                 ),
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(8.dp),
-                textStyle = androidx.compose.ui.text.TextStyle(color = textColor)
+                textStyle = typography.bodyLarge.copy(color = colors.onBackground)
             )
         } else {
             Text(
                 text = value.ifEmpty { "Not set" },
-                color = if (value.isEmpty()) placeholderColor else textColor,
+                color = if (value.isEmpty()) colors.onBackground.copy(alpha = 0.3f) else colors.onBackground,
+                style = typography.bodyLarge,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(fieldBackground, shape = RoundedCornerShape(8.dp))
+                    .background(colors.surfaceVariant.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
                     .padding(16.dp)
             )
         }

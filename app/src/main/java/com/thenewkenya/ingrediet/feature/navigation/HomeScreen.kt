@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.WaterDrop
@@ -52,7 +53,9 @@ import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.RestaurantMenu
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -111,6 +114,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -158,6 +162,7 @@ fun HomeScreen(navController: NavController) {
     var isSigningOut by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All Recipes") }
+    var selectedNavItem by remember { mutableStateOf(0) }
 
     // Recipes state
     var recipes by remember { mutableStateOf<List<RecipeRepository.RecipeListItem>>(emptyList()) }
@@ -165,49 +170,51 @@ fun HomeScreen(navController: NavController) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
 
-    val GradientStart = colors.primary
-    val GradientEnd = colors.primaryContainer
-    val AccentBlue = Color(0xFF8E2DE2)
-    val AccentGreen = Color(0xFF56ab2f)
-    val AccentYellow = Color(0xFFf7dc6f)
-    val AccentRed = Color(0xFFff3d71)
-    val Primary = colors.primary
-    val Secondary = colors.secondary
-    val Tertiary = colors.tertiary
+    // Remove hardcoded colors and use theme colors
+    val BackgroundColor = colors.background
+    val AccentGreen = colors.primary
+    val CardBackground = colors.surface
+    val TextPrimary = colors.onBackground
+    val TextSecondary = colors.onBackground.copy(alpha = 0.7f)
+    val SurfaceLight = colors.surfaceVariant
 
-    // Define categories
+    // Categories with updated design using theme colors
     val categories = listOf(
         Category(
             1,
-            "All Recipes",
-            Icons.Filled.RestaurantMenu,
-            Brush.horizontalGradient(listOf(GradientStart, GradientEnd))
+            "Calories",
+            Icons.Filled.LocalDining,
+            Brush.verticalGradient(listOf(colors.primary.copy(alpha = 0.1f), colors.primary.copy(alpha = 0.05f)))
         ),
         Category(
             2,
-            "Fitness",
-            Icons.Filled.FitnessCenter,
-            Brush.horizontalGradient(listOf(AccentBlue, Primary))
+            "Water",
+            Icons.Filled.WaterDrop,
+            Brush.verticalGradient(listOf(colors.primary.copy(alpha = 0.1f), colors.primary.copy(alpha = 0.05f)))
         ),
         Category(
             3,
-            "Vegetarian",
-            Icons.Filled.Eco,
-            Brush.horizontalGradient(listOf(AccentGreen, Primary))
+            "Sleep",
+            Icons.Filled.Timer,
+            Brush.verticalGradient(listOf(colors.primary.copy(alpha = 0.1f), colors.primary.copy(alpha = 0.05f)))
         ),
         Category(
             4,
-            "Quick & Easy",
-            Icons.Filled.Timer,
-            Brush.horizontalGradient(listOf(AccentYellow, Secondary))
-        ),
-        Category(
-            5,
-            "Trending",
-            Icons.Filled.Whatshot,
-            Brush.horizontalGradient(listOf(AccentRed, Tertiary))
+            "Training",
+            Icons.Filled.FitnessCenter,
+            Brush.verticalGradient(listOf(colors.primary.copy(alpha = 0.1f), colors.primary.copy(alpha = 0.05f)))
         )
+    )
+
+    // Navigation items
+    val navItems = listOf(
+        Triple(Icons.Filled.Home, Icons.Outlined.Home, "Home"),
+        Triple(Icons.Filled.RestaurantMenu, Icons.Outlined.RestaurantMenu, "Meal Planner"),
+        Triple(Icons.Filled.Add, Icons.Outlined.Add, "Create"),
+        Triple(Icons.Filled.ShoppingCart, Icons.Outlined.ShoppingCart, "Shopping"),
+        Triple(Icons.Filled.AccountCircle, Icons.Outlined.AccountCircle, "Profile")
     )
 
     // Fetch recipes when search query or category changes
@@ -249,19 +256,88 @@ fun HomeScreen(navController: NavController) {
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Main content
+    Scaffold(
+        modifier = Modifier.background(BackgroundColor),
+        bottomBar = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .background(
+                        colors.surfaceVariant,
+                        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                    )
+            ) {
+                NavigationBar(
+                    modifier = Modifier.fillMaxWidth(),
+                    containerColor = Color.Transparent,
+                    tonalElevation = 0.dp
+                ) {
+                    navItems.forEachIndexed { index, (selectedIcon, unselectedIcon, label) ->
+                        NavigationBarItem(
+                            icon = {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (selectedNavItem == index) selectedIcon else unselectedIcon,
+                                        contentDescription = label,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = if (selectedNavItem == index) 
+                                            colors.primary
+                                        else colors.onSurfaceVariant
+                                    )
+                                    if (selectedNavItem == index) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(4.dp)
+                                                .background(
+                                                    colors.primary,
+                                                    CircleShape
+                                                )
+                                        )
+                                    }
+                                }
+                            },
+                            label = null,
+                            selected = selectedNavItem == index,
+                            onClick = {
+                                selectedNavItem = index
+                                when (index) {
+                                    0 -> { /* Home - already on home screen */ }
+                                    1 -> navController.navigate("mealplanner")
+                                    2 -> navController.navigate("create")
+                                    3 -> navController.navigate("shopping")
+                                    4 -> navController.navigate("profile")
+                                }
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = colors.primary,
+                                unselectedIconColor = colors.onSurfaceVariant,
+                                indicatorColor = Color.Transparent
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    ) { paddingValues ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .background(BackgroundColor)
+                .padding(paddingValues),
+            contentPadding = PaddingValues(bottom = 16.dp)
         ) {
             // Header section
             item {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .padding(24.dp)
                 ) {
-                    // Profile section
+                    // Profile section with updated design
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -269,145 +345,95 @@ fun HomeScreen(navController: NavController) {
                     ) {
                         Column {
                             Text(
-                                text = "Hello,",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = user?.email?.substringBefore('@') ?: "Guest",
-                                style = MaterialTheme.typography.headlineMedium.copy(
+                                text = "Hi ${user?.email?.substringBefore('@') ?: "Guest"}!",
+                                style = typography.titleLarge.copy(
                                     fontWeight = FontWeight.Bold
                                 ),
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = colors.onBackground
+                            )
+                            Text(
+                                text = "Your boards looks so good",
+                                style = typography.bodyLarge,
+                                color = colors.onBackground.copy(alpha = 0.7f)
                             )
                         }
-                        IconButton(onClick = { /* Handle notification click */ }) {
-                            Icon(
-                                imageVector = Icons.Filled.Notifications,
-                                contentDescription = "Notifications",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Search bar with suggestions
-                    var tempSearchQuery by remember { mutableStateOf("") }
-                    var showSuggestions by remember { mutableStateOf(false) }
-                    var searchSuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
-                    
-                    // Get the current context for repository access
-                    val currentContext = LocalContext.current
-                    
-                    // Function to get search suggestions safely without composable dependencies
-                    suspend fun getSuggestions(appContext: Context, query: String): List<String> {
-                        return try {
-                            val recipeRepo = RecipeRepository(appContext)
-                            recipeRepo.getSearchSuggestions(query)
-                        } catch (e: Exception) {
-                            Log.e("HomeScreen", "Error getting search suggestions: ${e.message}", e)
-                            // Fallback to basic filtering if repository fails
-                            // Include Kenyan foods in the suggestions
-                            val allSuggestions = listOf(
-                                // International foods
-                                "Pasta", "Pizza", "Pancakes", "Chicken", "Beef", "Vegetarian",
-                                "Salad", "Soup", "Breakfast", "Dessert", "Quick meal", "Healthy",
-                                
-                                // Kenyan foods
-                                "Ugali", "Nyama Choma", "Sukuma Wiki", "Githeri", "Pilau", 
-                                "Chapati", "Mandazi", "Mukimo", "Irio", "Matoke", "Bhajia",
-                                "Samosa", "Kachumbari", "Mutura", "Mahindi Choma", "Mahamri",
-                                "Viazi Karai", "Mbaazi", "Uji", "Omena", "Tilapia", "Mursik"
-                            )
-                            allSuggestions.filter { 
-                                it.contains(query, ignoreCase = true) 
-                            }.take(5)
-                        }
-                    }
-                    
-                    // Effect to update suggestions when search query changes
-                    LaunchedEffect(tempSearchQuery) {
-                        if (tempSearchQuery.length >= 2) {
-                            // Get suggestions from the helper function, passing context explicitly
-                            searchSuggestions = getSuggestions(currentContext, tempSearchQuery)
-                            showSuggestions = searchSuggestions.isNotEmpty()
-                        } else {
-                            searchSuggestions = emptyList()
-                            showSuggestions = false
-                        }
-                    }
-                    
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        TextField(
-                            value = tempSearchQuery,
-                            onValueChange = { tempSearchQuery = it },
+                        // Circular profile image
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp)),
-                            placeholder = { Text("Search recipes...") },
-                            leadingIcon = { 
-                                Icon(
-                                    imageVector = Icons.Default.Search,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent
-                            ),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            keyboardActions = KeyboardActions(onSearch = {
-                                searchQuery = tempSearchQuery
-                                showSuggestions = false
-                            })
-                        )
-                        
-                        // Suggestions dropdown
-                        if (showSuggestions) {
-                            Box(
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(colors.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AccountCircle,
+                                contentDescription = "Profile",
+                                tint = colors.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    // Stats Grid
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(categories) { category ->
+                            Card(
                                 modifier = Modifier
-                                    .padding(top = 60.dp) // Position below search field
-                                    .fillMaxWidth()
-                                    .align(Alignment.TopStart)
+                                    .width(160.dp)
+                                    .height(120.dp),
+                                colors = CardDefaults.cardColors(containerColor = CardBackground),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                             ) {
-                                Surface(
+                                Column(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .shadow(4.dp, RoundedCornerShape(8.dp)),
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.surface
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Column(modifier = Modifier.heightIn(max = 200.dp)) {
-                                        searchSuggestions.forEach { suggestion ->
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable {
-                                                        tempSearchQuery = suggestion
-                                                        searchQuery = suggestion
-                                                        showSuggestions = false
-                                                    }
-                                                    .padding(16.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Search,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.size(16.dp)
+                                    Icon(
+                                        imageVector = category.icon,
+                                        contentDescription = null,
+                                        tint = AccentGreen,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = category.name,
+                                            style = MaterialTheme.typography.titleMedium.copy(
+                                                color = TextPrimary,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        )
+                                        when (category.name) {
+                                            "Calories" -> Text(
+                                                text = "1480 kcal",
+                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                    color = TextSecondary
                                                 )
-                                                Spacer(modifier = Modifier.width(12.dp))
-                                                Text(
-                                                    text = suggestion,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            "Water" -> Text(
+                                                text = "1.5L",
+                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                    color = TextSecondary
                                                 )
-                                            }
+                                            )
+                                            "Sleep" -> Text(
+                                                text = "7.5h",
+                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                    color = TextSecondary
+                                                )
+                                            )
+                                            "Training" -> Text(
+                                                text = "5500 steps",
+                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                    color = TextSecondary
+                                                )
+                                            )
                                         }
                                     }
                                 }
@@ -415,106 +441,81 @@ fun HomeScreen(navController: NavController) {
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
 
-                    // Categories
+                    // Today's Meals Section
                     Text(
-                        text = "Categories",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = "Today's Meals",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        modifier = Modifier.padding(bottom = 16.dp)
                     )
                 }
             }
 
-            // Categories list
-            item {
-                LazyRow(
+            // Recipes list with updated design
+            items(recipes) { recipe ->
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(horizontal = 24.dp, vertical = 8.dp)
+                        .height(80.dp)
+                        .clickable { navController.navigate("recipe/${recipe.id}") },
+                    colors = CardDefaults.cardColors(containerColor = CardBackground),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
-                    items(categories) { category ->
-                        CategoryItem(
-                            category = category,
-                            isSelected = category.name == selectedCategory,
-                            onCategorySelected = { selectedCategory = it }
-                        )
-                    }
-                }
-            }
-
-            // Recipes grid
-            if (isLoading) {
-                item {
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
+                            .fillMaxSize()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CircularProgressIndicator(
-                            color = MaterialTheme.colorScheme.primary
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Recipe image
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(SurfaceLight)
+                            ) {
+                                AsyncImage(
+                                    model = recipe.imageUrl,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            // Recipe details
+                            Column {
+                                Text(
+                                    text = recipe.name,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                )
+                                Text(
+                                    text = "${recipe.calories} kcal",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        color = TextSecondary
+                                    )
+                                )
+                            }
+                        }
+                        // Arrow indicator
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "View Recipe",
+                            tint = AccentGreen,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
-                }
-            } else if (errorMessage != null) {
-                item {
-                    Text(
-                        text = errorMessage ?: "An error occurred",
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
-            } else {
-                items(recipes) { recipe ->
-                    RecipeCard(recipe = recipe, navController = navController)
-                }
-            }
-        }
-
-        // Updated navigation bar to be more distinguishing
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp) // Adjusted padding
-                .navigationBarsPadding()
-                .background(MaterialTheme.colorScheme.tertiary .copy(alpha = 1f), shape = RoundedCornerShape(16.dp)) // Slightly darker earthy tone
-                .clickable(enabled = false) {} // Prevent click-through
-                .height(60.dp), // Set a moderate height for the Row
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            listOf(
-                Icons.Outlined.Home to "Home",
-                Icons.Outlined.FitnessCenter to "Fitness",
-                Icons.Outlined.Notifications to "Notifications",
-                Icons.Outlined.AccountCircle to "Profile"
-            ).forEachIndexed { index, (icon, label) ->
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) { 
-                            if (index == 3) navController.navigate("profile") 
-                        }
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = label,
-                        modifier = Modifier.size(24.dp), // Updated icon size
-                        tint = Color.White // Set icon color to white
-                    )
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White // Set text color to white
-                    )
                 }
             }
         }
@@ -564,8 +565,6 @@ fun SignOutDialog(
         tonalElevation = 8.dp
     )
 }
-
-
 
 @Composable
 fun CategoryItem(
@@ -630,9 +629,9 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
                 navController.navigate("recipe/${recipe.id}")
             },
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxSize(),
@@ -733,7 +732,7 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(vertical = 12.dp)
+                    .padding(vertical = 12.dp, horizontal = 4.dp)
             ) {
                 Text(
                     text = recipe.name,
@@ -752,7 +751,7 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
                 ) {
                     // Category tag
                     Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Text(
@@ -766,7 +765,7 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
                     // Display dietary info
                     recipe.dietaryInfo.take(3).forEach { info ->
                         Surface(
-                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
                             shape = RoundedCornerShape(4.dp)
                         ) {
                             Text(
@@ -824,33 +823,6 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
                 }
             }
         }
-    }
-}
-
-@Composable
-fun NavItem(
-    icon: ImageVector,
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val navColors = MaterialTheme.colorScheme
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (selected) navColors.primary else navColors.onSurface.copy(alpha = 0.7f),
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (selected) navColors.primary else navColors.onSurface.copy(alpha = 0.7f)
-        )
     }
 }
 

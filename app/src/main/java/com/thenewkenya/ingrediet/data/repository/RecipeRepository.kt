@@ -5,28 +5,28 @@ import android.util.Log
 import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.data.model.NutritionFacts
+import com.thenewkenya.ingrediet.data.model.Recipe
 import com.thenewkenya.ingrediet.data.network.CacheManager
 import com.thenewkenya.ingrediet.data.network.api.KenyanFoodsService
 import com.thenewkenya.ingrediet.data.network.api.OpenFoodFactsService
-import com.thenewkenya.ingrediet.data.network.api.TheMealDbService
+import com.thenewkenya.ingrediet.data.network.api.RecipeService
 import com.thenewkenya.ingrediet.data.network.supabase
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
-import io.github.jan.supabase.postgrest.query.filter.PostgrestFilterBuilder
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
+import kotlin.collections.*
 import java.util.concurrent.TimeUnit
 
 class RecipeRepository(context: Context) {
     private val cacheManager = CacheManager(context)
-    private val mealDbService = TheMealDbService()
+    private val recipeService = RecipeService()
     private val openFoodFactsService = OpenFoodFactsService()
     private val kenyanFoodsService = KenyanFoodsService()
     
@@ -159,7 +159,7 @@ class RecipeRepository(context: Context) {
             if (recipeList.isEmpty()) {
                 // Not in Supabase, try API
                 Log.d("RecipeRepository", "Recipe not in Supabase, trying API")
-                val apiRecipe = mealDbService.getMealById(recipeId.toString())
+                val apiRecipe = recipeService.getRecipeById(recipeId.toString(), "mealdb")
                 
                 if (apiRecipe != null) {
                     Log.d("RecipeRepository", "Found recipe $recipeId in API")
@@ -253,13 +253,13 @@ class RecipeRepository(context: Context) {
 
             // 6. Check favorite status
             val isFavorite = try {
-                val currentUser = supabase.auth.currentUserOrNull()?.id
+                val currentUser = supabase.auth.currentUserOrNull()
                 if (currentUser != null) {
                     // Use the proper DTO class for deserialization
                     val favoritesList = supabase.from("user_favorites")
                         .select(columns = Columns.list("id")) {
                             filter {
-                                eq("user_id", currentUser)
+                                eq("user_id", currentUser.id)
                                 eq("recipe_id", recipeId)
                             }
                         }
@@ -426,22 +426,29 @@ class RecipeRepository(context: Context) {
                 // Continue with API search even if Supabase search fails
             }
             
-            // Then search in TheMealDB API
+            // Then search in both APIs
             try {
-                val apiResults = mealDbService.searchMealsByName(query)
-                Log.d("RecipeRepository", "Found ${apiResults.size} recipes in API")
+                val apiResults = recipeService.searchRecipes(query)
+                    .collect { recipes ->
+                        (recipes as? List<com.thenewkenya.ingrediet.data.model.Recipe>)?.forEach { recipe ->
+                            if (results.none { it.id == recipe.id }) {
+                                results.add(recipe.toDetailedRecipe())
+                            }
+                        }
+                    }
+                Log.d("RecipeRepository", "Found ${apiResults} recipes from APIs")
                 
                 // Cache API results
-                apiResults.forEach { recipe ->
-                    cacheManager.cacheRecipe(recipe)
+                (apiResults as? List<com.thenewkenya.ingrediet.data.model.Recipe>)?.forEach { recipe ->
+                    cacheManager.cacheRecipe(recipe.toDetailedRecipe())
                     
                     // Only add if not already in results
-                    if (results.none { it.id == recipe.id }) {
-                        results.add(recipe)
+                    if (results.none { existingRecipe -> existingRecipe.id == recipe.id }) {
+                        results.add(recipe.toDetailedRecipe())
                     }
                 }
             } catch (e: Exception) {
-                Log.e("RecipeRepository", "Error searching API: ${e.message}", e)
+                Log.e("RecipeRepository", "Error searching APIs: ${e.message}", e)
                 // Continue with existing results even if API search fails
             }
             
@@ -619,52 +626,55 @@ class RecipeRepository(context: Context) {
                     Log.d("RecipeRepository", "Fetching recipes from API")
                     val apiQuery = query ?: ""  // Use empty string if query is null
                     
-                    // Search TheMealDB API
-                    val apiRecipes = mealDbService.searchMealsByName(apiQuery)
-                    Log.d("RecipeRepository", "Found ${apiRecipes.size} recipes from TheMealDB API")
+                    // Track the initial size before adding API results
+                    val initialSize = combinedRecipes.size
                     
-                    // Convert API recipes to RecipeListItems
-                    val apiRecipeItems = apiRecipes.map { recipe ->
-                        RecipeListItem(
-                            id = recipe.id,
-                            name = recipe.name,
-                            imageUrl = recipe.imageUrl,
-                            time = "${recipe.preparationTime + recipe.cookingTime} min",
-                            calories = recipe.nutritionFacts.calories,
-                            category = recipe.tags.firstOrNull() ?: "",
-                            rating = 4.5f,  // Default rating for API recipes
-                            dietaryInfo = recipe.tags
-                        )
-                    }
+                    // List to store recipes that might need caching
+                    val relevantRecipesToCache = mutableListOf<DetailedRecipe>()
                     
-                    // Filter out duplicates (recipes that are already in the list from Supabase)
-                    val newApiRecipes = apiRecipeItems.filter { apiRecipe ->
-                        combinedRecipes.none { it.id == apiRecipe.id }
-                    }
-                    
-                    // Add new API recipes to the combined list
-                    combinedRecipes.addAll(newApiRecipes)
-                    apiRecipesCount = newApiRecipes.size
-                    Log.d("RecipeRepository", "Added $apiRecipesCount new recipes from API")
-                    
-                    // Cache the first few recipes immediately if they match the search query closely
-                    // This improves user experience for future searches
-                    if (!query.isNullOrEmpty() && apiRecipes.isNotEmpty()) {
-                        val recipesToCache = apiRecipes.take(3).filter { recipe ->
-                            recipe.name.contains(query, ignoreCase = true)
+                    // Search both APIs
+                    recipeService.searchRecipes(apiQuery)
+                        .collect { recipes ->
+                            // Store relevant recipes for potential caching
+                            if (!query.isNullOrEmpty()) {
+                                relevantRecipesToCache.addAll(recipes.filter { recipe ->
+                                    recipe.name.contains(query, ignoreCase = true)
+                                })
+                            }
+                            
+                            recipes.forEach { recipe ->
+                                if (combinedRecipes.none { it.id == recipe.id }) {
+                                    combinedRecipes.add(
+                                        RecipeListItem(
+                                            id = recipe.id,
+                                            name = recipe.name,
+                                            imageUrl = recipe.imageUrl,
+                                            time = "${recipe.preparationTime + recipe.cookingTime} min",
+                                            calories = recipe.nutritionFacts.calories,
+                                            category = recipe.tags.firstOrNull() ?: "",
+                                            rating = 4.5f,  // Default rating for API recipes
+                                            dietaryInfo = recipe.tags
+                                        )
+                                    )
+                                }
+                            }
                         }
+                    
+                    val apiRecipesCount = combinedRecipes.size - initialSize
+                    Log.d("RecipeRepository", "Added $apiRecipesCount new recipes from APIs")
+                    
+                    // Cache the first few recipes if we have any that match the search query
+                    if (!query.isNullOrEmpty() && relevantRecipesToCache.isNotEmpty()) {
+                        val recipesToCache = relevantRecipesToCache.take(3)
+                        Log.d("RecipeRepository", "Found ${recipesToCache.size} highly relevant recipes to cache")
                         
-                        if (recipesToCache.isNotEmpty()) {
-                            Log.d("RecipeRepository", "Found ${recipesToCache.size} highly relevant recipes to cache")
-                            
-                            // Mark these recipes for caching when accessed
-                            // We'll store the recipe IDs to prioritize caching when they're viewed
-                            val recipeIds = recipesToCache.map { it.id }
-                            Log.d("RecipeRepository", "Marked recipe IDs for priority caching: $recipeIds")
-                            
-                            // The actual caching will happen when the recipe details are accessed
-                            // This avoids suspension function calls in this flow context
-                        }
+                        // Mark these recipes for caching when accessed
+                        // We'll store the recipe IDs to prioritize caching when they're viewed
+                        val recipeIds = recipesToCache.map { recipe -> recipe.id }
+                        Log.d("RecipeRepository", "Marked recipe IDs for priority caching: $recipeIds")
+                        
+                        // The actual caching will happen when the recipe details are accessed
+                        // This avoids suspension function calls in this flow context
                     }
                 } catch (e: Exception) {
                     Log.e("RecipeRepository", "Error fetching from API: ${e.message}", e)
@@ -828,8 +838,7 @@ class RecipeRepository(context: Context) {
             // If we still have fewer than 5 suggestions, try the international API
             if (suggestions.size < 5) {
                 try {
-                    val apiResults = mealDbService.searchMealsByName(query)
-                    // API results are already DetailedRecipe objects, so we need to extract the name
+                    val apiResults = recipeService.searchRecipes(query).first()
                     val apiSuggestions = apiResults.map { it.name }.take(5 - suggestions.size)
                     suggestions.addAll(apiSuggestions)
                 } catch (e: Exception) {
@@ -854,4 +863,76 @@ class RecipeRepository(context: Context) {
             return emptyList()
         }
     }
+
+    suspend fun getFavoriteRecipes(): List<DetailedRecipe> {
+        try {
+            // Get the current user
+            val currentUser = supabase.auth.currentUserOrNull()
+            if (currentUser == null) {
+                Log.d("RecipeRepository", "No user logged in, returning empty favorites list")
+                return emptyList()
+            }
+
+            // Fetch favorite recipes from Supabase
+            val favoriteRecipes = supabase.from("user_favorites")
+                .select() {
+                    filter { eq("user_id", currentUser.id) }
+                }
+                .decodeList<FavoriteRecipeDto>()
+
+            // Get the full recipe details for each favorite
+            return favoriteRecipes.mapNotNull { favorite ->
+                getRecipeDetails(favorite.recipeId).first().getOrNull()
+            }
+        } catch (e: Exception) {
+            Log.e("RecipeRepository", "Error fetching favorite recipes: ${e.message}", e)
+            return emptyList()
+        }
+    }
+
+    suspend fun addToFavorites(recipeId: Int) {
+        try {
+            val currentUser = supabase.auth.currentUserOrNull()
+            if (currentUser == null) {
+                Log.d("RecipeRepository", "Cannot add to favorites - no user logged in")
+                return
+            }
+
+            supabase.from("user_favorites")
+                .insert(FavoriteRecipeDto(
+                    id = 0, // Will be auto-assigned
+                    userId = currentUser.id,
+                    recipeId = recipeId
+                ))
+        } catch (e: Exception) {
+            Log.e("RecipeRepository", "Error adding recipe to favorites: ${e.message}", e)
+        }
+    }
+
+    suspend fun removeFromFavorites(recipeId: Int) {
+        try {
+            val currentUser = supabase.auth.currentUserOrNull()
+            if (currentUser == null) {
+                Log.d("RecipeRepository", "Cannot remove from favorites - no user logged in")
+                return
+            }
+
+            supabase.from("user_favorites")
+                .delete {
+                    filter {
+                        eq("user_id", currentUser.id)
+                        eq("recipe_id", recipeId)
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e("RecipeRepository", "Error removing recipe from favorites: ${e.message}", e)
+        }
+    }
+
+    @Serializable
+    private data class FavoriteRecipeDto(
+        val id: Int,
+        @SerialName("user_id") val userId: String,
+        @SerialName("recipe_id") val recipeId: Int
+    )
 }

@@ -24,7 +24,31 @@ data class DetailedRecipe(
     val dateAdded: String = "",
     val cuisineType: String = "",
     val dietaryInfo: List<String> = emptyList() // e.g., "Vegetarian", "Gluten-Free", etc.
-)
+) {
+    fun toRecipe(): Recipe {
+        return Recipe(
+            id = this.id,
+            name = this.name,
+            description = this.description,
+            imageUrl = this.imageUrl,
+            preparationTime = this.preparationTime,
+            cookingTime = this.cookingTime,
+            servings = this.servings,
+            difficulty = this.difficulty,
+            ingredients = this.ingredients,
+            instructions = this.instructions,
+            nutritionFacts = this.nutritionFacts,
+            tags = this.tags,
+            isFavorite = this.isFavorite,
+            rating = this.rating,
+            category = this.category,
+            author = this.author,
+            dateAdded = this.dateAdded,
+            cuisineType = this.cuisineType,
+            dietaryInfo = this.dietaryInfo
+        )
+    }
+}
 
 @Serializable
 data class IngredientItem(
@@ -66,4 +90,51 @@ data class NutritionFacts(
     fun getFormattedFat(): String = "${fat.toInt()}g"
     fun getFormattedFiber(): String? = fiber?.let { "${it.toInt()}g" }
     fun getFormattedSugar(): String? = sugar?.let { "${it.toInt()}g" }
+}
+
+@Serializable
+data class Recipe(
+    val id: Int,
+    val name: String,
+    val description: String,
+    val imageUrl: String,
+    val preparationTime: Int, // in minutes
+    val cookingTime: Int, // in minutes
+    val servings: Int,
+    val difficulty: String, // "Easy", "Medium", "Hard"
+    val ingredients: List<IngredientItem>,
+    val instructions: List<String>,
+    val nutritionFacts: NutritionFacts,
+    val tags: List<String>,
+    val isFavorite: Boolean,
+    val rating: Float,
+    val category: String,
+    val author: String,
+    val dateAdded: String,
+    val cuisineType: String,
+    val dietaryInfo: List<String>
+) {
+    fun toDetailedRecipe(): DetailedRecipe {
+        return DetailedRecipe(
+            id = this.id,
+            name = this.name,
+            description = this.description,
+            imageUrl = this.imageUrl,
+            preparationTime = this.preparationTime,
+            cookingTime = this.cookingTime,
+            servings = this.servings,
+            difficulty = this.difficulty,
+            ingredients = this.ingredients,
+            instructions = this.instructions,
+            nutritionFacts = this.nutritionFacts,
+            tags = this.tags,
+            isFavorite = this.isFavorite,
+            rating = this.rating,
+            category = this.category,
+            author = this.author,
+            dateAdded = this.dateAdded,
+            cuisineType = this.cuisineType,
+            dietaryInfo = this.dietaryInfo
+        )
+    }
 }

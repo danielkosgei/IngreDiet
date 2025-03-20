@@ -32,7 +32,7 @@ class ProfileViewModel(
                 result.fold(
                     onSuccess = { profile ->
                         _profile.value = profile
-                        _uiState.value = ProfileUiState.Success
+                        _uiState.value = ProfileUiState.Success(profile)
                     },
                     onFailure = { error ->
                         _uiState.value = ProfileUiState.Error(error.message ?: "Unknown error")
@@ -54,7 +54,7 @@ class ProfileViewModel(
                 result.fold(
                     onSuccess = {
                         _profile.value = updatedProfile
-                        _uiState.value = ProfileUiState.Success
+                        _uiState.value = ProfileUiState.Success(updatedProfile)
                     },
                     onFailure = { error ->
                         _uiState.value = ProfileUiState.Error(error.message ?: "Failed to update profile")
@@ -73,6 +73,6 @@ class ProfileViewModel(
 
 sealed class ProfileUiState {
     data object Loading : ProfileUiState()
-    data object Success : ProfileUiState()
+    data class Success(val profile: Profile) : ProfileUiState()
     data class Error(val message: String) : ProfileUiState()
 }

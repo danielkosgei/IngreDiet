@@ -25,32 +25,54 @@ val DarkBackgroundColor = Color(0xFF121212) // Dark background
 val DarkSurfaceColor = Color(0xFF1E1E1E) // Dark surface
 val DarkTextColor = Color(0xFFFFFFFF) // White text
 
-private val DarkColorScheme = darkColorScheme(
-    primary = DarkPrimaryColor,
-    secondary = DarkSecondaryColor,
-    tertiary = Color(0xFF00796B), // DarkTertiary
-    background = DarkBackgroundColor,
-    surface = DarkSurfaceColor,
+private val LightColorScheme = lightColorScheme(
+    primary = Primary,
     onPrimary = Color.White,
-    onSecondary = Color.Black,
-    onBackground = DarkTextColor,
-    onSurface = DarkTextColor,
-    error = Color(0xFFB00020), // DarkError
-    onError = Color.White
+    primaryContainer = SurfaceLight,
+    onPrimaryContainer = TextPrimary,
+    secondary = Secondary,
+    onSecondary = Color.White,
+    secondaryContainer = SurfaceLight,
+    onSecondaryContainer = TextPrimary,
+    tertiary = Primary,
+    onTertiary = Color.White,
+    tertiaryContainer = SurfaceLight,
+    onTertiaryContainer = TextPrimary,
+    background = Background,
+    onBackground = TextPrimary,
+    surface = Surface,
+    onSurface = TextPrimary,
+    surfaceVariant = NavBarColor,
+    onSurfaceVariant = NavBarIconInactive,
+    error = Error,
+    onError = Color.White,
+    errorContainer = Error.copy(alpha = 0.1f),
+    onErrorContainer = Error
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = PrimaryColor,
-    secondary = SecondaryColor,
-    tertiary = Color(0xFF009688), // Tertiary
-    background = BackgroundColor,
-    surface = SurfaceColor,
+private val DarkColorScheme = darkColorScheme(
+    primary = DarkPrimary,
     onPrimary = Color.White,
-    onSecondary = Color.Black,
-    onBackground = TextColor,
-    onSurface = TextColor,
-    error = Color(0xFFB00020), // Error
-    onError = Color.White
+    primaryContainer = DarkSurfaceLight,
+    onPrimaryContainer = DarkTextPrimary,
+    secondary = DarkSecondary,
+    onSecondary = Color.White,
+    secondaryContainer = DarkSurfaceLight,
+    onSecondaryContainer = DarkTextPrimary,
+    tertiary = DarkPrimary,
+    onTertiary = Color.White,
+    tertiaryContainer = DarkSurfaceLight,
+    onTertiaryContainer = DarkTextPrimary,
+    background = DarkBackground,
+    onBackground = DarkTextPrimary,
+    surface = DarkSurface,
+    onSurface = DarkTextPrimary,
+    surfaceVariant = DarkNavBarColor,
+    onSurfaceVariant = DarkNavBarIconInactive,
+    error = Error,
+    onError = Color.White,
+    errorContainer = Error.copy(alpha = 0.1f),
+    onErrorContainer = Error
 )
 
 @Composable
@@ -58,10 +80,13 @@ fun IngreDietTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val colors = if (darkTheme) DarkColorScheme else LightColorScheme
+    val colorScheme = when {
+        darkTheme -> DarkColorScheme
+        else -> LightColorScheme
+    }
 
     MaterialTheme(
-        colorScheme = colors,
+        colorScheme = colorScheme,
         typography = Typography,
         content = content
     )

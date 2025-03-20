@@ -197,11 +197,11 @@ class AuthManager(private val context: Context) {
 sealed class AuthState {
     data object Loading : AuthState()
     data object Success : AuthState()
-    data class Error(val error: AuthErrorCode) : AuthState()
+    data class Error(val message: String?) : AuthState()
 }
 
 sealed interface AuthResponse {
     data object Loading: AuthResponse
     data object Success: AuthResponse
-    data class Error(val mesasage: String?) : AuthResponse
+    data class Error(val message: String?) : AuthResponse
 }

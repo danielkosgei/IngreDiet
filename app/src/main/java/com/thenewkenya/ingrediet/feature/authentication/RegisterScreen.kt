@@ -5,7 +5,9 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +52,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.thenewkenya.ingrediet.Gradient
+import com.thenewkenya.ingrediet.R
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.AuthResponse
 import com.thenewkenya.ingrediet.data.network.AuthState
@@ -61,14 +65,22 @@ import kotlinx.coroutines.flow.onEach
 fun RegisterScreen(navController: NavController) {
     var emailValue by remember { mutableStateOf("") }
     var passwordValue by remember { mutableStateOf("") }
+    var confirmPasswordValue by remember { mutableStateOf("") }
     var passwordVisibility by remember { mutableStateOf(false) }
+    var confirmPasswordVisibility by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var errorType by remember { mutableStateOf<LoginError?>(null) }
+    val context = LocalContext.current
+    var authManager by remember { mutableStateOf(AuthManager(context)) }
+    val coroutineScope = rememberCoroutineScope()
+    var authState by remember { mutableStateOf<AuthState>(AuthState.Success) }
+    var isGoogleSignInLoading by remember { mutableStateOf(false) }
     var isOnline by remember { mutableStateOf(true) }
 
-    val context = LocalContext.current
-    val authManager = remember { AuthManager(context) }
-    val coroutineScope = rememberCoroutineScope()
-
-    val colors = MaterialTheme.colorScheme // Access current theme colors
+    LaunchedEffect(emailValue, passwordValue, confirmPasswordValue) {
+        errorMessage = null
+        errorType = null
+    }
 
     LaunchedEffect(Unit) {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -86,220 +98,253 @@ fun RegisterScreen(navController: NavController) {
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
     }
 
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.background), // Use dynamic background color
+            .background(colors.background),
         contentAlignment = Alignment.Center
     ) {
-        Gradient() // Uses theme-aware colors in gradient
+        Gradient()
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp)
-                .padding(top = 110.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            RegisterHeader()
-
-            Spacer(modifier = Modifier.height(40.dp))
-
-            GoogleSignInButton(
-                onClick = {
-                    authManager.loginGoogleuser()
-                        .onEach { result ->
-                            if (result is AuthResponse.Success) {
-                                Log.d("auth", "Google Success")
-                                Toast.makeText(context, "Google sign-up successful!", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Log.e("auth", "Google Error")
-                            }
-                        }
-                        .launchIn(coroutineScope)
-                }
+            Image(
+                painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                contentDescription = "App Logo",
+                modifier = Modifier.size(80.dp)
             )
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(vertical = 30.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(1.dp)
-                        .background(colors.onBackground.copy(alpha = 0.2f))
-                )
+            Text(
+                text = "Create Account",
+                style = typography.headlineMedium,
+                color = colors.onBackground,
+                fontWeight = FontWeight.Bold
+            )
 
-                Text(
-                    text = "Or",
-                    color = colors.onBackground.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(horizontal = 10.dp)
-                )
+            Text(
+                text = "Sign up to get started with IngreDiet",
+                style = typography.bodyMedium,
+                color = colors.onBackground.copy(alpha = 0.7f)
+            )
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(1.dp)
-                        .background(colors.onBackground.copy(alpha = 0.2f))
-                )
-            }
+            Spacer(modifier = Modifier.height(24.dp))
 
-            if (!isOnline) {
-                Text(
-                    text = "You are offline. Please check your internet connection.",
-                    color = Color.Red,
-                    modifier = Modifier
-                        .padding(bottom = 8.dp)
-                        .fillMaxWidth()
-                )
-            }
+            TextField(
+                value = emailValue,
+                onValueChange = { emailValue = it },
+                label = {
+                    Text(
+                        text = "Email",
+                        style = typography.bodyMedium
+                    )
+                },
+                colors = TextFieldDefaults.colors(
+                    unfocusedContainerColor = colors.surfaceVariant,
+                    focusedContainerColor = colors.surfaceVariant,
+                    unfocusedLabelColor = colors.onSurfaceVariant,
+                    focusedLabelColor = colors.primary
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
 
-            Column(horizontalAlignment = Alignment.Start) {
-                Text(
-                    text = "Email",
-                    color = colors.onBackground, // Adapts to theme
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                TextField(
-                    value = emailValue,
-                    onValueChange = { newValue -> emailValue = newValue },
-                    placeholder = {
-                        Text(
-                            text = "john.doe@example.com",
-                            color = colors.onBackground.copy(alpha = 0.7f)
+            TextField(
+                value = passwordValue,
+                onValueChange = { passwordValue = it },
+                label = {
+                    Text(
+                        text = "Password",
+                        style = typography.bodyMedium
+                    )
+                },
+                visualTransformation = if (passwordVisibility) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { passwordVisibility = !passwordVisibility }) {
+                        Icon(
+                            imageVector = if (passwordVisibility) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = if (passwordVisibility) "Hide password" else "Show password"
                         )
-                    },
-                    shape = RoundedCornerShape(10.dp),
-                    colors = TextFieldDefaults.colors(
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        focusedContainerColor = colors.surface,
-                        unfocusedContainerColor = colors.surface
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+                    }
+                },
+                colors = TextFieldDefaults.colors(
+                    unfocusedContainerColor = colors.surfaceVariant,
+                    focusedContainerColor = colors.surfaceVariant,
+                    unfocusedLabelColor = colors.onSurfaceVariant,
+                    focusedLabelColor = colors.primary
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Column(horizontalAlignment = Alignment.Start) {
-                Text(
-                    text = "Password",
-                    color = colors.onBackground,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                TextField(
-                    value = passwordValue,
-                    onValueChange = { newValue -> passwordValue = newValue },
-                    placeholder = {
-                        Text(
-                            text = "Enter your password",
-                            color = colors.onBackground.copy(alpha = 0.7f)
+            TextField(
+                value = confirmPasswordValue,
+                onValueChange = { confirmPasswordValue = it },
+                label = {
+                    Text(
+                        text = "Confirm Password",
+                        style = typography.bodyMedium
+                    )
+                },
+                visualTransformation = if (confirmPasswordVisibility) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { confirmPasswordVisibility = !confirmPasswordVisibility }) {
+                        Icon(
+                            imageVector = if (confirmPasswordVisibility) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = if (confirmPasswordVisibility) "Hide password" else "Show password"
                         )
-                    },
-                    visualTransformation = if (passwordVisibility) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
-                    trailingIcon = {
-                        val image = if (passwordVisibility) {
-                            Icons.Filled.Visibility
-                        } else {
-                            Icons.Filled.VisibilityOff
-                        }
+                    }
+                },
+                colors = TextFieldDefaults.colors(
+                    unfocusedContainerColor = colors.surfaceVariant,
+                    focusedContainerColor = colors.surfaceVariant,
+                    unfocusedLabelColor = colors.onSurfaceVariant,
+                    focusedLabelColor = colors.primary
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
 
-                        val description: String = if (passwordVisibility) "Hide password" else "Show password"
-
-                        IconButton(onClick = { passwordVisibility = !passwordVisibility }) {
-                            Icon(
-                                imageVector = image,
-                                contentDescription = description,
-                                tint = colors.onBackground // Use theme-aware icon tint
-                            )
-                        }
-                    },
-                    shape = RoundedCornerShape(10.dp),
-                    colors = TextFieldDefaults.colors(
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        focusedContainerColor = colors.surface,
-                        unfocusedContainerColor = colors.surface
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+            errorMessage?.let { message ->
+                Text(
+                    text = message,
+                    color = colors.error,
+                    style = typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(35.dp))
-
-            var authState by remember { mutableStateOf<AuthState>(AuthState.Success) }
+            Spacer(modifier = Modifier.height(16.dp))
 
             Button(
                 onClick = {
-                    authState = AuthState.Loading
-                    authManager.signUpWithEmail(emailValue, passwordValue)
-                        .onEach { result ->
-                            if (result is AuthResponse.Success) {
-                                authState = AuthState.Success
-                                Toast.makeText(context, "Registration successful!", Toast.LENGTH_SHORT).show()
-                                Log.d("auth", "Email Success")
-                            } else {
-                                authState = AuthState.Error(AuthErrorCode.InvalidCredentials)
-                                Log.e("auth", "Email Error")
+                    if (!isOnline) {
+                        errorMessage = "No internet connection"
+                        errorType = LoginError.NETWORK_ERROR
+                        return@Button
+                    }
+
+                    if (emailValue.isEmpty() || passwordValue.isEmpty() || confirmPasswordValue.isEmpty()) {
+                        errorMessage = "Please fill in all fields"
+                        errorType = LoginError.EMPTY_FIELDS
+                        return@Button
+                    }
+
+                    if (passwordValue != confirmPasswordValue) {
+                        errorMessage = "Passwords do not match"
+                        errorType = LoginError.WRONG_PASSWORD
+                        return@Button
+                    }
+
+                    coroutineScope.launch {
+                        authState = AuthState.Loading
+                        try {
+                            val response = authManager.signUpWithEmail(emailValue, passwordValue)
+                            when (response) {
+                                is AuthResponse.Success -> {
+                                    navController.navigate("home") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
+                                }
+                                is AuthResponse.Error -> {
+                                    errorMessage = response.message
+                                    errorType = LoginError.UNKNOWN_ERROR
+                                }
                             }
+                        } catch (e: Exception) {
+                            errorMessage = e.message ?: "An error occurred"
+                            errorType = LoginError.UNKNOWN_ERROR
                         }
-                        .launchIn(coroutineScope)
+                        authState = AuthState.Success
+                    }
                 },
-                enabled = isOnline && emailValue.isNotEmpty() && passwordValue.isNotEmpty(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.primary // Use dynamic theme color
+                    containerColor = colors.primary
                 ),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.fillMaxWidth()
+                shape = RoundedCornerShape(12.dp)
             ) {
                 if (authState == AuthState.Loading) {
                     CircularProgressIndicator(
-                        color = colors.onPrimary, // Adapted to theme
+                        color = colors.onPrimary,
                         modifier = Modifier.size(24.dp)
                     )
                 } else {
                     Text(
                         text = "Sign Up",
-                        color = colors.onPrimary, // Ensure contrast
-                        modifier = Modifier.padding(vertical = 4.dp)
+                        style = typography.bodyLarge,
+                        color = colors.onPrimary
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(25.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            TextButton(
-                onClick = { navController.navigate("login") }
+            GoogleSignInButton(
+                onClick = {
+                    if (!isOnline) {
+                        errorMessage = "No internet connection"
+                        errorType = LoginError.NETWORK_ERROR
+                        return@GoogleSignInButton
+                    }
+
+                    coroutineScope.launch {
+                        isGoogleSignInLoading = true
+                        try {
+                            val response = authManager.loginGoogleuser()
+                            when (response) {
+                                is AuthResponse.Success -> {
+                                    navController.navigate("home") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
+                                }
+                                is AuthResponse.Error -> {
+                                    errorMessage = response.message
+                                    errorType = LoginError.UNKNOWN_ERROR
+                                }
+                            }
+                        } catch (e: Exception) {
+                            errorMessage = e.message ?: "An error occurred"
+                            errorType = LoginError.UNKNOWN_ERROR
+                        }
+                        isGoogleSignInLoading = false
+                    }
+                },
+                isLoading = isGoogleSignInLoading
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = buildAnnotatedString {
-                        withStyle(
-                            style = SpanStyle(
-                                fontWeight = FontWeight.Light,
-                                color = colors.onBackground.copy(alpha = 0.8f)
-                            )
-                        ) { append("Already have an account? ") }
-
-                        withStyle(
-                            style = SpanStyle(
-                                fontWeight = FontWeight.Bold,
-                                color = colors.onBackground
-                            )
-                        ) { append("Sign In") }
-                    }
+                    text = "Already have an account? ",
+                    style = typography.bodyMedium,
+                    color = colors.onBackground.copy(alpha = 0.7f)
                 )
+                TextButton(
+                    onClick = { navController.navigate("login") }
+                ) {
+                    Text(
+                        text = "Sign In",
+                        style = typography.bodyMedium,
+                        color = colors.primary
+                    )
+                }
             }
         }
     }

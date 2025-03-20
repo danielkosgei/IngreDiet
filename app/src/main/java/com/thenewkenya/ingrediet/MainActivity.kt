@@ -50,6 +50,11 @@ import com.thenewkenya.ingrediet.feature.navigation.HomeScreen
 import com.thenewkenya.ingrediet.feature.navigation.LoadingScreen
 import com.thenewkenya.ingrediet.feature.profile.ProfileScreen
 import com.thenewkenya.ingrediet.feature.recipe.RecipeDetailScreen
+import com.thenewkenya.ingrediet.feature.search.SearchScreen
+import com.thenewkenya.ingrediet.feature.favorites.FavoritesScreen
+import com.thenewkenya.ingrediet.feature.mealplanner.MealPlannerScreen
+import com.thenewkenya.ingrediet.feature.create.CreateRecipeScreen
+import com.thenewkenya.ingrediet.feature.shopping.ShoppingListScreen
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
 
 import io.github.jan.supabase.auth.auth
@@ -155,6 +160,11 @@ fun AppNavigation() {
             composable("loading") { LoadingScreen() }
             composable("splash") { SplashScreen() }
             composable("profile") { ProfileScreen(navController) }
+            composable("search") { SearchScreen(navController) }
+            composable("favorites") { FavoritesScreen(navController) }
+            composable("mealplanner") { MealPlannerScreen(navController) }
+            composable("create") { CreateRecipeScreen(navController) }
+            composable("shopping") { ShoppingListScreen(navController) }
 
             // Recipe details route with parameter
             composable(
@@ -164,7 +174,17 @@ fun AppNavigation() {
                 )
             ) { backStackEntry ->
                 val recipeId = backStackEntry.arguments?.getInt("recipeId") ?: 1
-                RecipeDetailScreen(navController = navController, recipeId = recipeId)
+                val context = LocalContext.current
+                val viewModel = remember { 
+                    com.thenewkenya.ingrediet.feature.recipe.RecipeDetailViewModel(
+                        com.thenewkenya.ingrediet.data.repository.RecipeRepository(context)
+                    )
+                }
+                RecipeDetailScreen(
+                    navController = navController, 
+                    recipeId = recipeId, 
+                    viewModel = viewModel
+                )
             }
         }
     }
