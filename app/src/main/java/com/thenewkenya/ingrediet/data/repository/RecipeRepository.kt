@@ -24,6 +24,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 import kotlin.collections.*
 import java.util.concurrent.TimeUnit
+import java.time.DayOfWeek
+import kotlin.random.Random
 
 class RecipeRepository(context: Context) {
     private val cacheManager = CacheManager(context)
@@ -423,10 +425,12 @@ class RecipeRepository(context: Context) {
     /**
      * Search for recipes by name
      * Combines results from Supabase and TheMealDB API
+     * @param query The search query
+     * @param limit Maximum number of results to return (default: 10)
      */
-    suspend fun searchRecipes(query: String): Flow<Result<List<DetailedRecipe>>> = flow {
+    suspend fun searchRecipes(query: String, limit: Int = 10): Flow<Result<List<DetailedRecipe>>> = flow {
         try {
-            Log.d("RecipeRepository", "Searching for recipes with query: $query")
+            Log.d("RecipeRepository", "Searching for recipes with query: $query, limit: $limit")
             val results = mutableListOf<DetailedRecipe>()
             
             // First search in Supabase
@@ -434,7 +438,7 @@ class RecipeRepository(context: Context) {
                 val supabaseResults = supabase.from("recipes")
                     .select() {
                         filter { ilike("name", "%$query%") }
-                        limit(10)
+                        limit(limit.toLong())
                     }
                     .decodeList<RecipeDto>()
                     
@@ -456,7 +460,7 @@ class RecipeRepository(context: Context) {
             // Then search in both APIs
             try {
                 // Use SpoonacularCacheService for Spoonacular API calls
-                spoonacularCacheService.searchAndCacheRecipes(query, 10).collect { recipes ->
+                spoonacularCacheService.searchAndCacheRecipes(query, limit).collect { recipes ->
                     recipes.forEach { recipe ->
                         if (results.none { it.id == recipe.id }) {
                             results.add(recipe)
@@ -464,11 +468,11 @@ class RecipeRepository(context: Context) {
                     }
                 }
                 
-                // Still use recipeService for TheMealDB API calls
+                // Use RecipeService for TheMealDB API calls
                 recipeService.searchRecipes(query).collect { recipes ->
-                    (recipes as? List<com.thenewkenya.ingrediet.data.model.Recipe>)?.forEach { recipe ->
+                    recipes.forEach { recipe ->
                         if (results.none { it.id == recipe.id }) {
-                            results.add(recipe.toDetailedRecipe())
+                            results.add(recipe)
                         }
                     }
                 }
@@ -479,7 +483,7 @@ class RecipeRepository(context: Context) {
                 // Continue with existing results even if API search fails
             }
             
-            emit(Result.success(results))
+            emit(Result.success(results.take(limit)))
         } catch (e: Exception) {
             Log.e("RecipeRepository", "Error in searchRecipes: ${e.message}", e)
             emit(Result.failure(e))
@@ -1035,4 +1039,218 @@ class RecipeRepository(context: Context) {
             emit(Result.failure(e))
         }
     }
+
+    /**
+     * Generates a meal plan based on user preferences
+     * @param calorieTarget Daily calorie target
+     * @param dietType Diet preference (e.g., "Low-carb", "High-protein", etc.)
+     * @param days List of days to generate meal plan for (defaults to all days of the week)
+     * @param allergies List of allergies/restrictions to avoid
+     * @return Flow with the generated meal plan as a Map of DayOfWeek to List of RecipeMealItem
+     */
+    fun generateMealPlan(
+        calorieTarget: Int,
+        dietType: String,
+        days: List<DayOfWeek> = DayOfWeek.values().toList(),
+        allergies: List<String> = emptyList()
+    ): Flow<Result<Map<DayOfWeek, List<RecipeMealItem>>>> = flow {
+        try {
+            val mealPlan = mutableMapOf<DayOfWeek, MutableList<RecipeMealItem>>()
+            
+            // Initialize empty meal lists for each day
+            days.forEach { day ->
+                mealPlan[day] = mutableListOf()
+            }
+            
+            // Define meal distribution by percentage of daily calories
+            val mealDistribution = mapOf(
+                "Breakfast" to 0.25f,
+                "Lunch" to 0.35f,
+                "Dinner" to 0.35f,
+                "Snacks" to 0.05f
+            )
+            
+            // Get recipes that match the diet type
+            val dietQuery = when (dietType.lowercase()) {
+                "low-carb" -> "low carb"
+                "high-protein" -> "high protein"
+                "vegetarian" -> "vegetarian"
+                "vegan" -> "vegan"
+                else -> "" // balanced diet doesn't need a specific query
+            }
+            
+            // Get recipes that match the diet type and avoid allergies
+            var query = dietQuery
+            if (allergies.isNotEmpty()) {
+                // Add allergy exclusions to the query
+                allergies.forEach { allergy ->
+                    query += " -${allergy}"
+                }
+            }
+            
+            // Build the collection of recipes we can use for the meal plan
+            val breakfastRecipes = mutableListOf<DetailedRecipe>()
+            val lunchRecipes = mutableListOf<DetailedRecipe>()
+            val dinnerRecipes = mutableListOf<DetailedRecipe>()
+            val snackRecipes = mutableListOf<DetailedRecipe>()
+            
+            // Get breakfast recipes
+            val breakfastQuery = if (query.isNotEmpty()) "$query breakfast" else "breakfast"
+            searchRecipes(breakfastQuery, limit = 20).collect { result ->
+                result.getOrNull()?.let { recipes ->
+                    breakfastRecipes.addAll(recipes.filter { 
+                        // Filter recipes with appropriate calorie count for breakfast
+                        val targetCalories = (calorieTarget * mealDistribution["Breakfast"]!!)
+                        it.nutritionFacts.calories in (targetCalories * 0.7f).toInt()..(targetCalories * 1.3f).toInt()
+                    })
+                }
+            }
+            
+            // Get lunch recipes
+            val lunchQuery = if (query.isNotEmpty()) "$query lunch" else "lunch"
+            searchRecipes(lunchQuery, limit = 20).collect { result ->
+                result.getOrNull()?.let { recipes ->
+                    lunchRecipes.addAll(recipes.filter { 
+                        // Filter recipes with appropriate calorie count for lunch
+                        val targetCalories = (calorieTarget * mealDistribution["Lunch"]!!)
+                        it.nutritionFacts.calories in (targetCalories * 0.7f).toInt()..(targetCalories * 1.3f).toInt()
+                    })
+                }
+            }
+            
+            // Get dinner recipes
+            val dinnerQuery = if (query.isNotEmpty()) "$query dinner" else "dinner"
+            searchRecipes(dinnerQuery, limit = 20).collect { result ->
+                result.getOrNull()?.let { recipes ->
+                    dinnerRecipes.addAll(recipes.filter { 
+                        // Filter recipes with appropriate calorie count for dinner
+                        val targetCalories = (calorieTarget * mealDistribution["Dinner"]!!)
+                        it.nutritionFacts.calories in (targetCalories * 0.7f).toInt()..(targetCalories * 1.3f).toInt()
+                    })
+                }
+            }
+            
+            // Get snack recipes
+            val snackQuery = if (query.isNotEmpty()) "$query snack" else "snack"
+            searchRecipes(snackQuery, limit = 20).collect { result ->
+                result.getOrNull()?.let { recipes ->
+                    snackRecipes.addAll(recipes.filter { 
+                        // Filter recipes with appropriate calorie count for snacks
+                        val targetCalories = (calorieTarget * mealDistribution["Snacks"]!!)
+                        it.nutritionFacts.calories in (targetCalories * 0.5f).toInt()..(targetCalories * 1.5f).toInt()
+                    })
+                }
+            }
+            
+            // If we don't have enough recipes, get random ones
+            if (breakfastRecipes.size < days.size) {
+                getRandomRecipes(days.size - breakfastRecipes.size).collect { result ->
+                    result.getOrNull()?.let { recipes ->
+                        breakfastRecipes.addAll(recipes.filter { it.name.contains("breakfast", ignoreCase = true) })
+                    }
+                }
+            }
+            
+            if (lunchRecipes.size < days.size) {
+                getRandomRecipes(days.size - lunchRecipes.size).collect { result ->
+                    result.getOrNull()?.let { recipes ->
+                        lunchRecipes.addAll(recipes.filter { !it.name.contains("breakfast", ignoreCase = true) })
+                    }
+                }
+            }
+            
+            if (dinnerRecipes.size < days.size) {
+                getRandomRecipes(days.size - dinnerRecipes.size).collect { result ->
+                    result.getOrNull()?.let { recipes ->
+                        dinnerRecipes.addAll(recipes.filter { !it.name.contains("breakfast", ignoreCase = true) })
+                    }
+                }
+            }
+            
+            if (snackRecipes.size < days.size) {
+                getRandomRecipes(days.size - snackRecipes.size).collect { result ->
+                    result.getOrNull()?.let { recipes ->
+                        snackRecipes.addAll(recipes.filter { it.name.length < 30 })  // Short names are likely simpler recipes, good for snacks
+                    }
+                }
+            }
+            
+            // Assign recipes to each day of the week
+            for (day in days) {
+                // Breakfast
+                if (breakfastRecipes.isNotEmpty()) {
+                    val breakfast = breakfastRecipes.removeAt(Random.nextInt(breakfastRecipes.size))
+                    mealPlan[day]!!.add(RecipeMealItem(
+                        id = "${day.name}_breakfast",
+                        name = "Breakfast", 
+                        description = breakfast.name,
+                        recipeId = breakfast.id,
+                        calories = breakfast.nutritionFacts.calories,
+                        time = "08:00",
+                        imageUrl = breakfast.imageUrl
+                    ))
+                }
+                
+                // Lunch
+                if (lunchRecipes.isNotEmpty()) {
+                    val lunch = lunchRecipes.removeAt(Random.nextInt(lunchRecipes.size))
+                    mealPlan[day]!!.add(RecipeMealItem(
+                        id = "${day.name}_lunch",
+                        name = "Lunch", 
+                        description = lunch.name,
+                        recipeId = lunch.id,
+                        calories = lunch.nutritionFacts.calories,
+                        time = "13:00",
+                        imageUrl = lunch.imageUrl
+                    ))
+                }
+                
+                // Dinner
+                if (dinnerRecipes.isNotEmpty()) {
+                    val dinner = dinnerRecipes.removeAt(Random.nextInt(dinnerRecipes.size))
+                    mealPlan[day]!!.add(RecipeMealItem(
+                        id = "${day.name}_dinner",
+                        name = "Dinner", 
+                        description = dinner.name,
+                        recipeId = dinner.id,
+                        calories = dinner.nutritionFacts.calories,
+                        time = "19:00",
+                        imageUrl = dinner.imageUrl
+                    ))
+                }
+                
+                // Snack
+                if (snackRecipes.isNotEmpty()) {
+                    val snack = snackRecipes.removeAt(Random.nextInt(snackRecipes.size))
+                    mealPlan[day]!!.add(RecipeMealItem(
+                        id = "${day.name}_snack",
+                        name = "Snacks", 
+                        description = snack.name,
+                        recipeId = snack.id,
+                        calories = snack.nutritionFacts.calories,
+                        time = "16:00",
+                        imageUrl = snack.imageUrl
+                    ))
+                }
+            }
+            
+            emit(Result.success(mealPlan))
+        } catch (e: Exception) {
+            Log.e("RecipeRepository", "Error generating meal plan: ${e.message}", e)
+            emit(Result.failure(e))
+        }
+    }
+
+    /**
+     * Data class for items in the meal plan
+     */
+    data class RecipeMealItem(
+        val id: String,
+        val name: String,
+        val description: String,
+        val recipeId: Int,
+        val calories: Int,
+        val time: String,
+        val imageUrl: String? = null
+    )
 }
