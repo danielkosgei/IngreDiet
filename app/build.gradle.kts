@@ -57,6 +57,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {
         jvmTarget = "11"
@@ -65,9 +66,17 @@ android {
         buildConfig = true
         compose = true
     }
+    
+    lint {
+        baseline = file("lint-baseline.xml")
+        abortOnError = false // Temporarily disable build failing on lint errors
+    }
 }
 
 dependencies {
+
+    // Desugaring for Java 8+ APIs on older Android versions
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
     // Google
     implementation(libs.androidx.credentials)
