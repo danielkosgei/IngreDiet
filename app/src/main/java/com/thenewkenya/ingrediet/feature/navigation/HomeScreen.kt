@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FitnessCenter
@@ -130,6 +131,7 @@ import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
 
 import io.github.jan.supabase.auth.auth
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -163,6 +165,7 @@ fun HomeScreen(navController: NavController) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All Recipes") }
     var selectedNavItem by remember { mutableStateOf(0) }
+    var isSearchExpanded by remember { mutableStateOf(false) }
 
     // Recipes state
     var recipes by remember { mutableStateOf<List<RecipeRepository.RecipeListItem>>(emptyList()) }
@@ -221,24 +224,33 @@ fun HomeScreen(navController: NavController) {
     LaunchedEffect(searchQuery, selectedCategory) {
         isLoading = true
         errorMessage = null
+        
         try {
-            recipeRepository.getRecipes(
+            // Create a new coroutine for each collection to prevent cancellation issues
+            val result = recipeRepository.getRecipes(
                 query = searchQuery.takeIf { it.isNotEmpty() },
                 category = selectedCategory.takeIf { it != "All Recipes" }
             ).collect { result ->
-                isLoading = false
-                result.fold(
-                    onSuccess = { recipesList -> 
-                        recipes = recipesList.sortedByDescending { it.rating }
-                    },
-                    onFailure = { error -> 
-                        errorMessage = error.message ?: "Failed to load recipes" 
-                    }
-                )
+                // Ensure we're still active before updating state
+                if (isActive) {
+                    isLoading = false
+                    result.fold(
+                        onSuccess = { recipesList -> 
+                            recipes = recipesList.sortedByDescending { it.rating }
+                        },
+                        onFailure = { error -> 
+                            errorMessage = error.message ?: "Failed to load recipes" 
+                        }
+                    )
+                }
             }
         } catch (e: Exception) {
-            isLoading = false
-            errorMessage = e.message ?: "An unexpected error occurred"
+            // Only update state if the coroutine is still active
+            if (isActive) {
+                isLoading = false
+                errorMessage = e.message ?: "An unexpected error occurred"
+                Log.e("HomeScreen", "Error loading recipes", e)
+            }
         }
     }
 
@@ -343,34 +355,123 @@ fun HomeScreen(navController: NavController) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
-                            Text(
-                                text = "Hi ${user?.email?.substringBefore('@') ?: "Guest"}!",
-                                style = typography.titleLarge.copy(
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = colors.onBackground
-                            )
-                            Text(
-                                text = "Your boards looks so good",
-                                style = typography.bodyLarge,
-                                color = colors.onBackground.copy(alpha = 0.7f)
-                            )
+                        if (!isSearchExpanded) {
+                            Column {
+                                Text(
+                                    text = "Hi ${user?.email?.substringBefore('@') ?: "Guest"}!",
+                                    style = typography.titleLarge.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = colors.onBackground
+                                )
+                                Text(
+                                    text = "Your boards looks so good",
+                                    style = typography.bodyLarge,
+                                    color = colors.onBackground.copy(alpha = 0.7f)
+                                )
+                            }
                         }
-                        // Circular profile image
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(colors.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.AccountCircle,
-                                contentDescription = "Profile",
-                                tint = colors.primary,
-                                modifier = Modifier.size(24.dp)
+                        
+                        // Action buttons or Search bar
+                        if (isSearchExpanded) {
+                            // Expanded search bar
+                            TextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                placeholder = { Text("Search recipes...") },
+                                leadingIcon = { 
+                                    Icon(
+                                        imageVector = Icons.Filled.Search,
+                                        contentDescription = "Search",
+                                        tint = colors.primary
+                                    )
+                                },
+                                trailingIcon = {
+                                    IconButton(onClick = { 
+                                        isSearchExpanded = false
+                                        searchQuery = ""
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Close Search",
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = colors.surfaceVariant,
+                                    unfocusedContainerColor = colors.surfaceVariant,
+                                    disabledContainerColor = colors.surfaceVariant,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent
+                                ),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(
+                                    onSearch = {
+                                        // Just leave the keyboard handling to the system
+                                        // No need to manually dismiss the keyboard
+                                    }
+                                )
                             )
+                        } else {
+                            // Action buttons
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Search button
+                                IconButton(
+                                    onClick = { isSearchExpanded = true },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.surfaceVariant)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Search,
+                                        contentDescription = "Search",
+                                        tint = colors.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                
+                                // Favorites button
+                                IconButton(
+                                    onClick = { navController.navigate("favorites") },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.surfaceVariant)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Favorite,
+                                        contentDescription = "Favorites",
+                                        tint = colors.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                
+                                // Profile button
+                                IconButton(
+                                    onClick = { navController.navigate("profile") },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.surfaceVariant)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.AccountCircle,
+                                        contentDescription = "Profile",
+                                        tint = colors.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -443,79 +544,140 @@ fun HomeScreen(navController: NavController) {
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    // Today's Meals Section
-                    Text(
-                        text = "Today's Meals",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
+                    // Search results section (shown if search query is not empty)
+                    if (searchQuery.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "Search Results",
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    color = TextPrimary,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            )
+                            
+                            if (isLoading) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(color = colors.primary)
+                                }
+                            } else if (errorMessage != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = errorMessage ?: "Error loading recipes",
+                                        color = colors.error
+                                    )
+                                }
+                            } else if (recipes.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "No recipes found for '$searchQuery'",
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Today's Meals Section (only shown if not searching)
+                    if (searchQuery.isEmpty()) {
+                        Text(
+                            text = "Today's Meals",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                    }
                 }
             }
 
             // Recipes list with updated design
-            items(recipes) { recipe ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp)
-                        .height(80.dp)
-                        .clickable { navController.navigate("recipe/${recipe.id}") },
-                    colors = CardDefaults.cardColors(containerColor = CardBackground),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Row(
+            if (searchQuery.isEmpty()) {
+                // Show regular recipe list when not searching
+                items(recipes) { recipe ->
+                    Card(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 8.dp)
+                            .height(80.dp)
+                            .clickable { navController.navigate("recipe/${recipe.id}") },
+                        colors = CardDefaults.cardColors(containerColor = CardBackground),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Recipe image
-                            Box(
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(SurfaceLight)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                AsyncImage(
-                                    model = recipe.imageUrl,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                            // Recipe details
-                            Column {
-                                Text(
-                                    text = recipe.name,
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        color = TextPrimary,
-                                        fontWeight = FontWeight.Medium
+                                // Recipe image
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(SurfaceLight)
+                                ) {
+                                    AsyncImage(
+                                        model = recipe.imageUrl,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
                                     )
-                                )
-                                Text(
-                                    text = "${recipe.calories} kcal",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        color = TextSecondary
+                                }
+                                // Recipe details
+                                Column {
+                                    Text(
+                                        text = recipe.name,
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            color = TextPrimary,
+                                            fontWeight = FontWeight.Medium
+                                        )
                                     )
-                                )
+                                    Text(
+                                        text = "${recipe.calories} kcal",
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            color = TextSecondary
+                                        )
+                                    )
+                                }
                             }
+                            // Arrow indicator
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "View Recipe",
+                                tint = AccentGreen,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
-                        // Arrow indicator
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "View Recipe",
-                            tint = AccentGreen,
-                            modifier = Modifier.size(24.dp)
-                        )
                     }
+                }
+            } else if (!isLoading && errorMessage == null && recipes.isNotEmpty()) {
+                // Show search results when searching and there are results
+                items(recipes) { recipe ->
+                    RecipeCard(recipe = recipe, navController = navController)
                 }
             }
         }
