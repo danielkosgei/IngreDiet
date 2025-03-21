@@ -7,17 +7,29 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -48,19 +60,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.thenewkenya.ingrediet.data.network.AuthManager
@@ -68,10 +84,11 @@ import com.thenewkenya.ingrediet.data.network.LocalSupabase
 import com.thenewkenya.ingrediet.data.network.SessionManager
 import com.thenewkenya.ingrediet.data.network.SpoonacularCacheService
 import com.thenewkenya.ingrediet.data.network.supabase
+import com.thenewkenya.ingrediet.data.repository.RecipeRepository
+import com.thenewkenya.ingrediet.feature.navigation.LoadingScreen
 import com.thenewkenya.ingrediet.feature.authentication.LoginScreen
 import com.thenewkenya.ingrediet.feature.authentication.RegisterScreen
 import com.thenewkenya.ingrediet.feature.navigation.HomeScreenContent
-import com.thenewkenya.ingrediet.feature.navigation.LoadingScreen
 import com.thenewkenya.ingrediet.feature.profile.ProfileScreen
 import com.thenewkenya.ingrediet.feature.recipe.RecipeDetailScreen
 import com.thenewkenya.ingrediet.feature.search.SearchScreen
@@ -80,15 +97,11 @@ import com.thenewkenya.ingrediet.feature.mealplanner.MealPlannerScreen
 import com.thenewkenya.ingrediet.feature.create.CreateRecipeScreen
 import com.thenewkenya.ingrediet.feature.shopping.ShoppingListScreen
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
-import com.thenewkenya.ingrediet.data.repository.RecipeRepository
-
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.getValue
-import androidx.navigation.compose.currentBackStackEntryAsState
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeoutOrNull
 
 class MainActivity : ComponentActivity() {
@@ -283,11 +296,9 @@ fun AppNavigation() {
                 ) { backStackEntry ->
                     val recipeId = backStackEntry.arguments?.getInt("recipeId") ?: 1
                     val context = LocalContext.current
-                    val viewModel = remember { 
-                        com.thenewkenya.ingrediet.feature.recipe.RecipeDetailViewModel(
-                            com.thenewkenya.ingrediet.data.repository.RecipeRepository(context)
-                        )
-                    }
+                    val viewModel = viewModel<com.thenewkenya.ingrediet.feature.recipe.RecipeDetailViewModel>(
+                        factory = com.thenewkenya.ingrediet.feature.recipe.RecipeDetailViewModelFactory(context)
+                    )
                     RecipeDetailScreen(
                         navController = navController, 
                         recipeId = recipeId, 

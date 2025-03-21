@@ -1,5 +1,6 @@
 package com.thenewkenya.ingrediet.feature.recipe
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.ViewModel
@@ -8,19 +9,32 @@ import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.data.model.NutritionFacts
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
+import com.thenewkenya.ingrediet.data.repository.ShoppingListRepository
+import com.thenewkenya.ingrediet.feature.shopping.ShoppingItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.util.UUID
+import androidx.lifecycle.ViewModelProvider
 
 class RecipeDetailViewModel(
-    private val recipeRepository: RecipeRepository
+    private val recipeRepository: RecipeRepository,
+    private val shoppingListRepository: ShoppingListRepository,
+    private val context: Context
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RecipeDetailUiState>(RecipeDetailUiState.Loading)
     val uiState: StateFlow<RecipeDetailUiState> = _uiState.asStateFlow()
 
     private val _recipe = MutableStateFlow<DetailedRecipe?>(null)
     val recipe: StateFlow<DetailedRecipe?> = _recipe.asStateFlow()
+
+    private val _isAddingToShoppingList = MutableStateFlow(false)
+    val isAddingToShoppingList: StateFlow<Boolean> = _isAddingToShoppingList.asStateFlow()
+
+    private val _addToShoppingListResult = MutableStateFlow<AddToShoppingListResult?>(null)
+    val addToShoppingListResult: StateFlow<AddToShoppingListResult?> = _addToShoppingListResult.asStateFlow()
 
     fun loadRecipe(recipeId: Int) {
         viewModelScope.launch {
@@ -126,10 +140,150 @@ class RecipeDetailViewModel(
             }
         }
     }
+
+    fun addIngredientsToShoppingList() {
+        val currentRecipe = _recipe.value ?: return
+        
+        viewModelScope.launch {
+            _isAddingToShoppingList.value = true
+            
+            try {
+                // Map ingredients to shopping items
+                val shoppingItems = currentRecipe.ingredients.map { ingredient ->
+                    val formattedQuantity = formatQuantity(ingredient.quantity, ingredient.unit)
+                    val category = mapIngredientToCategory(ingredient.name)
+                    
+                    ShoppingItem(
+                        id = UUID.randomUUID().toString(),
+                        name = "${ingredient.name} ($formattedQuantity)",
+                        category = category,
+                        isChecked = false
+                    )
+                }
+                
+                var successCount = 0
+                
+                // Add each ingredient to shopping list
+                shoppingItems.forEach { item ->
+                    shoppingListRepository.addShoppingItem(item)
+                        .collectLatest { result ->
+                            result.fold(
+                                onSuccess = { successCount++ },
+                                onFailure = { error ->
+                                    Log.e("RecipeDetailViewModel", "Failed to add item ${item.name}: ${error.message}")
+                                }
+                            )
+                        }
+                }
+                
+                // Set result based on success count
+                _addToShoppingListResult.value = if (successCount == shoppingItems.size) {
+                    AddToShoppingListResult.Success(shoppingItems.size)
+                } else if (successCount > 0) {
+                    AddToShoppingListResult.PartialSuccess(successCount, shoppingItems.size)
+                } else {
+                    AddToShoppingListResult.Error("Failed to add ingredients to shopping list")
+                }
+                
+            } catch (e: Exception) {
+                Log.e("RecipeDetailViewModel", "Error adding to shopping list", e)
+                _addToShoppingListResult.value = AddToShoppingListResult.Error(e.message ?: "Unknown error occurred")
+            } finally {
+                _isAddingToShoppingList.value = false
+            }
+        }
+    }
+    
+    // Reset the add to shopping list result (e.g., after showing a message to the user)
+    fun resetAddToShoppingListResult() {
+        _addToShoppingListResult.value = null
+    }
+    
+    /**
+     * Format the quantity and unit for display
+     */
+    private fun formatQuantity(quantity: Float, unit: String): String {
+        // Format whole numbers without decimal point
+        val formattedQuantity = if (quantity == quantity.toInt().toFloat()) {
+            quantity.toInt().toString()
+        } else {
+            quantity.toString()
+        }
+        
+        return "$formattedQuantity $unit"
+    }
+    
+    /**
+     * Map ingredient name to an appropriate category
+     */
+    private fun mapIngredientToCategory(name: String): String {
+        val lowerName = name.lowercase()
+        
+        return when {
+            // Dairy
+            lowerName.contains("milk") || lowerName.contains("cheese") || 
+            lowerName.contains("yogurt") || lowerName.contains("cream") || 
+            lowerName.contains("butter") -> "Dairy"
+            
+            // Produce
+            lowerName.contains("apple") || lowerName.contains("banana") || 
+            lowerName.contains("orange") || lowerName.contains("pepper") || 
+            lowerName.contains("tomato") || lowerName.contains("potato") || 
+            lowerName.contains("onion") || lowerName.contains("garlic") || 
+            lowerName.contains("lettuce") || lowerName.contains("spinach") || 
+            lowerName.contains("broccoli") || lowerName.contains("carrot") ||
+            lowerName.contains("berry") || lowerName.contains("fruit") ||
+            lowerName.contains("vegetable") -> "Produce"
+            
+            // Meat
+            lowerName.contains("beef") || lowerName.contains("chicken") || 
+            lowerName.contains("pork") || lowerName.contains("lamb") || 
+            lowerName.contains("sausage") || lowerName.contains("meat") ||
+            lowerName.contains("bacon") || lowerName.contains("steak") -> "Meat"
+            
+            // Bakery
+            lowerName.contains("bread") || lowerName.contains("bun") || 
+            lowerName.contains("roll") || lowerName.contains("cake") || 
+            lowerName.contains("cookie") || lowerName.contains("flour") -> "Bakery"
+            
+            // Spices and condiments
+            lowerName.contains("salt") || lowerName.contains("pepper") || 
+            lowerName.contains("spice") || lowerName.contains("sauce") || 
+            lowerName.contains("oil") || lowerName.contains("vinegar") || 
+            lowerName.contains("herb") -> "Spices"
+            
+            // Grains
+            lowerName.contains("rice") || lowerName.contains("pasta") || 
+            lowerName.contains("cereal") || lowerName.contains("grain") ||
+            lowerName.contains("quinoa") || lowerName.contains("oat") -> "Grains"
+            
+            // Default category
+            else -> "General"
+        }
+    }
 }
 
 sealed class RecipeDetailUiState {
     data object Loading : RecipeDetailUiState()
     data object Success : RecipeDetailUiState()
     data class Error(val message: String) : RecipeDetailUiState()
+}
+
+sealed class AddToShoppingListResult {
+    data class Success(val count: Int) : AddToShoppingListResult()
+    data class PartialSuccess(val successCount: Int, val totalCount: Int) : AddToShoppingListResult()
+    data class Error(val message: String) : AddToShoppingListResult()
+}
+
+class RecipeDetailViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(RecipeDetailViewModel::class.java)) {
+            return RecipeDetailViewModel(
+                recipeRepository = RecipeRepository(context),
+                shoppingListRepository = ShoppingListRepository(context),
+                context = context
+            ) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
 }

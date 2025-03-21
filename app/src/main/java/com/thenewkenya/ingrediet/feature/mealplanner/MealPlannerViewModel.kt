@@ -114,28 +114,24 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
         loadMealPlans()
     }
 
-    private fun loadMealPlans() {
+    fun loadMealPlans() {
         viewModelScope.launch {
             try {
                 _isLoading.value = true
                 _error.value = null
                 
-                // Check if user is authenticated
-                val isAuthenticated = supabase.auth.currentUserOrNull() != null
-                _isUserAuthenticated.value = isAuthenticated
+                // Check if the user is authenticated
+                val currentUser = supabase.auth.currentUserOrNull()
+                _isUserAuthenticated.value = currentUser != null
                 
-                if (isAuthenticated) {
-                    // First try to load user's saved meal plans
+                if (currentUser != null) {
                     try {
-                        // Use non-suspending catch methods on the Flow to avoid transparency violations
+                        // Check if the user has saved meal plans
                         mealPlanRepository.hasMealPlans()
-                            .catch { e ->
-                                if (e is CancellationException || e.message?.contains("composition") == true) {
-                                    Log.d("MealPlannerViewModel", "Operation cancelled while checking meal plans")
-                                } else {
-                                    Log.e("MealPlannerViewModel", "Error checking meal plans", e)
-                                }
-                                // Don't propagate the error, just silently handle it and continue
+                            .catch { e -> 
+                                Log.e("MealPlannerViewModel", "Error checking for meal plans", e)
+                                // Continue with plan generation on error
+                                generateMealPlanWithRealRecipes()
                             }
                             .collect { result ->
                                 val hasMealPlans = result.getOrNull() ?: false

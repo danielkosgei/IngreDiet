@@ -2,8 +2,18 @@ package com.thenewkenya.ingrediet.feature.navigation
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.InfiniteRepeatableSpec
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -13,16 +23,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -30,33 +42,36 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DinnerDining
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.FreeBreakfast
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.LunchDining
 import androidx.compose.material.icons.filled.LocalDining
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarOutline
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material.icons.filled.Whatshot
-import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.Favorite
-import androidx.compose.material.icons.outlined.FitnessCenter
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.RestaurantMenu
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.ShoppingCart
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -65,12 +80,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import com.thenewkenya.ingrediet.feature.components.NutritionItem
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -78,16 +93,23 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -97,25 +119,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.ui.draw.shadow
-import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -129,11 +145,17 @@ import com.thenewkenya.ingrediet.R
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
-
+import com.thenewkenya.ingrediet.feature.mealplanner.MealPlannerViewModel
+import com.thenewkenya.ingrediet.feature.shopping.ShoppingListViewModel
+import com.thenewkenya.ingrediet.feature.shopping.ShoppingItem
+import com.thenewkenya.ingrediet.feature.mealplanner.MealPlanItem
+import com.thenewkenya.ingrediet.feature.mealplanner.MealTime
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.DayOfWeek
 import java.util.Date
 import java.util.Locale
 import androidx.compose.ui.focus.FocusManager
@@ -141,6 +163,18 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.layout.heightIn
+import com.thenewkenya.ingrediet.feature.components.EnhancedMealPreviewCard
 
 data class Recipe(
     val id: Int,
@@ -149,13 +183,6 @@ data class Recipe(
     val calories: Int,
     val time: String,
     val category: String
-)
-
-data class Category(
-    val id: Int,
-    val name: String,
-    val icon: ImageVector,
-    val gradient: Brush
 )
 
 // Define a local composition provider for NavController
@@ -194,91 +221,183 @@ fun HomeScreenContent(navController: NavController) {
     val TextSecondary = colors.onBackground.copy(alpha = 0.7f)
     val SurfaceLight = colors.surfaceVariant
 
-    // Categories with updated design using theme colors
-    val categories = listOf(
-        Category(
-            1,
-            "Calories",
-            Icons.Filled.LocalDining,
-            Brush.verticalGradient(listOf(colors.primary.copy(alpha = 0.1f), colors.primary.copy(alpha = 0.05f)))
-        ),
-        Category(
-            2,
-            "Water",
-            Icons.Filled.WaterDrop,
-            Brush.verticalGradient(listOf(colors.primary.copy(alpha = 0.1f), colors.primary.copy(alpha = 0.05f)))
-        ),
-        Category(
-            3,
-            "Sleep",
-            Icons.Filled.Timer,
-            Brush.verticalGradient(listOf(colors.primary.copy(alpha = 0.1f), colors.primary.copy(alpha = 0.05f)))
-        ),
-        Category(
-            4,
-            "Training",
-            Icons.Filled.FitnessCenter,
-            Brush.verticalGradient(listOf(colors.primary.copy(alpha = 0.1f), colors.primary.copy(alpha = 0.05f)))
-        )
-    )
+    // Filter suggestions based on input
+    var filteredSuggestions by remember { mutableStateOf<List<String>>(listOf()) }
 
-    // Fetch recipes when search query or category changes
-    LaunchedEffect(searchQuery, selectedCategory) {
-        isLoading = true
-        errorMessage = null
+    // Simplified function that searches by recipe name, category, and dietary info
+    fun filterSuggestions(query: String, allRecipes: List<RecipeRepository.RecipeListItem>) {
+        if (query.isBlank()) {
+            Log.d("SearchDebug", "Query is blank, clearing suggestions")
+            filteredSuggestions = emptyList()
+            return
+        }
+
+        val lowercaseQuery = query.lowercase().trim()
+        val matchedRecipes = mutableSetOf<String>()
         
-        try {
-            // Use coroutineScope.launch to collect the flow properly
-            coroutineScope.launch {
-                try {
-                    recipeRepository.getRecipes(
-                        query = searchQuery.takeIf { it.isNotEmpty() },
-                        category = selectedCategory.takeIf { it != "All Recipes" }
-                    ).collect { result ->
-                        if (isActive) { // Check if still active before updating state
-                            isLoading = false
-                            result.fold(
-                                onSuccess = { recipesList -> 
-                                    recipes = recipesList.sortedByDescending { it.rating }
-                                    Log.d("HomeScreen", "Loaded ${recipes.size} recipes")
-                                },
-                                onFailure = { error -> 
-                                    if (error is kotlinx.coroutines.CancellationException ||
-                                        error.message?.contains("composition") == true ||
-                                        error.cause is kotlinx.coroutines.CancellationException) {
-                                        Log.d("HomeScreen", "Recipe loading cancelled - screen likely left composition")
-                                    } else {
-                                        errorMessage = error.message ?: "Failed to load recipes"
-                                        Log.e("HomeScreen", "Error loading recipes", error)
-                                    }
-                                }
-                            )
-                        }
-                    }
-                } catch (e: Exception) {
-                    // Only update UI state if still active and not a cancellation
-                    if (isActive && e !is kotlinx.coroutines.CancellationException && 
-                        e.message?.contains("composition") != true &&
-                        e.cause !is kotlinx.coroutines.CancellationException) {
-                        isLoading = false
-                        errorMessage = e.message ?: "An unexpected error occurred"
-                        Log.e("HomeScreen", "Error loading recipes", e)
-                    } else {
-                        Log.d("HomeScreen", "Recipe loading cancelled: ${e.message}")
+        Log.d("SearchDebug", "Searching for: '$lowercaseQuery' in ${allRecipes.size} recipes")
+        
+        if (allRecipes.isEmpty()) {
+            Log.d("SearchDebug", "Recipe list is empty!")
+            return
+        }
+        
+        // Map of special terms to look for in various places
+        val specialTerms = mapOf(
+            "dessert" to listOf("dessert", "sweet", "cake", "pie", "cookie"),
+            "breakfast" to listOf("breakfast", "morning", "brunch"),
+            "vegan" to listOf("vegan", "plant-based"),
+            "vegetarian" to listOf("vegetarian", "veggie", "no meat")
+        )
+        
+        // Check if query matches any special terms
+        val matchingTerms = specialTerms.filter { (key, synonyms) ->
+            lowercaseQuery.contains(key) || synonyms.any { lowercaseQuery.contains(it) }
+        }
+        
+        if (matchingTerms.isNotEmpty()) {
+            Log.d("SearchDebug", "Query matches special terms: ${matchingTerms.keys}")
+        }
+
+        allRecipes.forEach { recipe ->
+            var matched = false
+            
+            // Check recipe name
+            if (recipe.name.lowercase().contains(lowercaseQuery)) {
+                matchedRecipes.add(recipe.name)
+                matched = true
+                Log.d("SearchDebug", "Name match: ${recipe.name}")
+                return@forEach // No need to check further for this recipe
+            }
+            
+            // Check recipe category directly
+            if (recipe.category.lowercase().contains(lowercaseQuery)) {
+                matchedRecipes.add(recipe.name)
+                matched = true
+                Log.d("SearchDebug", "Category match: ${recipe.name} (${recipe.category})")
+                return@forEach
+            }
+            
+            // Check for special term matches in category
+            if (matchingTerms.isNotEmpty()) {
+                for ((term, synonyms) in matchingTerms) {
+                    if (recipe.category.lowercase().contains(term) || 
+                        synonyms.any { recipe.category.lowercase().contains(it) }) {
+                        matchedRecipes.add(recipe.name)
+                        matched = true
+                        Log.d("SearchDebug", "Special term match in category: ${recipe.name} (term: $term)")
+                        return@forEach
                     }
                 }
             }
-        } catch (e: Exception) {
-            // Handle exceptions outside of the coroutine scope
-            if (e !is kotlinx.coroutines.CancellationException && 
-                e.message?.contains("composition") != true &&
-                e.cause !is kotlinx.coroutines.CancellationException) {
-                isLoading = false
-                errorMessage = e.message ?: "An unexpected error occurred"
-                Log.e("HomeScreen", "Error launching recipe loader", e)
-            } else {
-                Log.d("HomeScreen", "Recipe loading cancelled during launch: ${e.message}")
+            
+            // Check dietary tags
+            val dietaryTags = recipe.dietaryInfo.filter { it.isNotBlank() }
+            if (dietaryTags.isNotEmpty()) {
+                Log.d("SearchDebug", "Checking dietary tags for ${recipe.name}: ${dietaryTags.joinToString()}")
+                
+                // Direct tag match
+                for (tag in dietaryTags) {
+                    if (tag.lowercase().contains(lowercaseQuery) || 
+                        lowercaseQuery.contains(tag.lowercase())) {
+                        matchedRecipes.add(recipe.name)
+                        Log.d("SearchDebug", "Tag direct match: ${recipe.name} (tag: $tag)")
+                        matched = true
+                        break
+                    }
+                }
+                
+                // Special term match in tags
+                if (!matched && matchingTerms.isNotEmpty()) {
+                    for ((term, synonyms) in matchingTerms) {
+                        val foundMatch = dietaryTags.any { tag ->
+                            tag.lowercase().contains(term) || 
+                            synonyms.any { syn -> tag.lowercase().contains(syn) }
+                        }
+                        
+                        if (foundMatch) {
+                            matchedRecipes.add(recipe.name)
+                            Log.d("SearchDebug", "Special term match in tags: ${recipe.name} (term: $term)")
+                            matched = true
+                            break
+                        }
+                    }
+                }
             }
+        }
+
+        filteredSuggestions = matchedRecipes.toList().sorted()
+        Log.d("SearchDebug", "Final filtered suggestions: ${filteredSuggestions.joinToString()}")
+    }
+
+    // Fetch recipes when search query or category changes
+    LaunchedEffect(searchQuery, selectedCategory) {
+        if (searchQuery.isNotEmpty()) {
+            isLoading = true
+            errorMessage = null
+            
+            try {
+                // Use coroutineScope.launch to collect the flow properly
+                coroutineScope.launch {
+                    try {
+                        recipeRepository.getRecipes(
+                            query = searchQuery,
+                            category = selectedCategory.takeIf { it != "All Recipes" }
+                        ).collect { result ->
+                            if (isActive) { // Check if still active before updating state
+                                isLoading = false
+                                result.fold(
+                                    onSuccess = { recipesList -> 
+                                        recipes = recipesList.sortedByDescending { it.rating }
+                                        // Update filtered suggestions based on loaded recipes
+                                        filterSuggestions(searchQuery, recipes)
+                                        Log.d("HomeScreen", "Loaded ${recipes.size} recipes")
+                                        Log.d("SearchDebug", "Recipe categories: ${recipes.map { it.category }.distinct()}")
+                                        Log.d("SearchDebug", "Recipe tags: ${recipes.flatMap { it.dietaryInfo }.distinct()}")
+                                    },
+                                    onFailure = { error -> 
+                                        if (error is kotlinx.coroutines.CancellationException ||
+                                            error.message?.contains("composition") == true ||
+                                            error.cause is kotlinx.coroutines.CancellationException) {
+                                            Log.d("HomeScreen", "Recipe loading cancelled - screen likely left composition")
+                                        } else {
+                                            errorMessage = error.message ?: "Failed to load recipes"
+                                            Log.e("HomeScreen", "Error loading recipes", error)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // Only update UI state if still active and not a cancellation
+                        if (isActive && e !is kotlinx.coroutines.CancellationException && 
+                            e.message?.contains("composition") != true &&
+                            e.cause !is kotlinx.coroutines.CancellationException) {
+                            isLoading = false
+                            errorMessage = e.message ?: "An unexpected error occurred"
+                            Log.e("HomeScreen", "Error loading recipes", e)
+                        } else {
+                            Log.d("HomeScreen", "Recipe loading cancelled: ${e.message}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Handle exceptions outside of the coroutine scope
+                if (e !is kotlinx.coroutines.CancellationException && 
+                    e.message?.contains("composition") != true &&
+                    e.cause !is kotlinx.coroutines.CancellationException) {
+                    isLoading = false
+                    errorMessage = e.message ?: "An unexpected error occurred"
+                    Log.e("HomeScreen", "Error launching recipe loader", e)
+                } else {
+                    Log.d("HomeScreen", "Recipe loading cancelled during launch: ${e.message}")
+                }
+            }
+        } else {
+            // Reset states when search query is empty
+            isLoading = false
+            errorMessage = null
+            recipes = emptyList()
         }
     }
 
@@ -324,23 +443,17 @@ fun HomeScreenContent(navController: NavController) {
                         onSearchQueryChange = { searchQuery = it },
                         focusManager = focusManager,
                         colors = colors,
-                        typography = typography
+                        typography = typography,
+                        recipes = recipes,
+                        filteredSuggestions = filteredSuggestions,
+                        onUpdateFilteredSuggestions = { query -> 
+                            filterSuggestions(query, recipes)
+                        }
                     )
                 }
 
-                // Stats Grid
                 item {
-                    StatsGrid(
-                        categories = categories,
-                        AccentGreen = AccentGreen,
-                        CardBackground = CardBackground,
-                        TextPrimary = TextPrimary,
-                        TextSecondary = TextSecondary
-                    )
-                }
-                
-                item {
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
 
                 // Search results section (shown if search query is not empty)
@@ -373,13 +486,47 @@ fun HomeScreenContent(navController: NavController) {
                         )
                     }
                     
-                    // Display the recipes in the LazyColumn
+                    // Add today's meal preview card
+                    item {
+                        com.thenewkenya.ingrediet.feature.components.EnhancedMealPreviewCard(
+                            navController = navController,
+                            colors = colors
+                        )
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                    }
+                    
+                    // Add shopping list preview
+                    item {
+                        Text(
+                            text = "Shopping List",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            modifier = Modifier
+                                .padding(horizontal = 24.dp)
+                                .padding(bottom = 16.dp)
+                        )
+                        
+                        ShoppingListPreview(
+                            navController = navController,
+                            colors = colors,
+                            TextPrimary = TextPrimary,
+                            TextSecondary = TextSecondary,
+                            CardBackground = CardBackground
+                        )
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                    }
+                    
+                    // Loading and error states only shown during search
                     if (isLoading) {
                         item {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(200.dp),
+                                    .height(100.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 CircularProgressIndicator(color = colors.primary)
@@ -390,7 +537,7 @@ fun HomeScreenContent(navController: NavController) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(200.dp),
+                                    .height(100.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -398,24 +545,6 @@ fun HomeScreenContent(navController: NavController) {
                                     color = colors.error
                                 )
                             }
-                        }
-                    } else if (recipes.isEmpty()) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(200.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "No recipes available. Try searching for something!",
-                                    color = TextSecondary
-                                )
-                            }
-                        }
-                    } else {
-                        items(recipes) { recipe ->
-                            RecipeCard(recipe = recipe, navController = navController)
                         }
                     }
                 }
@@ -460,8 +589,25 @@ private fun HomeHeader(
     onSearchQueryChange: (String) -> Unit,
     focusManager: FocusManager,
     colors: androidx.compose.material3.ColorScheme,
-    typography: androidx.compose.material3.Typography
+    typography: androidx.compose.material3.Typography,
+    recipes: List<RecipeRepository.RecipeListItem>,
+    filteredSuggestions: List<String>,
+    onUpdateFilteredSuggestions: (String) -> Unit
 ) {
+    // Common search suggestions
+    val searchSuggestions = remember {
+        listOf(
+            "Breakfast", "Lunch", "Dinner", 
+            "Vegetarian", "Vegan", "Gluten-Free", 
+            "Low Carb", "High Protein", "Keto", 
+            "Quick & Easy", "Desserts", "Snacks",
+            "Italian", "Mexican", "Asian", "Mediterranean",
+            "Soup", "Salad", "Seafood", "Chicken"
+        )
+    }
+    
+    var showSuggestions by remember { mutableStateOf(false) }
+    
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -553,131 +699,151 @@ private fun HomeHeader(
         val localSearchQuery = remember(searchQuery) { mutableStateOf(searchQuery) }
         val scope = rememberCoroutineScope()
         
-        OutlinedTextField(
-            value = localSearchQuery.value,
-            onValueChange = { newValue ->
-                localSearchQuery.value = newValue
-                // Use scope.launch to avoid composition cancellation issues
-                scope.launch {
-                    onSearchQueryChange(newValue)
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            placeholder = { Text("Search recipes...") },
-            leadingIcon = { 
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search"
-                )
-            },
-            trailingIcon = {
-                if (localSearchQuery.value.isNotEmpty()) {
-                    IconButton(onClick = { 
-                        localSearchQuery.value = ""
-                        scope.launch {
-                            onSearchQueryChange("")
-                        }
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Clear search"
-                        )
+        Column {
+            OutlinedTextField(
+                value = localSearchQuery.value,
+                onValueChange = { newValue ->
+                    localSearchQuery.value = newValue
+                    showSuggestions = newValue.isNotEmpty()
+                    // Update filtered suggestions
+                    onUpdateFilteredSuggestions(newValue)
+                    // Log for debugging
+                    Log.d("SearchDebug", "Text changed to: $newValue")
+                    // Use scope.launch to avoid composition cancellation issues
+                    scope.launch {
+                        onSearchQueryChange(newValue)
                     }
-                }
-            },
-            shape = RoundedCornerShape(16.dp),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = colors.surfaceVariant,
-                unfocusedContainerColor = colors.surfaceVariant,
-                disabledContainerColor = colors.surfaceVariant,
-                focusedIndicatorColor = colors.primary,
-                unfocusedIndicatorColor = Color.Transparent
-            ),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                imeAction = ImeAction.Search
-            ),
-            keyboardActions = KeyboardActions(
-                onSearch = {
-                    // Handle search action
-                    focusManager.clearFocus()
-                    if (localSearchQuery.value.isNotEmpty()) {
-                        navController.navigate("search/${localSearchQuery.value}")
-                    }
-                }
-            )
-        )
-    }
-}
-
-@Composable
-private fun StatsGrid(
-    categories: List<Category>,
-    AccentGreen: Color,
-    CardBackground: Color,
-    TextPrimary: Color,
-    TextSecondary: Color
-) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(horizontal = 24.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        items(categories) { category ->
-            Card(
+                },
                 modifier = Modifier
-                    .width(160.dp)
-                    .height(120.dp),
-                colors = CardDefaults.cardColors(containerColor = CardBackground),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
+                    .fillMaxWidth()
+                    .height(56.dp),
+                placeholder = { Text("Search recipes...") },
+                leadingIcon = { 
                     Icon(
-                        imageVector = category.icon,
-                        contentDescription = null,
-                        tint = AccentGreen,
-                        modifier = Modifier.size(24.dp)
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search"
                     )
-                    Column {
-                        Text(
-                            text = category.name,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                color = TextPrimary,
-                                fontWeight = FontWeight.Medium
+                },
+                trailingIcon = {
+                    if (localSearchQuery.value.isNotEmpty()) {
+                        IconButton(onClick = { 
+                            localSearchQuery.value = ""
+                            showSuggestions = false
+                            scope.launch {
+                                onSearchQueryChange("")
+                            }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear search"
                             )
-                        )
-                        when (category.name) {
-                            "Calories" -> Text(
-                                text = "1480 kcal",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    color = TextSecondary
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(16.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = colors.surfaceVariant,
+                    unfocusedContainerColor = colors.surfaceVariant,
+                    disabledContainerColor = colors.surfaceVariant,
+                    focusedIndicatorColor = colors.primary,
+                    unfocusedIndicatorColor = Color.Transparent
+                ),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Search
+                ),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        // Handle search action
+                        focusManager.clearFocus()
+                        showSuggestions = false
+                        if (localSearchQuery.value.isNotEmpty()) {
+                            // Don't navigate to a non-existent route
+                            // Just update the search query instead
+                            scope.launch {
+                                onSearchQueryChange(localSearchQuery.value)
+                            }
+                        }
+                    }
+                )
+            )
+            
+            // Search suggestions
+            AnimatedVisibility(
+                visible = showSuggestions && localSearchQuery.value.isNotEmpty(),
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = colors.surfaceVariant
+                    ),
+                    elevation = CardDefaults.cardElevation(
+                        defaultElevation = 2.dp
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        if (filteredSuggestions.isEmpty()) {
+                            // Show a hint when no matching suggestions
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Text(
+                                    text = "Try searching for a recipe, ingredient, or cuisine type",
+                                    style = typography.bodySmall,
+                                    color = colors.onSurfaceVariant.copy(alpha = 0.7f),
+                                    textAlign = TextAlign.Center
                                 )
-                            )
-                            "Water" -> Text(
-                                text = "1.5L",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    color = TextSecondary
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                Text(
+                                    text = "You can also search by tags like \"Vegan\" or \"Low Carb\"",
+                                    style = typography.labelSmall,
+                                    color = colors.primary.copy(alpha = 0.7f),
+                                    textAlign = TextAlign.Center
                                 )
-                            )
-                            "Sleep" -> Text(
-                                text = "7.5h",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    color = TextSecondary
-                                )
-                            )
-                            "Training" -> Text(
-                                text = "5500 steps",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    color = TextSecondary
-                                )
-                            )
+                            }
+                        } else {
+                            // Show filtered suggestions
+                            LazyColumn(
+                                modifier = Modifier.heightIn(max = 200.dp)
+                            ) {
+                                items(filteredSuggestions) { suggestion ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                localSearchQuery.value = suggestion
+                                                showSuggestions = false
+                                                scope.launch {
+                                                    onSearchQueryChange(suggestion)
+                                                }
+                                                focusManager.clearFocus()
+                                            }
+                                            .padding(horizontal = 8.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Search,
+                                            contentDescription = null,
+                                            tint = colors.onSurfaceVariant.copy(alpha = 0.7f),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = suggestion,
+                                            style = typography.bodyMedium,
+                                            color = colors.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -701,7 +867,7 @@ private fun SearchResultsSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = 16.dp)
     ) {
         Text(
             text = "Search Results",
@@ -709,7 +875,8 @@ private fun SearchResultsSection(
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
             ),
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier
+                .padding(start = 8.dp, bottom = 12.dp, top = 8.dp)
         )
         
         if (isLoading) {
@@ -740,15 +907,44 @@ private fun SearchResultsSection(
                     .height(200.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "No recipes found for '$searchQuery'",
-                    color = TextSecondary
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = TextSecondary.copy(alpha = 0.5f),
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "No recipes found for '$searchQuery'",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Try adjusting your search terms or browse categories",
+                        color = TextSecondary.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         } else {
-            // Display the found recipes
-            recipes.forEach { recipe ->
-                RecipeCard(recipe = recipe, navController = navController)
+            // Display the found recipes with improved spacing
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                recipes.forEach { recipe ->
+                    RecipeCard(recipe = recipe, navController = navController)
+                }
+                // Add some bottom padding
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -799,258 +995,164 @@ fun SignOutDialog(
 }
 
 @Composable
-fun CategoryItem(
-    category: Category,
-    isSelected: Boolean,
-    onCategorySelected: (String) -> Unit
-) {
-    val categoryColors = MaterialTheme.colorScheme
-    val typography = MaterialTheme.typography
-
-    Box(
-        modifier = Modifier
-            .width(120.dp)
-            .height(100.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(category.gradient)
-            .clickable { onCategorySelected(category.name) }
-            .padding(16.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(categoryColors.onPrimary.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = category.icon,
-                    contentDescription = null,
-                    tint = categoryColors.onPrimary
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = category.name,
-                color = categoryColors.onPrimary,
-                style = typography.bodyMedium,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}
-
-@Composable
 fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavController) {
+    val colors = MaterialTheme.colorScheme
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .height(140.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .padding(vertical = 4.dp)
             .clickable {
                 Log.d("RecipeCard", "Navigating to recipe ${recipe.id}")
                 navController.navigate("recipe/${recipe.id}")
             },
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = colors.surfaceVariant.copy(alpha = 0.4f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Recipe Image with gradient overlay
+            // Recipe image as squircle (rounded square)
             Box(
                 modifier = Modifier
-                    .width(140.dp)
-                    .fillMaxHeight()
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(colors.primary.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
             ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    var isLoading by remember { mutableStateOf(true) }
-                    var isError by remember { mutableStateOf(false) }
-                    
-                    if (recipe.imageUrl.isNotEmpty()) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(recipe.imageUrl)
-                                .crossfade(true)
-                                .listener(object : ImageRequest.Listener {
-                                    override fun onStart(request: ImageRequest) {
-                                        isLoading = true
-                                    }
-                                    override fun onSuccess(request: ImageRequest, result: SuccessResult) {
-                                        isLoading = false
-                                    }
-                                    override fun onError(request: ImageRequest, result: ErrorResult) {
-                                        isLoading = false
-                                        isError = true
-                                    }
-                                })
-                                .build(),
-                            contentDescription = "Recipe image for ${recipe.name}",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Restaurant,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    
-                    if (isError) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Restaurant,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    
-                    if (isLoading) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(32.dp),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
+                if (recipe.imageUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(recipe.imageUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Restaurant,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
                 }
-                // Gradient overlay
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.3f)
-                                )
-                            )
-                        )
-                )
             }
             
-            // Recipe Details
+            // Recipe details
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(vertical = 12.dp, horizontal = 4.dp)
+                    .padding(vertical = 4.dp)
             ) {
-                Text(
-                    text = recipe.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                
-                // Category and dietary info
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Category tag
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
-                        Text(
-                            text = recipe.category,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
+                    // Recipe name
+                    Text(
+                        text = recipe.name,
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = colors.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
                     
-                    // Display dietary info
-                    recipe.dietaryInfo.take(3).forEach { info ->
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
-                            Text(
-                                text = info,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                color = MaterialTheme.colorScheme.onTertiaryContainer
-                            )
-                        }
-                    }
+                    // Quick info in a compact format
+                    Text(
+                        text = recipe.time,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
                 }
                 
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.height(4.dp))
                 
-                // Metadata row
+                // Category with subtle indicator
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(colors.primary)
+                    )
+                    Text(
+                        text = recipe.category,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                // Tags row with scrolling
+                Row(
+                    modifier = Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Time
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    // Display calories
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(colors.tertiary.copy(alpha = 0.1f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Timer,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
                         Text(
-                            text = recipe.time,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            text = "${recipe.calories} kcal",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.tertiary
                         )
                     }
                     
-                    // Calories
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.LocalDining,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                        Text(
-                            text = "${recipe.calories} kcal",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
+                    // Display dietary info tags - show up to 4 tags
+                    val tagsToShow = mutableListOf<String>()
+                    
+                    // Get filtered tags
+                    recipe.dietaryInfo.forEach { tag ->
+                        val cleanTag = tag.trim()
+                        if (cleanTag.isNotEmpty() && !tagsToShow.contains(cleanTag) && 
+                            !recipe.category.equals(cleanTag, ignoreCase = true) &&
+                            tagsToShow.size < 4) {
+                            tagsToShow.add(cleanTag)
+                        }
+                    }
+                    
+                    // Show all valid tags in pills
+                    tagsToShow.forEach { tag ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(colors.secondary.copy(alpha = 0.1f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = tag.capitalizeFirst(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.onSecondaryContainer
+                            )
+                        }
                     }
                 }
             }
@@ -1061,4 +1163,190 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
 // String extension to capitalize first letter
 fun String.capitalizeFirst(): String {
     return this.lowercase().replaceFirstChar { it.uppercase() }
+}
+
+@Composable
+fun ShoppingListPreview(
+    navController: NavController,
+    colors: ColorScheme,
+    TextPrimary: Color,
+    TextSecondary: Color,
+    CardBackground: Color
+) {
+    val context = LocalContext.current
+    val shoppingListViewModel = remember { 
+        ShoppingListViewModel(
+            context = context
+        )
+    }
+    
+    // Get shopping list items
+    val items by shoppingListViewModel.items.collectAsState(initial = emptyList())
+    val isLoading by shoppingListViewModel.isLoading.collectAsState(initial = true)
+    val displayItems = items.take(5)
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .clickable { navController.navigate("shopping") },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = CardBackground)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            if (isLoading) {
+                // Show loading skeleton
+                ShoppingListSkeleton(TextSecondary)
+            } else if (items.isEmpty()) {
+                // Show empty state
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.ShoppingCart,
+                            contentDescription = null,
+                            tint = TextSecondary.copy(alpha = 0.5f),
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Your shopping list is empty",
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        TextButton(
+                            onClick = { navController.navigate("shopping") },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = colors.primary
+                            )
+                        ) {
+                            Text("Add items")
+                        }
+                    }
+                }
+            } else {
+                // Display items
+                displayItems.forEachIndexed { index, item ->
+                    if (index > 0) {
+                        Divider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = TextSecondary.copy(alpha = 0.1f)
+                        )
+                    }
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = item.isChecked,
+                            onCheckedChange = { shoppingListViewModel.toggleItem(item.id) },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = colors.primary,
+                                uncheckedColor = TextSecondary
+                            )
+                        )
+                        
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = TextPrimary,
+                                textDecoration = if (item.isChecked) {
+                                    androidx.compose.ui.text.style.TextDecoration.LineThrough
+                                } else {
+                                    null
+                                }
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                
+                // If there are more items than we show
+                if (items.size > 5) {
+                    Divider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = TextSecondary.copy(alpha = 0.1f)
+                    )
+                    
+                    Text(
+                        text = "+${items.size - 5} more items",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = colors.primary
+                        ),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShoppingListSkeleton(textSecondary: Color) {
+    val shimmerColor = textSecondary.copy(alpha = 0.2f)
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val alpha by transition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 0.6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1000),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shimmer alpha"
+    )
+    
+    Column(modifier = Modifier.fillMaxWidth()) {
+        repeat(5) { index ->
+            if (index > 0) {
+                Divider(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .padding(vertical = 8.dp)
+                        .background(shimmerColor.copy(alpha = 0.5f))
+                )
+            }
+            
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Checkbox placeholder
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .background(
+                            shimmerColor.copy(alpha = alpha),
+                            RoundedCornerShape(4.dp)
+                        )
+                )
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                // Text placeholder
+                Box(
+                    modifier = Modifier
+                        .height(16.dp)
+                        .width(150.dp + (index * 20).dp)
+                        .background(
+                            shimmerColor.copy(alpha = alpha),
+                            RoundedCornerShape(4.dp)
+                        )
+                )
+            }
+        }
+    }
 }

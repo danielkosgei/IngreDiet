@@ -44,6 +44,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
@@ -183,6 +186,32 @@ fun RecipeDetailScreen(
     val tabs = listOf("Recipe", "Ingredients")
     var selectedTabIndex by remember { mutableStateOf(0) }
 
+    // For snackbar
+    val snackbarHostState = remember { SnackbarHostState() }
+    val addToShoppingListResult by viewModel.addToShoppingListResult.collectAsState()
+    
+    // Show snackbar when add to shopping list result changes
+    LaunchedEffect(addToShoppingListResult) {
+        addToShoppingListResult?.let { result ->
+            val snackbarMessage = when (result) {
+                is AddToShoppingListResult.Success -> 
+                    "Added ${result.count} ingredients to shopping list"
+                is AddToShoppingListResult.PartialSuccess -> 
+                    "Added ${result.successCount} out of ${result.totalCount} ingredients"
+                is AddToShoppingListResult.Error -> 
+                    "Error: ${result.message}"
+            }
+            
+            snackbarHostState.showSnackbar(
+                message = snackbarMessage,
+                duration = SnackbarDuration.Short
+            )
+            
+            // Reset the result after showing the snackbar
+            viewModel.resetAddToShoppingListResult()
+        }
+    }
+
     // Use theme colors instead of hardcoded colors
     val backgroundColor = colors.background
     val accentColor = colors.primary
@@ -199,6 +228,7 @@ fun RecipeDetailScreen(
             .fillMaxSize()
             .background(backgroundColor),
         containerColor = backgroundColor,
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -498,15 +528,24 @@ fun RecipeDetailScreen(
                                     .padding(16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
+                                val isAddingToShoppingList by viewModel.isAddingToShoppingList.collectAsState()
+                                
                                 Button(
-                                    onClick = { /* Handle button click */ },
+                                    onClick = { 
+                                        if (selectedTabIndex == 0) {
+                                            /* Handle Start Cooking action */ 
+                                        } else {
+                                            viewModel.addIngredientsToShoppingList()
+                                        }
+                                    },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(56.dp),
                                     shape = RoundedCornerShape(28.dp),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = accentColor
-                                    )
+                                    ),
+                                    enabled = !isAddingToShoppingList
                                 ) {
                                     if (selectedTabIndex == 0) {
                                         Text(
@@ -521,13 +560,21 @@ fun RecipeDetailScreen(
                                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.ShoppingCart,
-                                                contentDescription = null,
-                                                tint = colors.onPrimary
-                                            )
+                                            if (isAddingToShoppingList) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(20.dp),
+                                                    strokeWidth = 2.dp,
+                                                    color = colors.onPrimary
+                                                )
+                                            } else {
+                                                Icon(
+                                                    imageVector = Icons.Filled.ShoppingCart,
+                                                    contentDescription = null,
+                                                    tint = colors.onPrimary
+                                                )
+                                            }
                                             Text(
-                                                text = "Add to Shopping List",
+                                                text = if (isAddingToShoppingList) "Adding..." else "Add to Shopping List",
                                                 style = typography.bodyLarge.copy(
                                                     fontWeight = FontWeight.Bold,
                                                     color = colors.onPrimary
