@@ -9,18 +9,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
  * Manages caching of API responses to reduce external API calls and Supabase storage usage
  */
-class CacheManager(context: Context) {
+class CacheManager(private val context: Context) {
     companion object {
         private const val PREFS_NAME = "ingrediet_cache"
         private const val RECIPE_PREFIX = "recipe_"
         private const val INGREDIENT_PREFIX = "ingredient_"
         private const val LAST_USED_PREFIX = "last_used_"
         private const val CACHE_EXPIRY_DAYS = 7 // Default cache expiry in days
+        private const val RECIPE_CACHE_DIR = "recipe_cache"
     }
     
     private val json = Json { ignoreUnknownKeys = true }
@@ -45,6 +47,25 @@ class CacheManager(context: Context) {
     }
     
     /**
+     * Cache a recipe synchronously (non-suspending version)
+     * For use in non-suspending contexts like callbacks
+     */
+    fun cacheRecipeSync(recipe: DetailedRecipe?) {
+        if (recipe == null) return
+        try {
+            val recipeKey = "$RECIPE_PREFIX${recipe.id}"
+            prefs.edit()
+                .putString(recipeKey, json.encodeToString(recipe))
+                .putLong("$LAST_USED_PREFIX$recipeKey", System.currentTimeMillis())
+                .apply()
+                
+            Log.d("CacheManager", "Cached recipe: ${recipe.id} - ${recipe.name}")
+        } catch (e: Exception) {
+            Log.e("CacheManager", "Error caching recipe: ${e.message}", e)
+        }
+    }
+    
+    /**
      * Get a cached recipe by ID
      * @return The cached recipe or null if not found or expired
      */
@@ -62,6 +83,28 @@ class CacheManager(context: Context) {
         } catch (e: Exception) {
             Log.e("CacheManager", "Error getting cached recipe: ${e.message}", e)
             return@withContext null
+        }
+    }
+    
+    /**
+     * Get a cached recipe by ID (non-suspending version)
+     * For use in non-suspending contexts like callbacks
+     * @return The cached recipe or null if not found or expired
+     */
+    fun getCachedRecipeSync(recipeId: Int): DetailedRecipe? {
+        try {
+            val recipeKey = "$RECIPE_PREFIX$recipeId"
+            val recipeJson = prefs.getString(recipeKey, null) ?: return null
+            
+            // Update last used timestamp
+            prefs.edit()
+                .putLong("$LAST_USED_PREFIX$recipeKey", System.currentTimeMillis())
+                .apply()
+                
+            return json.decodeFromString<DetailedRecipe>(recipeJson)
+        } catch (e: Exception) {
+            Log.e("CacheManager", "Error getting cached recipe: ${e.message}", e)
+            return null
         }
     }
     
@@ -170,5 +213,73 @@ class CacheManager(context: Context) {
         } catch (e: Exception) {
             Log.e("CacheManager", "Error cleaning up cache: ${e.message}", e)
         }
+    }
+
+    /**
+     * Get cached recipes that match a query
+     * @param query The search query to match against recipe names
+     * @return List of matching recipes from cache
+     */
+    fun getCachedRecipesByQuery(query: String): List<DetailedRecipe> {
+        val cachedRecipes = getRecipesFromCache()
+        
+        // If there's no actual query, return a subset of all recipes
+        if (query.isBlank()) {
+            return cachedRecipes.take(10)
+        }
+        
+        // Otherwise filter by the query term
+        return cachedRecipes.filter {
+            it.name.contains(query, ignoreCase = true)
+        }
+    }
+
+    /**
+     * Get a random selection of cached recipes
+     * @param count Number of recipes to return
+     * @return List of random recipes from cache
+     */
+    fun getRandomCachedRecipes(count: Int): List<DetailedRecipe> {
+        val cachedRecipes = getRecipesFromCache()
+        
+        // If we have fewer recipes than requested, return all of them
+        if (cachedRecipes.size <= count) {
+            return cachedRecipes
+        }
+        
+        // Otherwise return a random subset
+        return cachedRecipes.shuffled().take(count)
+    }
+
+    /**
+     * Get all recipes from the cache
+     * @return List of all cached recipes
+     */
+    private fun getRecipesFromCache(): List<DetailedRecipe> {
+        val cachedRecipes = mutableListOf<DetailedRecipe>()
+        
+        try {
+            val parentDir = context.cacheDir
+            val cacheDir = File(parentDir.path, RECIPE_CACHE_DIR)
+            if (!cacheDir.exists()) {
+                return emptyList()
+            }
+            
+            val files = cacheDir.listFiles()
+            files?.forEach { file ->
+                try {
+                    val content = file.readText()
+                    val recipe = json.decodeFromString<DetailedRecipe>(content)
+                    cachedRecipes.add(recipe)
+                } catch (e: Exception) {
+                    Log.e("CacheManager", "Error reading cached recipe: ${e.message}")
+                    // Continue with other files
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("CacheManager", "Error getting recipes from cache: ${e.message}")
+        }
+        
+        return cachedRecipes
     }
 }

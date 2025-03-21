@@ -5,7 +5,11 @@ import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.data.model.NutritionFacts
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -35,7 +39,7 @@ class TheMealDbService {
             // Search endpoint returns full meal details
             return@withContext searchResponse.meals?.map { meal -> meal.toDetailedRecipe() } ?: emptyList()
         } catch (e: Exception) {
-            Log.e("TheMealDbService", "Error searching meals: ${e.message}", e)
+            Log.e("TheMealDbService", "Error searching meals: ${e.message}")
             return@withContext emptyList()
         }
     }
@@ -54,7 +58,7 @@ class TheMealDbService {
             
             return@withContext searchResponse.meals?.firstOrNull()?.toDetailedRecipe()
         } catch (e: Exception) {
-            Log.e("TheMealDbService", "Error getting meal details: ${e.message}", e)
+            Log.e("TheMealDbService", "Error getting meal details: ${e.message}")
             return@withContext null
         }
     }
@@ -64,16 +68,34 @@ class TheMealDbService {
      */
     suspend fun getRandomMeal(): DetailedRecipe? = withContext(Dispatchers.IO) {
         try {
+            // Check if the coroutine is still active before making the network call
+            if (!isActive) {
+                return@withContext null
+            }
+            
             val url = URL("$baseUrl/random.php")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
+            connection.connectTimeout = 5000 // 5 second timeout
+            connection.readTimeout = 5000
+            
+            // Check again if still active before reading response
+            if (!isActive) {
+                connection.disconnect()
+                return@withContext null
+            }
             
             val response = connection.inputStream.bufferedReader().use { it.readText() }
             val searchResponse = json.decodeFromString<MealSearchResponse>(response)
             
             return@withContext searchResponse.meals?.firstOrNull()?.toDetailedRecipe()
         } catch (e: Exception) {
-            Log.e("TheMealDbService", "Error getting random meal: ${e.message}", e)
+            // Handle cancellation exceptions silently
+            if (e is kotlinx.coroutines.CancellationException) {
+                return@withContext null
+            }
+            
+            Log.e("TheMealDbService", "Error getting random meal: ${e.message}")
             return@withContext null
         }
     }
@@ -92,7 +114,7 @@ class TheMealDbService {
             
             return@withContext categoriesResponse.categories?.map { it.strCategory } ?: emptyList()
         } catch (e: Exception) {
-            Log.e("TheMealDbService", "Error getting categories: ${e.message}", e)
+            Log.e("TheMealDbService", "Error getting categories: ${e.message}")
             return@withContext emptyList()
         }
     }
@@ -100,20 +122,40 @@ class TheMealDbService {
     /**
      * Filter meals by category
      */
-    suspend fun filterByCategory(category: String): List<DetailedRecipe> = withContext(Dispatchers.IO) {
+    suspend fun filterByCategory(category: String): Flow<List<DetailedRecipe>> = flow {
         try {
+            // Check if the coroutine is still active before making the network call
+            if (!currentCoroutineContext().isActive) {
+                return@flow
+            }
+            
             val url = URL("$baseUrl/filter.php?c=$category")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
+            connection.connectTimeout = 5000 // 5 second timeout
+            connection.readTimeout = 5000
+            
+            // Check again if still active before reading response
+            if (!currentCoroutineContext().isActive) {
+                connection.disconnect()
+                return@flow
+            }
             
             val response = connection.inputStream.bufferedReader().use { it.readText() }
             val filterResponse = json.decodeFromString<MealFilterResponse>(response)
             
             // Filter response now contains full recipe details
-            return@withContext filterResponse.meals?.map { meal -> meal.toDetailedRecipe() } ?: emptyList()
+            val results = filterResponse.meals?.map { meal -> meal.toDetailedRecipe() } ?: emptyList()
+            emit(results)
         } catch (e: Exception) {
-            Log.e("TheMealDbService", "Error filtering by category: ${e.message}", e)
-            return@withContext emptyList()
+            // Don't emit in case of cancellation
+            if (e is kotlinx.coroutines.CancellationException) {
+                Log.d("TheMealDbService", "Category filtering cancelled")
+                return@flow // Don't emit anything
+            }
+            
+            Log.e("TheMealDbService", "Error filtering by category: ${e.message}")
+            emit(emptyList())
         }
     }
 }

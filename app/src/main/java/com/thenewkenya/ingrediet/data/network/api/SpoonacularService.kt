@@ -5,103 +5,295 @@ import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.data.model.NutritionFacts
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
 import java.net.URL
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.State
+import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.client.call.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.client.plugins.*
+import io.ktor.util.*
+import android.preference.PreferenceManager
 
 /**
  * Service class for interacting with Spoonacular API
  */
-class SpoonacularService {
+class SpoonacularService(private val context: android.content.Context) {
+    private val TAG = "SpoonacularService"
     private val json = Json { ignoreUnknownKeys = true }
     private val baseUrl = "https://api.spoonacular.com"
     private val apiKey = "8633f6e288b441c48e43a51c3c968d78"
+    
+    // Constants
+    companion object {
+        const val TAG = "SpoonacularService"
+        const val API_LIMIT_TIMESTAMP_KEY = "spoonacular_api_limit_timestamp"
+        const val API_LIMIT_DURATION_MS = 24 * 60 * 60 * 1000L // 24 hours in milliseconds
+    }
+    
+    // Track if API limit has been reached
+    private val _apiLimitReached = mutableStateOf(false)
+    private var _lastApiLimitReachedTime: Long = 0L
+    
+    // Public state for API limit
+    val apiLimitReached: State<Boolean> = _apiLimitReached
+    
+    // Create Ktor client
+    private val client = HttpClient {
+        install(ContentNegotiation) {
+            json(Json {
+                prettyPrint = true
+                isLenient = true
+                ignoreUnknownKeys = true
+            })
+        }
+        // Set timeout using HttpTimeout feature or handle manually with HttpURLConnection
+    }
+
+    // Simplified method using HttpURLConnection for direct HTTP calls
+    private suspend fun makeApiCall(endpoint: String, params: Map<String, String> = emptyMap()): String {
+        return withContext(Dispatchers.IO) {
+            // If API limit already reached, don't even try to make the call
+            if (_apiLimitReached.value) {
+                Log.d(TAG, "API limit already reached, skipping call to endpoint: $endpoint")
+                throw ApiLimitExceededException("API limit reached (cached state)")
+            }
+            
+            val urlBuilder = StringBuilder("$baseUrl/$endpoint?apiKey=$apiKey")
+            
+            params.forEach { (key, value) ->
+                urlBuilder.append("&$key=$value")
+            }
+            
+            val url = URL(urlBuilder.toString())
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 10000 // 10 seconds
+            connection.readTimeout = 10000 // 10 seconds
+            
+            try {
+                val responseCode = connection.responseCode
+                Log.d(TAG, "API call to $endpoint returned code: $responseCode")
+                
+                if (responseCode == 200) {
+                    val response = connection.inputStream.bufferedReader().use { it.readText() }
+                    Log.d(TAG, "Successfully received data from Spoonacular for endpoint: $endpoint")
+                    return@withContext response
+                } else if (responseCode == 402) {
+                    _apiLimitReached.value = true
+                    // Store the timestamp for when we reached the limit
+                    storeLimitReachedTimestamp()
+                    Log.e(TAG, "API limit reached (402 Payment Required) for endpoint: $endpoint")
+                    throw ApiLimitExceededException("API limit reached (402 Payment Required)")
+                } else {
+                    Log.e(TAG, "API error: $responseCode for endpoint: $endpoint")
+                    throw ApiException("API error: $responseCode for endpoint: $endpoint")
+                }
+            } catch (e: Exception) {
+                if (e is ApiLimitExceededException) {
+                    throw e
+                }
+                
+                if (e is java.net.SocketTimeoutException) {
+                    Log.e(TAG, "Timeout connecting to Spoonacular API for endpoint: $endpoint", e)
+                    throw ApiTimeoutException("Connection timed out for endpoint: $endpoint")
+                }
+                
+                Log.e(TAG, "Error making API call to endpoint: $endpoint", e)
+                throw e
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    /**
+     * Store timestamp when API limit was reached
+     */
+    private fun storeLimitReachedTimestamp() {
+        // We use the system time to track when the limit was reached
+        val currentTime = System.currentTimeMillis()
+        _lastApiLimitReachedTime = currentTime
+        
+        // Store the timestamp in preferences for app restarts
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().putLong(API_LIMIT_TIMESTAMP_KEY, currentTime).apply()
+    }
+
+    /**
+     * Custom exceptions for API errors
+     */
+    class ApiException(message: String) : Exception(message)
+    class ApiLimitExceededException(message: String) : Exception(message)
+    class ApiTimeoutException(message: String) : Exception(message)
 
     /**
      * Search for recipes by query
      */
-    suspend fun searchRecipes(query: String): List<DetailedRecipe> = withContext(Dispatchers.IO) {
-        try {
-            // If the query is empty, fall back to random recipes
-            if (query.isBlank()) {
-                Log.d("SpoonacularService", "Empty query, fetching random recipes instead")
-                return@withContext getRandomRecipes(10)
-            }
-            
-            val url = URL("$baseUrl/recipes/complexSearch?apiKey=$apiKey&query=$query&addRecipeInformation=true")
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            
-            // Check response code before reading
-            val responseCode = connection.responseCode
-            if (responseCode != HttpURLConnection.HTTP_OK) {
-                Log.e("SpoonacularService", "API error: $responseCode - ${connection.responseMessage}")
-                return@withContext getFallbackRecipes()
-            }
-            
-            val response = connection.inputStream.bufferedReader().use { it.readText() }
-            val searchResponse = json.decodeFromString<SpoonacularSearchResponse>(response)
-            
-            return@withContext searchResponse.results.map { it.toDetailedRecipe() }
-        } catch (e: Exception) {
-            Log.e("SpoonacularService", "Error searching recipes: ${e.message}", e)
-            return@withContext getFallbackRecipes()
+    suspend fun searchRecipes(query: String, limit: Int = 10): Flow<List<DetailedRecipe>> = flow {
+        // Early check for API limit to avoid unnecessary work
+        if (_apiLimitReached.value) {
+            Log.d(TAG, "API limit reached, skipping Spoonacular search for query: $query")
+            emit(emptyList())
+            return@flow
         }
+
+        // Skip empty queries
+        if (query.isBlank()) {
+            Log.d(TAG, "Empty query, fetching random recipes instead")
+            getRandomRecipes(limit).collect { recipes -> 
+                emit(recipes)
+            }
+            return@flow
+        }
+
+        Log.d(TAG, "Searching Spoonacular for: $query")
+        val endpoint = "recipes/complexSearch"
+        
+        val params = mapOf(
+            "query" to query,
+            "number" to limit.toString(),
+            "addRecipeInformation" to "true",
+            "fillIngredients" to "true",
+            "addRecipeNutrition" to "true"
+        )
+        
+        val recipes = try {
+            val responseJson = makeApiCall(endpoint, params)
+            val searchResponse = json.decodeFromString<SpoonacularSearchResponse>(responseJson)
+            searchResponse.results.map { result ->
+                mapToDetailedRecipe(result)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "API error during search: ${e.message}")
+            
+            // Set API limit flag if appropriate
+            if (e is ApiLimitExceededException || e.message?.contains("402") == true) {
+                _apiLimitReached.value = true
+                Log.d(TAG, "API limit reached, skipping Spoonacular search")
+            }
+            
+            // For cancellation, don't emit - just return
+            if (e is kotlinx.coroutines.CancellationException || 
+                e.message?.contains("composition") == true || 
+                e.cause is kotlinx.coroutines.CancellationException) {
+                Log.d(TAG, "Search operation cancelled normally")
+                return@flow
+            }
+            
+            // For other errors, use an empty list
+            emptyList()
+        }
+        
+        // Only emit once, at the end
+        emit(recipes)
     }
 
     /**
      * Get random recipes
      */
-    suspend fun getRandomRecipes(number: Int = 10): List<DetailedRecipe> = withContext(Dispatchers.IO) {
-        try {
-            val url = URL("$baseUrl/recipes/random?apiKey=$apiKey&number=$number")
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
+    suspend fun getRandomRecipes(limit: Int = 10): Flow<List<DetailedRecipe>> = flow {
+        // Early check for API limit to avoid unnecessary work
+        if (_apiLimitReached.value) {
+            Log.d(TAG, "API limit reached, skipping Spoonacular random recipes")
+            emit(emptyList())
+            return@flow
+        }
+
+        Log.d(TAG, "Fetching random recipes from Spoonacular")
+        val endpoint = "recipes/random"
+        
+        val params = mapOf(
+            "number" to limit.toString(),
+            "tags" to ""
+        )
+        
+        val recipes = try {
+            val responseJson = makeApiCall(endpoint, params)
+            val randomResponse = json.decodeFromString<SpoonacularRandomResponse>(responseJson)
+            randomResponse.recipes.map { recipe ->
+                mapRandomToDetailedRecipe(recipe)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "API error during random recipes: ${e.message}")
             
-            // Check response code before reading
-            val responseCode = connection.responseCode
-            if (responseCode != HttpURLConnection.HTTP_OK) {
-                Log.e("SpoonacularService", "API error: $responseCode - ${connection.responseMessage}")
-                return@withContext getFallbackRecipes()
+            // Set API limit flag if appropriate
+            if (e is ApiLimitExceededException || e.message?.contains("402") == true) {
+                _apiLimitReached.value = true
+                Log.d(TAG, "API limit reached, skipping Spoonacular random recipes")
             }
             
-            val response = connection.inputStream.bufferedReader().use { it.readText() }
-            val randomResponse = json.decodeFromString<SpoonacularRandomResponse>(response)
+            // For cancellation, don't emit - just return
+            if (e is kotlinx.coroutines.CancellationException || 
+                e.message?.contains("composition") == true || 
+                e.cause is kotlinx.coroutines.CancellationException) {
+                Log.d(TAG, "Random recipes operation cancelled normally")
+                return@flow
+            }
             
-            return@withContext randomResponse.recipes.map { it.toDetailedRecipe() }
-        } catch (e: Exception) {
-            Log.e("SpoonacularService", "Error getting random recipes: ${e.message}", e)
-            return@withContext getFallbackRecipes()
+            // For other errors, use an empty list
+            emptyList()
         }
+        
+        // Only emit once, at the end
+        emit(recipes)
     }
 
     /**
      * Get recipe by ID
      */
-    suspend fun getRecipeById(id: Int): DetailedRecipe? = withContext(Dispatchers.IO) {
-        try {
-            val url = URL("$baseUrl/recipes/$id/information?apiKey=$apiKey")
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
+    suspend fun getRecipeById(id: Int): Flow<DetailedRecipe?> = flow {
+        // Early check for API limit to avoid unnecessary work
+        if (_apiLimitReached.value) {
+            Log.d(TAG, "API limit reached, skipping Spoonacular recipe details for id: $id")
+            emit(null)
+            return@flow
+        }
+
+        Log.d(TAG, "Fetching recipe details from Spoonacular for ID: $id")
+        val endpoint = "recipes/$id/information"
+        
+        val params = mapOf(
+            "includeNutrition" to "true"
+        )
+        
+        val recipe = try {
+            val responseJson = makeApiCall(endpoint, params)
+            val recipeResponse = json.decodeFromString<SpoonacularRecipeResponse>(responseJson)
+            mapRecipeToDetailedRecipe(recipeResponse)
+        } catch (e: Exception) {
+            Log.e(TAG, "API error during recipe details: ${e.message}")
             
-            // Check response code before reading
-            val responseCode = connection.responseCode
-            if (responseCode != HttpURLConnection.HTTP_OK) {
-                Log.e("SpoonacularService", "API error: $responseCode - ${connection.responseMessage}")
-                return@withContext getFallbackRecipes().firstOrNull()
+            // Set API limit flag if appropriate
+            if (e is ApiLimitExceededException || e.message?.contains("402") == true) {
+                _apiLimitReached.value = true
+                Log.d(TAG, "API limit reached, skipping recipe details")
             }
             
-            val response = connection.inputStream.bufferedReader().use { it.readText() }
-            val recipe = json.decodeFromString<SpoonacularRecipe>(response)
+            // For cancellation, don't emit - just return
+            if (e is kotlinx.coroutines.CancellationException || 
+                e.message?.contains("composition") == true || 
+                e.cause is kotlinx.coroutines.CancellationException) {
+                Log.d(TAG, "Recipe details operation cancelled normally")
+                return@flow
+            }
             
-            return@withContext recipe.toDetailedRecipe()
-        } catch (e: Exception) {
-            Log.e("SpoonacularService", "Error getting recipe details: ${e.message}", e)
-            return@withContext getFallbackRecipes().firstOrNull()
+            // For other errors, return null
+            null
         }
+        
+        // Only emit once, at the end
+        emit(recipe)
     }
 
     /**
@@ -193,11 +385,21 @@ class SpoonacularService {
             )
         )
     }
+
+    // Method to check if we should try the API or use fallbacks only
+    fun shouldUseFallbackOnly(): Boolean {
+        return _apiLimitReached.value
+    }
+
+    // Method to reset the API limit status (e.g., at midnight when limits reset)
+    fun resetApiLimitStatus() {
+        _apiLimitReached.value = false
+    }
 }
 
 @Serializable
 data class SpoonacularSearchResponse(
-    val results: List<SpoonacularRecipe>,
+    val results: List<SpoonacularSearchResult>,
     val offset: Int,
     val number: Int,
     val totalResults: Int
@@ -205,76 +407,25 @@ data class SpoonacularSearchResponse(
 
 @Serializable
 data class SpoonacularRandomResponse(
-    val recipes: List<SpoonacularRecipe>
+    val recipes: List<SpoonacularRandomRecipe>
 )
 
 @Serializable
-data class SpoonacularRecipe(
-    val id: Int,
-    val title: String,
-    val image: String,
-    @SerialName("readyInMinutes")
-    val totalTime: Int = 0,
-    val servings: Int = 4,
-    @SerialName("extendedIngredients")
-    val ingredients: List<SpoonacularIngredient> = emptyList(),
-    val analyzedInstructions: List<SpoonacularInstructions> = emptyList(),
-    val cuisines: List<String> = emptyList(),
-    val dishTypes: List<String> = emptyList(),
-    val diets: List<String> = emptyList(),
-    val summary: String = "",
-    val nutrition: SpoonacularNutrition? = null
-) {
-    fun toDetailedRecipe(): DetailedRecipe {
-        val allTags = mutableListOf<String>()
-        allTags.addAll(cuisines)
-        allTags.addAll(dishTypes)
-        allTags.addAll(diets)
-
-        val instructions = analyzedInstructions
-            .flatMap { it.steps }
-            .map { it.step }
-
-        return DetailedRecipe(
-            id = id,
-            name = title,
-            description = summary,
-            imageUrl = image,
-            preparationTime = totalTime / 2, // Estimate prep time as half of total time
-            cookingTime = totalTime / 2,     // Estimate cooking time as half of total time
-            servings = servings,
-            difficulty = when {
-                totalTime <= 30 -> "Easy"
-                totalTime <= 60 -> "Medium"
-                else -> "Hard"
-            },
-            ingredients = ingredients.map { it.toIngredientItem() },
-            instructions = instructions,
-            nutritionFacts = nutrition?.toNutritionFacts() ?: NutritionFacts(0, 0f, 0f, 0f),
-            tags = allTags,
-            category = dishTypes.firstOrNull() ?: "",
-            author = "",
-            dateAdded = "",
-            cuisineType = cuisines.firstOrNull() ?: ""
-        )
-    }
-}
-
-@Serializable
 data class SpoonacularIngredient(
-    val id: Int,
+    val id: Int? = null,
     val name: String,
-    val amount: Double,
-    val unit: String,
-    val original: String
+    val amount: Float? = null,
+    val unit: String? = null,
+    val original: String? = null,
+    val aisle: String? = null,
+    val image: String? = null
 ) {
     fun toIngredientItem(): IngredientItem {
         return IngredientItem(
-            id = id,
+            id = id ?: name.hashCode(),
             name = name,
-            quantity = amount.toFloat(),
-            unit = unit,
-            imageUrl = "https://spoonacular.com/cdn/ingredients_100x100/$name.jpg"
+            quantity = amount ?: 0f,
+            unit = unit ?: ""
         )
     }
 }
@@ -282,7 +433,7 @@ data class SpoonacularIngredient(
 @Serializable
 data class SpoonacularInstructions(
     val name: String = "",
-    val steps: List<SpoonacularStep>
+    val steps: List<SpoonacularStep> = emptyList()
 )
 
 @Serializable
@@ -325,3 +476,273 @@ data class SpoonacularNutrient(
     val amount: Float,
     val unit: String
 )
+
+@Serializable
+data class SpoonacularSearchResult(
+    val id: Int,
+    val title: String,
+    val image: String? = null,
+    val summary: String? = null,
+    val preparationMinutes: Int? = null,
+    val cookingMinutes: Int? = null,
+    val readyInMinutes: Int? = null,
+    val servings: Int? = null,
+    val vegetarian: Boolean? = null,
+    val vegan: Boolean? = null,
+    val glutenFree: Boolean? = null,
+    val dairyFree: Boolean? = null,
+    val veryHealthy: Boolean? = null,
+    val analyzedInstructions: List<SpoonacularInstructions>? = emptyList(),
+    val nutrition: SpoonacularNutritionInfo? = null
+)
+
+@Serializable
+data class SpoonacularRandomRecipe(
+    val id: Int,
+    val title: String,
+    val image: String? = null,
+    val summary: String? = null,
+    val instructions: String? = null,
+    val readyInMinutes: Int? = null,
+    val preparationMinutes: Int? = null,
+    val cookingMinutes: Int? = null,
+    val servings: Int? = null,
+    val vegetarian: Boolean? = null,
+    val vegan: Boolean? = null,
+    val glutenFree: Boolean? = null,
+    val dairyFree: Boolean? = null,
+    val veryHealthy: Boolean? = null,
+    val cuisines: List<String>? = null,
+    val analyzedInstructions: List<SpoonacularInstructions>? = emptyList(),
+    val extendedIngredients: List<SpoonacularIngredient>? = emptyList(),
+    val calories: Int? = null,
+    val protein: String? = null,
+    val carbs: String? = null,
+    val fat: String? = null
+)
+
+@Serializable
+data class SpoonacularRecipeResponse(
+    val id: Int,
+    val title: String,
+    val image: String? = null,
+    val summary: String? = null,
+    val instructions: String? = null,
+    val readyInMinutes: Int? = null,
+    val preparationMinutes: Int? = null,
+    val cookingMinutes: Int? = null,
+    val servings: Int? = null,
+    val vegetarian: Boolean? = null,
+    val vegan: Boolean? = null,
+    val glutenFree: Boolean? = null,
+    val dairyFree: Boolean? = null,
+    val veryHealthy: Boolean? = null,
+    val cuisines: List<String>? = null,
+    val analyzedInstructions: List<SpoonacularInstructions>? = emptyList(),
+    val extendedIngredients: List<SpoonacularIngredient>? = emptyList(),
+    val nutrition: SpoonacularNutritionInfo? = null
+)
+
+@Serializable
+data class SpoonacularNutritionInfo(
+    val nutrients: List<SpoonacularNutrient> = emptyList(),
+    val ingredients: List<SpoonacularNutritionIngredient> = emptyList()
+)
+
+@Serializable
+data class SpoonacularNutritionIngredient(
+    val id: Int? = null,
+    val name: String,
+    val amount: Float? = null,
+    val unit: String? = null
+)
+
+/**
+ * Map SpoonacularSearchResult to DetailedRecipe
+ */
+private fun mapToDetailedRecipe(result: SpoonacularSearchResult): DetailedRecipe {
+    // Extract ingredients
+    val ingredients = result.nutrition?.ingredients?.map { ingredient ->
+        IngredientItem(
+            id = ingredient.id ?: ingredient.name.hashCode(),
+            name = ingredient.name,
+            quantity = ingredient.amount ?: 0f,
+            unit = ingredient.unit ?: ""
+        )
+    } ?: emptyList()
+    
+    // Extract nutrition facts
+    val nutritionFacts = NutritionFacts(
+        calories = result.nutrition?.nutrients?.find { it.name == "Calories" }?.amount?.toInt() ?: 0,
+        protein = result.nutrition?.nutrients?.find { it.name == "Protein" }?.amount ?: 0f,
+        carbs = result.nutrition?.nutrients?.find { it.name == "Carbohydrates" }?.amount ?: 0f,
+        fat = result.nutrition?.nutrients?.find { it.name == "Fat" }?.amount ?: 0f,
+        fiber = result.nutrition?.nutrients?.find { it.name == "Fiber" }?.amount,
+        sugar = result.nutrition?.nutrients?.find { it.name == "Sugar" }?.amount
+    )
+    
+    // Extract instructions
+    val instructions = result.analyzedInstructions?.firstOrNull()?.steps?.map { 
+        it.step 
+    } ?: emptyList()
+    
+    // Extract tags
+    val tags = mutableListOf<String>()
+    if (result.vegetarian == true) tags.add("Vegetarian")
+    if (result.vegan == true) tags.add("Vegan")
+    if (result.glutenFree == true) tags.add("Gluten-Free")
+    if (result.dairyFree == true) tags.add("Dairy-Free")
+    if (result.veryHealthy == true) tags.add("Healthy")
+    
+    // Calculate preparation and cooking times
+    val prepTime = result.preparationMinutes ?: 0
+    val cookTime = result.cookingMinutes ?: 0
+    
+    return DetailedRecipe(
+        id = result.id,
+        name = result.title,
+        description = result.summary ?: "",
+        imageUrl = result.image ?: "",
+        preparationTime = prepTime,
+        cookingTime = cookTime,
+        servings = result.servings ?: 4,
+        difficulty = if (prepTime + cookTime > 45) "Hard" else if (prepTime + cookTime > 20) "Medium" else "Easy",
+        ingredients = ingredients,
+        instructions = instructions,
+        nutritionFacts = nutritionFacts,
+        tags = tags,
+        isFavorite = false // Default to not favorite
+    )
+}
+
+/**
+ * Map SpoonacularRandomRecipe to DetailedRecipe
+ */
+private fun mapRandomToDetailedRecipe(recipe: SpoonacularRandomRecipe): DetailedRecipe {
+    // Extract ingredients
+    val ingredients = recipe.extendedIngredients?.map { ingredient ->
+        IngredientItem(
+            id = ingredient.id ?: ingredient.name.hashCode(),
+            name = ingredient.name,
+            quantity = ingredient.amount ?: 0f,
+            unit = ingredient.unit ?: ""
+        )
+    } ?: emptyList()
+    
+    // Estimate nutrition facts if not provided
+    val nutritionFacts = NutritionFacts(
+        calories = (recipe.calories ?: (recipe.servings?.times(250) ?: 500)),
+        protein = recipe.protein?.toFloatOrNull() ?: 15f,
+        carbs = recipe.carbs?.toFloatOrNull() ?: 30f,
+        fat = recipe.fat?.toFloatOrNull() ?: 10f,
+        fiber = null,
+        sugar = null
+    )
+    
+    // Extract instructions
+    val instructions = recipe.analyzedInstructions?.firstOrNull()?.steps?.map { 
+        it.step 
+    } ?: recipe.instructions?.split(Regex("\\. |\\.\\s*"))?.filter { it.isNotBlank() } ?: emptyList()
+    
+    // Extract tags
+    val tags = mutableListOf<String>()
+    if (recipe.vegetarian == true) tags.add("Vegetarian")
+    if (recipe.vegan == true) tags.add("Vegan")
+    if (recipe.glutenFree == true) tags.add("Gluten-Free")
+    if (recipe.dairyFree == true) tags.add("Dairy-Free")
+    if (recipe.veryHealthy == true) tags.add("Healthy")
+    
+    // Add cuisine as tag if available
+    recipe.cuisines?.firstOrNull()?.let { tags.add(it) }
+    
+    // Calculate preparation and cooking times
+    val prepTime = recipe.preparationMinutes ?: 0
+    val cookTime = recipe.cookingMinutes ?: recipe.readyInMinutes ?: 0
+    
+    return DetailedRecipe(
+        id = recipe.id,
+        name = recipe.title,
+        description = recipe.summary ?: "",
+        imageUrl = recipe.image ?: "",
+        preparationTime = prepTime,
+        cookingTime = cookTime,
+        servings = recipe.servings ?: 4,
+        difficulty = if (prepTime + cookTime > 45) "Hard" else if (prepTime + cookTime > 20) "Medium" else "Easy",
+        ingredients = ingredients,
+        instructions = instructions,
+        nutritionFacts = nutritionFacts,
+        tags = tags,
+        isFavorite = false // Default to not favorite
+    )
+}
+
+/**
+ * Map SpoonacularRecipeResponse to DetailedRecipe
+ */
+private fun mapRecipeToDetailedRecipe(recipe: SpoonacularRecipeResponse): DetailedRecipe {
+    // Extract ingredients
+    val ingredients = recipe.extendedIngredients?.map { ingredient ->
+        IngredientItem(
+            id = ingredient.id ?: ingredient.name.hashCode(),
+            name = ingredient.name,
+            quantity = ingredient.amount ?: 0f,
+            unit = ingredient.unit ?: ""
+        )
+    } ?: emptyList()
+    
+    // Extract nutrition facts
+    val nutritionFacts = if (recipe.nutrition != null) {
+        NutritionFacts(
+            calories = recipe.nutrition.nutrients?.find { it.name == "Calories" }?.amount?.toInt() ?: 0,
+            protein = recipe.nutrition.nutrients?.find { it.name == "Protein" }?.amount ?: 0f,
+            carbs = recipe.nutrition.nutrients?.find { it.name == "Carbohydrates" }?.amount ?: 0f,
+            fat = recipe.nutrition.nutrients?.find { it.name == "Fat" }?.amount ?: 0f,
+            fiber = recipe.nutrition.nutrients?.find { it.name == "Fiber" }?.amount,
+            sugar = recipe.nutrition.nutrients?.find { it.name == "Sugar" }?.amount
+        )
+    } else {
+        // Default nutrition if not provided
+        NutritionFacts(
+            calories = 0,
+            protein = 0f,
+            carbs = 0f,
+            fat = 0f
+        )
+    }
+    
+    // Extract instructions
+    val instructions = recipe.analyzedInstructions?.firstOrNull()?.steps?.map { 
+        it.step 
+    } ?: recipe.instructions?.split(Regex("\\. |\\.\\s*"))?.filter { it.isNotBlank() } ?: emptyList()
+    
+    // Extract tags
+    val tags = mutableListOf<String>()
+    if (recipe.vegetarian == true) tags.add("Vegetarian")
+    if (recipe.vegan == true) tags.add("Vegan")
+    if (recipe.glutenFree == true) tags.add("Gluten-Free")
+    if (recipe.dairyFree == true) tags.add("Dairy-Free")
+    if (recipe.veryHealthy == true) tags.add("Healthy")
+    
+    // Add cuisine as tag if available
+    recipe.cuisines?.firstOrNull()?.let { tags.add(it) }
+    
+    // Calculate preparation and cooking times
+    val prepTime = recipe.preparationMinutes ?: 0
+    val cookTime = recipe.cookingMinutes ?: recipe.readyInMinutes ?: 0
+    
+    return DetailedRecipe(
+        id = recipe.id,
+        name = recipe.title,
+        description = recipe.summary ?: "",
+        imageUrl = recipe.image ?: "",
+        preparationTime = prepTime,
+        cookingTime = cookTime,
+        servings = recipe.servings ?: 4,
+        difficulty = if (prepTime + cookTime > 45) "Hard" else if (prepTime + cookTime > 20) "Medium" else "Easy",
+        ingredients = ingredients,
+        instructions = instructions,
+        nutritionFacts = nutritionFacts,
+        tags = tags,
+        isFavorite = false // Default to not favorite
+    )
+}

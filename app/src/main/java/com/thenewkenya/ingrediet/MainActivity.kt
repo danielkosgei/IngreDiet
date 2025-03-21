@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -83,9 +84,12 @@ import com.thenewkenya.ingrediet.data.repository.RecipeRepository
 
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.navigation.compose.currentBackStackEntryAsState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -127,14 +131,15 @@ class MainActivity : ComponentActivity() {
      * This runs in the background and doesn't block app startup
      */
     private fun preloadRecipes() {
-        // Start a background thread to avoid blocking the main thread
-        Thread {
+        Log.d("MainActivity", "Starting recipe preloading")
+        
+        // Use a coroutine without lifecycleScope
+        GlobalScope.launch(Dispatchers.IO) {
             try {
                 val recipeRepository = RecipeRepository(applicationContext)
                 
-                // Run in a coroutine context
-                kotlinx.coroutines.runBlocking {
-                    // Get 10 random recipes instead of 5
+                // Get recipes from local cache first, with a short timeout
+                withTimeoutOrNull(5000) {
                     recipeRepository.getRandomRecipes(10).collect { result ->
                         result.onSuccess { recipes ->
                             Log.d("MainActivity", "Preloaded ${recipes.size} recipes")
@@ -147,7 +152,7 @@ class MainActivity : ComponentActivity() {
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error preloading recipes", e)
             }
-        }.start()
+        }
     }
 }
 

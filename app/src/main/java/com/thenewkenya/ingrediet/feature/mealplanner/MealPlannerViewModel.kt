@@ -6,36 +6,60 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
+import com.thenewkenya.ingrediet.data.repository.MealPlanRepository
+import com.thenewkenya.ingrediet.data.repository.ProfileRepository
+import com.thenewkenya.ingrediet.data.network.supabase
+import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
 import java.util.Locale
+import java.io.File
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withTimeout
+import android.util.Log
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.CancellationException
+
+// Add the MealTime enum
+enum class MealTime {
+    Breakfast, Lunch, Dinner, Snacks
+}
 
 data class MealPlanItem(
     val id: String,
     val name: String,
     val calories: Int,
     val day: DayOfWeek,
-    val time: String,
+    val time: MealTime,
     val description: String? = null,
     val recipeId: Int? = null,
     val imageUrl: String? = null
 )
 
+/**
+ * Data class for nutrition summary
+ */
 data class NutritionSummary(
     val calories: Int,
-    val protein: Int,
-    val carbs: Int,
-    val fat: Int
+    val protein: Int, // grams
+    val carbs: Int,   // grams
+    val fat: Int      // grams
 )
 
 class MealPlannerViewModel(context: Context) : ViewModel() {
     private val repository = RecipeRepository(context)
+    private val mealPlanRepository = MealPlanRepository()
+    private val profileRepository = ProfileRepository()
+    private val appContext = context.applicationContext
     
     private val _currentWeek = MutableStateFlow(getCurrentWeekString())
     val currentWeek: StateFlow<String> = _currentWeek.asStateFlow()
@@ -63,8 +87,19 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
     private val _generationStage = MutableStateFlow<String?>(null)
     val generationStage: StateFlow<String?> = _generationStage.asStateFlow()
 
+    // Flag to indicate if the user is authenticated
+    private val _isUserAuthenticated = MutableStateFlow(false)
+    val isUserAuthenticated: StateFlow<Boolean> = _isUserAuthenticated.asStateFlow()
+
     init {
+        checkAuthentication()
         loadMealPlans()
+    }
+    
+    private fun checkAuthentication() {
+        viewModelScope.launch {
+            _isUserAuthenticated.value = supabase.auth.currentUserOrNull() != null
+        }
     }
 
     private fun getCurrentWeekString(): String {
@@ -85,112 +120,408 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                 _isLoading.value = true
                 _error.value = null
                 
-                // Try to get meal plans from the local storage or Supabase in the future
-                // For now, we'll just use empty meal plans that will be filled by the user or generated
+                // Check if user is authenticated
+                val isAuthenticated = supabase.auth.currentUserOrNull() != null
+                _isUserAuthenticated.value = isAuthenticated
                 
-                val sampleMeals = DayOfWeek.values().associateWith { day ->
-                    when (day) {
-                        DayOfWeek.MONDAY -> listOf(
-                            MealPlanItem(
-                                id = "1",
-                                name = "Breakfast",
-                                calories = 450,
-                                day = day,
-                                time = "08:00",
-                                description = "Oatmeal with berries and nuts"
-                            ),
-                            MealPlanItem(
-                                id = "2",
-                                name = "Lunch",
-                                calories = 650,
-                                day = day,
-                                time = "13:00",
-                                description = "Grilled chicken salad"
-                            ),
-                            MealPlanItem(
-                                id = "3",
-                                name = "Dinner",
-                                calories = 750,
-                                day = day,
-                                time = "19:00",
-                                description = "Salmon with roasted vegetables"
-                            )
-                        )
-                        DayOfWeek.WEDNESDAY -> listOf(
-                            MealPlanItem(
-                                id = "7",
-                                name = "Breakfast",
-                                calories = 400,
-                                day = day,
-                                time = "08:00",
-                                description = "Greek yogurt with honey and granola"
-                            ),
-                            MealPlanItem(
-                                id = "8",
-                                name = "Lunch",
-                                calories = 700,
-                                day = day,
-                                time = "13:00",
-                                description = "Turkey wrap with avocado"
-                            ),
-                            MealPlanItem(
-                                id = "9",
-                                name = "Dinner",
-                                calories = 600,
-                                day = day,
-                                time = "19:00",
-                                description = "Vegetable stir-fry with tofu"
-                            )
-                        )
-                        DayOfWeek.FRIDAY -> listOf(
-                            MealPlanItem(
-                                id = "13",
-                                name = "Breakfast",
-                                calories = 350,
-                                day = day,
-                                time = "08:00",
-                                description = "Smoothie bowl with fruits"
-                            ),
-                            MealPlanItem(
-                                id = "14",
-                                name = "Lunch",
-                                calories = 550,
-                                day = day,
-                                time = "13:00",
-                                description = "Quinoa bowl with roasted vegetables"
-                            ),
-                            MealPlanItem(
-                                id = "15",
-                                name = "Dinner",
-                                calories = 800,
-                                day = day,
-                                time = "19:00",
-                                description = "Grilled steak with sweet potato"
-                            )
-                        )
-                        else -> emptyList()
+                if (isAuthenticated) {
+                    // First try to load user's saved meal plans
+                    try {
+                        // Use non-suspending catch methods on the Flow to avoid transparency violations
+                        mealPlanRepository.hasMealPlans()
+                            .catch { e ->
+                                if (e is CancellationException || e.message?.contains("composition") == true) {
+                                    Log.d("MealPlannerViewModel", "Operation cancelled while checking meal plans")
+                                } else {
+                                    Log.e("MealPlannerViewModel", "Error checking meal plans", e)
+                                }
+                                // Don't propagate the error, just silently handle it and continue
+                            }
+                            .collect { result ->
+                                val hasMealPlans = result.getOrNull() ?: false
+                                
+                                if (hasMealPlans) {
+                                    Log.d("MealPlannerViewModel", "User has saved meal plans")
+                                    // Load the meal plans with proper error handling
+                                    mealPlanRepository.getUserMealPlans()
+                                        .catch { e ->
+                                            if (e is CancellationException || e.message?.contains("composition") == true) {
+                                                Log.d("MealPlannerViewModel", "Operation cancelled while loading meal plans")
+                                            } else {
+                                                Log.e("MealPlannerViewModel", "Error loading meal plans", e)
+                                            }
+                                            // Continue with plan generation if there's an error
+                                            generateMealPlanWithRealRecipes()
+                                        }
+                                        .collect { userMealPlansResult ->
+                                            userMealPlansResult.onSuccess { mealPlanData ->
+                                                _mealPlans.value = mealPlanData
+                                                
+                                                // Calculate nutrition summaries
+                                                val nutritionSummaries = calculateNutritionSummaries(mealPlanData)
+                                                _dailyNutrition.value = nutritionSummaries
+                                                
+                                                _isLoading.value = false
+                                                // Don't continue with the rest of the coroutine
+                                                return@collect
+                                            }.onFailure {
+                                                // Continue with plan generation on failure
+                                                generateMealPlanWithRealRecipes()
+                                            }
+                                        }
+                                } else {
+                                    // No user meal plans found, generate new plans
+                                    generateMealPlanWithRealRecipes()
+                                }
+                            }
+                    } catch (e: Exception) {
+                        if (e is CancellationException || e.message?.contains("composition") == true) {
+                            Log.d("MealPlannerViewModel", "Operation cancelled while loading meal plans")
+                            return@launch
+                        }
+                        Log.e("MealPlannerViewModel", "Error in meal plan flow handling", e)
+                        // Continue with generating a new meal plan
+                        generateMealPlanWithRealRecipes()
+                    }
+                } else {
+                    // Not authenticated, generate a new meal plan
+                    generateMealPlanWithRealRecipes()
+                }
+            } catch (e: Exception) {
+                Log.e("MealPlannerViewModel", "Error in loadMealPlans", e)
+                _error.value = e.message
+                _isLoading.value = false
+                
+                // Use fallback meal plans if everything else fails
+                useFallbackMealPlans()
+            }
+        }
+    }
+    
+    /**
+     * Convert MealTime enum to string and back
+     */
+    private fun getMealTimeFromString(timeString: String): MealTime {
+        return when (timeString) {
+            "Breakfast" -> MealTime.Breakfast
+            "Lunch" -> MealTime.Lunch 
+            "Dinner" -> MealTime.Dinner
+            else -> MealTime.Snacks
+        }
+    }
+
+    /**
+     * Generates a meal plan with real recipes from APIs or cached sources.
+     * This method handles API limits and timeouts gracefully.
+     */
+    private fun generateMealPlanWithRealRecipes() {
+        viewModelScope.launch {
+            try {
+                _isGenerating.value = true
+                _error.value = null
+                _generationProgress.value = 0.1f
+                _generationStage.value = "Initializing meal generation..."
+                
+                // Set default parameters
+                var calorieTarget = 2000
+                var dietType = "Balanced"
+                var allergies = emptyList<String>()
+
+                // Try to get user preferences if authenticated
+                if (_isUserAuthenticated.value) {
+                    try {
+                        _generationStage.value = "Retrieving your preferences..."
+                        
+                        // Get user profile data
+                        profileRepository.getProfile().collect { result ->
+                            result.onSuccess { profile ->
+                                // Update parameters based on profile
+                                calorieTarget = profile.calorieTarget
+                                dietType = profile.dietaryPreferences.firstOrNull()?.lowercase() ?: "Balanced"
+                                allergies = profile.allergies
+                                
+                                Log.d("MealPlannerViewModel", "Using profile data: calories=$calorieTarget, diet=$dietType, allergies=$allergies")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MealPlannerViewModel", "Error getting user profile: ${e.message}")
+                        // Continue with defaults
+                    }
+                } else {
+                    Log.d("MealPlannerViewModel", "User not authenticated, using default parameters")
+                }
+
+                // Fire up a quick job to pre-cache some recipes for better variety
+                // This runs in parallel with the main meal plan generation
+                var cacheJobCompleted = false
+                
+                // Use a shorter timeout for pre-caching
+                val cacheJob = viewModelScope.launch {
+                    try {
+                        withTimeout(8000) { // 8 second timeout for pre-caching
+                            _generationStage.value = "Finding delicious recipes for you..."
+                            
+                            // Launch parallel requests for different meal types
+                            coroutineScope {
+                                launch { repository.searchRecipes("breakfast $dietType", 15).catch { e ->
+                                    Log.e("MealPlannerViewModel", "Error pre-caching breakfast recipes: ${e.message}")
+                                }.collect {}
+                                }
+                                
+                                launch { repository.searchRecipes("lunch $dietType", 15).catch { e ->
+                                    Log.e("MealPlannerViewModel", "Error pre-caching lunch recipes: ${e.message}")
+                                }.collect {}
+                                }
+                                
+                                launch { repository.searchRecipes("dinner $dietType", 15).catch { e ->
+                                    Log.e("MealPlannerViewModel", "Error pre-caching dinner recipes: ${e.message}")
+                                }.collect {}
+                                }
+                                
+                                launch { repository.getRandomRecipes(20).catch { e ->
+                                    Log.e("MealPlannerViewModel", "Error pre-caching random recipes: ${e.message}")
+                                }.collect {}
+                                }
+                            }
+                            
+                            cacheJobCompleted = true
+                            Log.d("MealPlannerViewModel", "Recipe pre-caching completed successfully")
+                        }
+                    } catch (e: Exception) {
+                        Log.d("MealPlannerViewModel", "Pre-caching job timed out or failed: ${e.message}")
+                        // This is expected - we don't need to wait for all pre-caching to complete
+                        cacheJobCompleted = true
                     }
                 }
                 
-                // Generate nutrition summaries
-                val nutritionSummaries = sampleMeals.mapValues { (_, meals) ->
-                    val totalCalories = meals.sumOf { it.calories }
-                    NutritionSummary(
-                        calories = totalCalories,
-                        protein = (totalCalories * 0.3).toInt(),
-                        carbs = (totalCalories * 0.4).toInt(),
-                        fat = (totalCalories * 0.3).toInt()
-                    )
+                // Give the cache job a head start but don't wait indefinitely
+                _generationStage.value = "Building your personalized meal plan..."
+                
+                // Wait up to 2 seconds for pre-caching to complete, but proceed anyway
+                withTimeoutOrNull(2000) {
+                    while (!cacheJobCompleted) {
+                        delay(100)
+                    }
                 }
                 
-                _mealPlans.value = sampleMeals
-                _dailyNutrition.value = nutritionSummaries
+                if (!cacheJobCompleted) {
+                    Log.d("MealPlannerViewModel", "Proceeding with meal plan generation while pre-caching continues in background")
+                }
+                
+                // Now generate the actual meal plan with a reasonable timeout
+                val mealPlan = withTimeoutOrNull(30000) { // 30 seconds max for the main operation
+                    try {
+                        val days = DayOfWeek.values().toList()
+                        val result = repository.generateMealPlan(
+                            calorieTarget = calorieTarget,
+                            dietType = dietType,
+                            days = days,
+                            allergies = allergies
+                        ).first()
+                        
+                        if (result.isSuccess) {
+                            result.getOrNull()
+                        } else {
+                            Log.e("MealPlannerViewModel", "Error generating meal plan: ${result.exceptionOrNull()?.message}")
+                            null
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MealPlannerViewModel", "Exception during meal plan generation: ${e.message}", e)
+                        null
+                    }
+                }
+                
+                if (mealPlan != null) {
+                    Log.d("MealPlannerViewModel", "Successfully generated meal plan")
+                    
+                    // Convert to our UI state model
+                    val mealItems = mutableListOf<MealPlanItem>()
+                    
+                    mealPlan.forEach { (day, meals) ->
+                        meals.forEach { meal ->
+                            mealItems.add(
+                                MealPlanItem(
+                                    id = meal.id,
+                                    name = meal.description,
+                                    day = day,
+                                    time = getMealTimeFromString(meal.time),
+                                    calories = meal.calories,
+                                    recipeId = meal.recipeId,
+                                    imageUrl = meal.imageUrl
+                                )
+                            )
+                        }
+                    }
+                    
+                    // Calculate nutrition summary
+                    val summaries = calculateNutritionSummaries(mealItems)
+                    
+                    _generationStage.value = "Finalizing your meal plan..."
+                    _generationProgress.value = 0.8f
+                    
+                    _mealPlans.value = mealItems.groupBy { it.day }
+                    _dailyNutrition.value = summaries
+                    
+                    // Save the meal plan if user is authenticated
+                    if (_isUserAuthenticated.value) {
+                        try {
+                            mealPlanRepository.saveUserMealPlans(mealItems.groupBy { it.day }).collect { saveResult ->
+                                saveResult.onSuccess {
+                                    Log.d("MealPlannerViewModel", "Successfully saved auto-generated meal plans")
+                                }
+                                saveResult.onFailure { error ->
+                                    Log.e("MealPlannerViewModel", "Failed to save auto-generated meal plans", error)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("MealPlannerViewModel", "Error saving auto-generated meal plans", e)
+                        }
+                    }
+                    
+                    // Refresh recipes in background for future use
+                    viewModelScope.launch {
+                        refreshRecipeCacheInBackground(30)
+                    }
+                    
+                } else {
+                    Log.w("MealPlannerViewModel", "Failed to generate meal plan, using fallback")
+                    
+                    // Use a hardcoded fallback plan
+                    createFallbackMealPlan(calorieTarget = 2000, dietType = "Balanced")
+                }
             } catch (e: Exception) {
-                _error.value = e.message
+                Log.e("MealPlannerViewModel", "Error generating meal plan: ${e.message}", e)
+                _error.value = e.message ?: "An unexpected error occurred"
+                
+                // Use offline fallback
+                try {
+                    val fallbackPlan = createOfflineMealPlan(2000, "balanced")
+                    val fallbackNutrition = calculateNutritionSummaries(fallbackPlan)
+                    
+                    _mealPlans.value = fallbackPlan
+                    _dailyNutrition.value = fallbackNutrition
+                } catch (fallbackError: Exception) {
+                    Log.e("MealPlannerViewModel", "Failed to create fallback plan", fallbackError)
+                }
             } finally {
-                _isLoading.value = false
+                _isGenerating.value = false
+                _generationStage.value = null
+                _generationProgress.value = 0f
             }
         }
+    }
+    
+    private fun createDiverseMealPlan(sourceData: Map<DayOfWeek, List<MealPlanItem>>): Map<DayOfWeek, List<MealPlanItem>> {
+        try {
+            Log.d("MealPlannerViewModel", "Creating diverse meal plan from ${sourceData.size} days of source data")
+            
+            // Collect all meals from all days into one pool
+            val allMeals = sourceData.values.flatten()
+            
+            if (allMeals.isEmpty()) {
+                Log.w("MealPlannerViewModel", "No meals available to create diverse plan")
+                return emptyMap()
+            }
+            
+            // Track used recipe IDs to avoid duplicates
+            val usedRecipeIds = mutableSetOf<Int?>()
+            
+            // Group meals by their type (breakfast, lunch, dinner, etc.)
+            val mealsByTime = allMeals.groupBy { it.time }
+            
+            // Create a map to store our optimized plan
+            val result = mutableMapOf<DayOfWeek, List<MealPlanItem>>()
+            
+            // Determine needed days (either all days in source or all days of week)
+            val daysToFill = if (sourceData.isNotEmpty()) sourceData.keys else DayOfWeek.values().toList()
+            
+            // Create a diverse plan for each day
+            for (day in daysToFill) {
+                val dayMeals = mutableListOf<MealPlanItem>()
+                
+                // For each meal time, try to find a unique recipe
+                for (mealTime in MealTime.values()) {
+                    val mealsForTime = mealsByTime[mealTime] ?: emptyList()
+                    
+                    // Find meals that haven't been used yet (unique recipes)
+                    val unusedMeals = mealsForTime.filter { meal -> 
+                        meal.recipeId == null || !usedRecipeIds.contains(meal.recipeId)
+                    }
+                    
+                    // Choose a meal, preferring unused ones
+                    val selectedMeal = if (unusedMeals.isNotEmpty()) {
+                        unusedMeals.random()
+                    } else if (mealsForTime.isNotEmpty()) {
+                        // If all recipes are used, just pick a random one
+                        mealsForTime.random()
+                    } else {
+                        // If no meals available for this time, try to get one from another time
+                        val anyUnusedMeal = allMeals.filter { meal -> 
+                            meal.recipeId == null || !usedRecipeIds.contains(meal.recipeId)
+                        }.randomOrNull()
+                        
+                        anyUnusedMeal?.copy(time = mealTime) ?: continue
+                    }
+                    
+                    // Track this recipe as used
+                    if (selectedMeal.recipeId != null) {
+                        usedRecipeIds.add(selectedMeal.recipeId)
+                    }
+                    
+                    // Add to our day's meals with this day set
+                    dayMeals.add(selectedMeal.copy(day = day))
+                }
+                
+                // Only add days that have at least one meal
+                if (dayMeals.isNotEmpty()) {
+                    result[day] = dayMeals
+                }
+            }
+            
+            Log.d("MealPlannerViewModel", "Successfully created diverse meal plan with ${result.size} days and ${usedRecipeIds.size} unique recipes")
+            return result
+            
+        } catch (e: Exception) {
+            Log.e("MealPlannerViewModel", "Error creating diverse meal plan", e)
+            return sourceData // Return original data on error
+        }
+    }
+    
+    // Helper function to get default meal images if none provided
+    private fun getDefaultMealImage(mealType: String): String {
+        return when(mealType) {
+            "Breakfast" -> "https://images.unsplash.com/photo-1533089860892-a9c9f5a37eb5?q=80&w=2370&auto=format&fit=crop"
+            "Lunch" -> "https://images.unsplash.com/photo-1546793665-c74683f339c1?q=80&w=2374&auto=format&fit=crop"
+            "Dinner" -> "https://images.unsplash.com/photo-1547592180-85f173990554?q=80&w=2370&auto=format&fit=crop"
+            "Snacks" -> "https://images.unsplash.com/photo-1612105675765-07416cdb0b89?q=80&w=1974&auto=format&fit=crop"
+            else -> "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2360&auto=format&fit=crop"
+        }
+    }
+
+    // Fix method name clash and references
+    private fun calculateNutritionSummaries(mealItems: List<MealPlanItem>): Map<DayOfWeek, NutritionSummary> {
+        // Group by day
+        val mealsByDay = mealItems.groupBy { it.day }
+        
+        // Calculate totals for each day
+        return mealsByDay.mapValues { (_, meals) ->
+            NutritionSummary(
+                calories = meals.sumOf { it.calories },
+                // Estimate macros based on calories - in a real app you'd get this from the recipes
+                protein = (meals.sumOf { it.calories } * 0.2f / 4).toInt(), // 20% protein
+                carbs = (meals.sumOf { it.calories } * 0.5f / 4).toInt(),   // 50% carbs
+                fat = (meals.sumOf { it.calories } * 0.3f / 9).toInt()      // 30% fat
+            )
+        }
+    }
+    
+    private fun useFallbackMealPlans() {
+        // Create a fallback plan with the offline meal generator
+        val enhancedPlan = createOfflineMealPlan(2000, "balanced")
+        val nutritionSummaries = calculateNutritionSummaries(enhancedPlan)
+        
+        _mealPlans.value = enhancedPlan
+        _dailyNutrition.value = nutritionSummaries
     }
 
     fun getMealsForDay(day: DayOfWeek): List<MealPlanItem> {
@@ -238,6 +569,548 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
         }
     }
     
+    // New method that creates a meal plan using entirely offline data
+    private fun createOfflineMealPlan(calorieTarget: Int, dietType: String): Map<DayOfWeek, List<MealPlanItem>> {
+        val daysOfWeek = DayOfWeek.values()
+        val mealPlan = mutableMapOf<DayOfWeek, List<MealPlanItem>>()
+        
+        val breakfastCalories = (calorieTarget * 0.25).toInt()
+        val lunchCalories = (calorieTarget * 0.35).toInt()
+        val dinnerCalories = (calorieTarget * 0.30).toInt()
+        val snackCalories = (calorieTarget * 0.10).toInt()
+        
+        // Create expanded collections of predefined meals that match the diet type
+        val breakfastOptions = getPresetMeals("Breakfast", dietType)
+        val lunchOptions = getPresetMeals("Lunch", dietType)
+        val dinnerOptions = getPresetMeals("Dinner", dietType)
+        val snackOptions = getPresetMeals("Snacks", dietType)
+        
+        // Track used meals to ensure maximum variety
+        val usedBreakfasts = mutableSetOf<String>()
+        val usedLunches = mutableSetOf<String>()
+        val usedDinners = mutableSetOf<String>()
+        val usedSnacks = mutableSetOf<String>()
+        
+        // Generate a meal plan for each day with proper meal distribution
+        // and ensuring maximum variety across days
+        daysOfWeek.forEach { day ->
+            // For each meal type, select an unused meal if possible
+            val availableBreakfasts = breakfastOptions.filter { it !in usedBreakfasts }
+            val breakfast = if (availableBreakfasts.isNotEmpty()) {
+                availableBreakfasts.random().also { usedBreakfasts.add(it) }
+            } else {
+                // If all options have been used, reset and pick a random one
+                usedBreakfasts.clear()
+                breakfastOptions.random().also { usedBreakfasts.add(it) }
+            }
+            
+            val availableLunches = lunchOptions.filter { it !in usedLunches }
+            val lunch = if (availableLunches.isNotEmpty()) {
+                availableLunches.random().also { usedLunches.add(it) }
+            } else {
+                usedLunches.clear()
+                lunchOptions.random().also { usedLunches.add(it) }
+            }
+            
+            val availableDinners = dinnerOptions.filter { it !in usedDinners }
+            val dinner = if (availableDinners.isNotEmpty()) {
+                availableDinners.random().also { usedDinners.add(it) }
+            } else {
+                usedDinners.clear()
+                dinnerOptions.random().also { usedDinners.add(it) }
+            }
+            
+            val availableSnacks = snackOptions.filter { it !in usedSnacks }
+            val snack = if (availableSnacks.isNotEmpty()) {
+                availableSnacks.random().also { usedSnacks.add(it) }
+            } else {
+                usedSnacks.clear()
+                snackOptions.random().also { usedSnacks.add(it) }
+            }
+            
+            // Create meal items with unique IDs based on timestamp
+            val breakfastItem = MealPlanItem(
+                id = "${day}_BREAKFAST_${System.currentTimeMillis() + day.ordinal}",
+                name = "Breakfast",
+                calories = breakfastCalories,
+                day = day,
+                time = MealTime.Breakfast,
+                description = breakfast,
+                recipeId = null,
+                imageUrl = "https://source.unsplash.com/random/300x200?breakfast,${breakfast.hashCode()}"
+            )
+            
+            val lunchItem = MealPlanItem(
+                id = "${day}_LUNCH_${System.currentTimeMillis() + day.ordinal}",
+                name = "Lunch",
+                calories = lunchCalories,
+                day = day,
+                time = MealTime.Lunch,
+                description = lunch,
+                recipeId = null,
+                imageUrl = "https://source.unsplash.com/random/300x200?lunch,${lunch.hashCode()}"
+            )
+            
+            val dinnerItem = MealPlanItem(
+                id = "${day}_DINNER_${System.currentTimeMillis() + day.ordinal}",
+                name = "Dinner",
+                calories = dinnerCalories,
+                day = day,
+                time = MealTime.Dinner,
+                description = dinner,
+                recipeId = null,
+                imageUrl = "https://source.unsplash.com/random/300x200?dinner,${dinner.hashCode()}"
+            )
+            
+            val snackItem = MealPlanItem(
+                id = "${day}_SNACKS_${System.currentTimeMillis() + day.ordinal}",
+                name = "Snacks",
+                calories = snackCalories,
+                day = day,
+                time = MealTime.Snacks,
+                description = snack,
+                recipeId = null,
+                imageUrl = "https://source.unsplash.com/random/300x200?snack,${snack.hashCode()}"
+            )
+            
+            mealPlan[day] = listOf(breakfastItem, lunchItem, dinnerItem, snackItem)
+        }
+        
+        return mealPlan
+    }
+    
+    // Helper method to get preset meals based on meal type and diet type
+    private fun getPresetMeals(mealType: String, dietType: String): List<String> {
+        // Base options for each meal type - expanded with more variety
+        val baseOptions = when (mealType) {
+            "Breakfast" -> listOf(
+                "Oatmeal with berries and nuts",
+                "Avocado toast with eggs",
+                "Greek yogurt with honey and granola",
+                "Protein smoothie bowl",
+                "Breakfast burrito with eggs and vegetables",
+                "Whole grain cereal with milk and fruit",
+                "Pancakes with fresh fruit",
+                "Overnight oats with chia seeds",
+                "Breakfast sandwich with egg and cheese",
+                "Spinach and mushroom omelette",
+                "French toast with maple syrup",
+                "Breakfast hash with sweet potatoes",
+                "Acai bowl with granola and banana",
+                "Breakfast quesadilla with eggs and cheese",
+                "Smoked salmon on whole grain toast"
+            )
+            "Lunch" -> listOf(
+                "Grilled chicken salad",
+                "Turkey and avocado wrap",
+                "Vegetable soup with whole grain bread",
+                "Quinoa bowl with roasted vegetables",
+                "Mediterranean pasta salad",
+                "Tuna salad sandwich",
+                "Rice bowl with beans and vegetables",
+                "Falafel wrap with hummus",
+                "Caprese sandwich on sourdough",
+                "Poke bowl with brown rice",
+                "Greek salad with grilled chicken",
+                "Tomato basil soup with grilled cheese",
+                "Chicken Caesar wrap",
+                "Bento box with rice, protein and vegetables",
+                "Black bean and corn burrito bowl"
+            )
+            "Dinner" -> listOf(
+                "Grilled salmon with steamed vegetables",
+                "Chicken stir-fry with rice",
+                "Beef stew with vegetables",
+                "Vegetable lasagna",
+                "Baked chicken with roasted potatoes",
+                "Fish tacos with slaw",
+                "Pasta with marinara sauce and vegetables",
+                "Shrimp and vegetable skewers",
+                "Roasted pork tenderloin with vegetables",
+                "Vegetable curry with brown rice",
+                "Beef and broccoli with quinoa",
+                "Stuffed bell peppers with ground turkey",
+                "Baked cod with lemon and herbs",
+                "Spaghetti Bolognese with side salad",
+                "Eggplant parmesan with whole grain pasta"
+            )
+            else -> listOf(
+                "Apple with peanut butter",
+                "Greek yogurt with berries",
+                "Protein bar",
+                "Handful of mixed nuts",
+                "Carrot sticks with hummus",
+                "String cheese with crackers",
+                "Fruit smoothie",
+                "Dark chocolate with almonds",
+                "Rice cakes with avocado",
+                "Cottage cheese with pineapple",
+                "Trail mix with dried fruit",
+                "Banana with almond butter",
+                "Edamame with sea salt",
+                "Roasted chickpeas",
+                "Vegetable chips with guacamole"
+            )
+        }
+        
+        // Diet-specific options to add variety
+        val dietSpecificOptions = when (dietType.lowercase()) {
+            "low-carb" -> when (mealType) {
+                "Breakfast" -> listOf(
+                    "Egg and vegetable omelette",
+                    "Chia seed pudding with berries",
+                    "Cottage cheese with sliced tomatoes",
+                    "Bacon and avocado plate",
+                    "Low-carb breakfast bowl with eggs and greens",
+                    "Smoked salmon and cream cheese roll-ups",
+                    "Keto pancakes with butter",
+                    "Egg muffins with spinach and feta",
+                    "Avocado and egg breakfast salad",
+                    "Low-carb yogurt parfait with nuts"
+                )
+                "Lunch" -> listOf(
+                    "Lettuce wrap with turkey and cheese",
+                    "Zucchini noodles with pesto and chicken",
+                    "Cauliflower rice bowl with shrimp",
+                    "Avocado egg salad",
+                    "Spinach salad with steak strips",
+                    "Cucumber subs with tuna",
+                    "Cobb salad with ranch dressing",
+                    "Stuffed avocados with chicken salad",
+                    "Cabbage wrap with ground beef",
+                    "Low-carb vegetable soup with protein"
+                )
+                "Dinner" -> listOf(
+                    "Grilled salmon with asparagus",
+                    "Chicken and vegetable stir-fry (no rice)",
+                    "Stuffed bell peppers with ground turkey",
+                    "Zucchini lasagna",
+                    "Cauliflower crust pizza with vegetables",
+                    "Baked cod with Brussels sprouts",
+                    "Grilled steak with buttered vegetables",
+                    "Pork chops with cabbage slaw",
+                    "Turkey burgers with portobello buns",
+                    "Spaghetti squash with meat sauce"
+                )
+                else -> listOf(
+                    "Cheese cubes with olives",
+                    "Celery sticks with cream cheese",
+                    "Hard-boiled eggs",
+                    "Beef jerky",
+                    "Avocado with salt and pepper",
+                    "Pepperoni chips",
+                    "Cucumber with smoked salmon",
+                    "Pork rinds with dip",
+                    "Macadamia nuts",
+                    "Kale chips with sea salt"
+                )
+            }
+            "high-protein" -> when (mealType) {
+                "Breakfast" -> listOf(
+                    "Protein pancakes with whey protein",
+                    "Egg white omelette with spinach and turkey",
+                    "Greek yogurt parfait with extra protein",
+                    "Protein smoothie with almond milk",
+                    "Scrambled eggs with turkey bacon",
+                    "Cottage cheese with fresh berries",
+                    "Protein-packed breakfast sandwich",
+                    "Tofu scramble with nutritional yeast",
+                    "Salmon and egg breakfast bowl",
+                    "High-protein overnight oats"
+                )
+                "Lunch" -> listOf(
+                    "Grilled chicken breast with quinoa",
+                    "Protein-packed tuna salad",
+                    "Lentil soup with grilled chicken",
+                    "Tempeh and vegetable stir-fry",
+                    "Cottage cheese with fruit and nuts",
+                    "Turkey and chickpea wrap",
+                    "Salmon poke bowl with edamame",
+                    "High-protein pasta with lean beef",
+                    "Shrimp and bean salad",
+                    "Chicken and black bean burrito bowl"
+                )
+                "Dinner" -> listOf(
+                    "Baked cod with steamed broccoli",
+                    "Turkey meatballs with zucchini noodles",
+                    "Grilled steak with asparagus",
+                    "Salmon with roasted Brussels sprouts",
+                    "Chicken and black bean burrito bowl",
+                    "Tofu and vegetable stir-fry",
+                    "Lamb chops with protein-rich sides",
+                    "Bison burger with sweet potato fries",
+                    "Protein-packed vegetable curry",
+                    "Grilled chicken kabobs with vegetables"
+                )
+                else -> listOf(
+                    "Protein shake",
+                    "Turkey roll-ups",
+                    "Edamame",
+                    "Greek yogurt with protein powder",
+                    "Tuna on cucumber slices",
+                    "Beef jerky with nuts",
+                    "Protein bar",
+                    "Boiled eggs with hot sauce",
+                    "Protein pudding",
+                    "Cottage cheese with flaxseeds"
+                )
+            }
+            "vegetarian" -> when (mealType) {
+                "Breakfast" -> listOf(
+                    "Vegetable frittata",
+                    "Peanut butter banana toast",
+                    "Breakfast quinoa bowl",
+                    "Spinach and feta omelette",
+                    "Avocado smoothie bowl",
+                    "Vegetarian breakfast burrito",
+                    "Banana pancakes with nut butter",
+                    "Breakfast power bowl with beans",
+                    "Cheese and vegetable breakfast muffins",
+                    "Yogurt parfait with fruits and nuts"
+                )
+                "Lunch" -> listOf(
+                    "Caprese sandwich",
+                    "Lentil and vegetable soup",
+                    "Falafel wrap with tahini",
+                    "Spinach and strawberry salad",
+                    "Vegetable sushi rolls",
+                    "Stuffed sweet potato with black beans",
+                    "Veggie burger with avocado",
+                    "Greek salad with feta cheese",
+                    "Mushroom and spinach quesadilla",
+                    "Mediterranean vegetable wrap"
+                )
+                "Dinner" -> listOf(
+                    "Eggplant parmesan",
+                    "Black bean and sweet potato tacos",
+                    "Mushroom risotto",
+                    "Vegetable curry with rice",
+                    "Stuffed bell peppers with quinoa",
+                    "Vegetarian chili with cornbread",
+                    "Pasta primavera with cheese",
+                    "Spinach and ricotta cannelloni",
+                    "Vegetable lasagna with tofu ricotta",
+                    "Cauliflower and chickpea curry"
+                )
+                else -> listOf(
+                    "Hummus with bell pepper slices",
+                    "Trail mix with dried fruit",
+                    "Roasted chickpeas",
+                    "Caprese skewers",
+                    "Yogurt parfait with granola",
+                    "Cheese and crackers",
+                    "Apple with nut butter",
+                    "Vegetable chips with salsa",
+                    "Greek yogurt with honey",
+                    "Stuffed dates with cream cheese"
+                )
+            }
+            "vegan" -> when (mealType) {
+                "Breakfast" -> listOf(
+                    "Overnight oats with almond milk",
+                    "Tofu scramble with vegetables",
+                    "Avocado toast with nutritional yeast",
+                    "Chia seed pudding with coconut milk",
+                    "Green smoothie bowl",
+                    "Vegan protein pancakes",
+                    "Quinoa breakfast bowl with fruits",
+                    "Chickpea flour omelette",
+                    "Whole grain cereal with plant milk",
+                    "Vegan breakfast burrito with beans"
+                )
+                "Lunch" -> listOf(
+                    "Quinoa salad with roasted vegetables",
+                    "Lentil and vegetable soup",
+                    "Hummus and vegetable wrap",
+                    "Buddha bowl with tahini dressing",
+                    "Vegan burrito with beans and rice",
+                    "Falafel pita with tahini sauce",
+                    "Vegan sushi rolls with avocado",
+                    "Chickpea salad sandwich",
+                    "Sweet potato and black bean bowl",
+                    "Tempeh BLT sandwich"
+                )
+                "Dinner" -> listOf(
+                    "Chickpea curry with coconut milk",
+                    "Stuffed bell peppers with lentils",
+                    "Vegetable stir-fry with tofu",
+                    "Cauliflower steaks with chimichurri",
+                    "Pasta with vegan pesto and vegetables",
+                    "Vegan lentil shepherd's pie",
+                    "Black bean and corn enchiladas",
+                    "Vegetable paella with saffron",
+                    "Mushroom and walnut bolognese",
+                    "Sweet potato and chickpea curry"
+                )
+                else -> listOf(
+                    "Apple slices with almond butter",
+                    "Roasted chickpeas",
+                    "Energy bites with dates and nuts",
+                    "Vegetable sticks with hummus",
+                    "Fruit salad with mint",
+                    "Avocado chocolate pudding",
+                    "Trail mix with dried fruit and seeds",
+                    "Rice cakes with nut butter",
+                    "Coconut yogurt with berries",
+                    "Seaweed snacks"
+                )
+            }
+            else -> emptyList() // Use base options for balanced diet
+        }
+        
+        // Combine base options with diet-specific options and return a shuffled list
+        return (baseOptions + dietSpecificOptions).shuffled()
+    }
+    
+    // Background function to refresh recipe cache without blocking UI
+    private suspend fun refreshRecipeCacheInBackground(limit: Int = 40) {
+        try {
+            Log.d("MealPlannerViewModel", "Starting background recipe cache refresh for future variety")
+            
+            // Use a coroutine scope to run multiple requests in parallel
+            kotlinx.coroutines.coroutineScope {
+                // Launch different recipe queries in parallel with shorter timeouts
+                val mealTypes = listOf("breakfast", "lunch", "dinner", "snack", "dessert")
+                val cuisines = listOf("african", "american", "asian", "european", "mediterranean")
+                
+                // Randomize meal types and cuisines to get different recipes each time
+                val selectedMealTypes = mealTypes.shuffled().take(3)
+                val selectedCuisines = cuisines.shuffled().take(2)
+                
+                // Launch parallel recipe searches
+                val jobs = mutableListOf<kotlinx.coroutines.Job>()
+                
+                // Search by meal type
+                selectedMealTypes.forEach { mealType ->
+                    jobs.add(launch {
+                        withTimeoutOrNull(5000) {
+                            repository.searchRecipes(mealType, limit = limit / 5).first()
+                        }
+                    })
+                }
+                
+                // Search by cuisine
+                selectedCuisines.forEach { cuisine ->
+                    jobs.add(launch {
+                        withTimeoutOrNull(5000) {
+                            repository.searchRecipes(cuisine, limit = limit / 5).first()
+                        }
+                    })
+                }
+                
+                // Get random recipes
+                jobs.add(launch {
+                    withTimeoutOrNull(8000) {
+                        repository.getRandomRecipes(limit / 2).first()
+                    }
+                })
+                
+                // Wait for all jobs to complete or timeout
+                withTimeoutOrNull(10000) {
+                    jobs.forEach { it.join() }
+                }
+                
+                // Cancel any remaining jobs to prevent wasting resources
+                jobs.forEach { if (it.isActive) it.cancel() }
+            }
+            
+            Log.d("MealPlannerViewModel", "Background recipe cache refresh completed")
+        } catch (e: Exception) {
+            Log.w("MealPlannerViewModel", "Background recipe cache refresh interrupted: ${e.message}")
+        }
+    }
+
+    // Save and export meal plan functionality
+    fun generateMealPlanSummary(): String {
+        val mealPlanData = _mealPlans.value
+        val nutritionData = _dailyNutrition.value
+        
+        if (mealPlanData.isEmpty()) {
+            return "No meal plan available."
+        }
+        
+        val dateFormatter = DateTimeFormatter.ofPattern("EEEE, MMMM d")
+        val today = LocalDate.now()
+        val dateByDay = DayOfWeek.values().associateWith { day ->
+            when (day) {
+                DayOfWeek.MONDAY -> today.with(DayOfWeek.MONDAY)
+                DayOfWeek.TUESDAY -> today.with(DayOfWeek.TUESDAY)
+                DayOfWeek.WEDNESDAY -> today.with(DayOfWeek.WEDNESDAY)
+                DayOfWeek.THURSDAY -> today.with(DayOfWeek.THURSDAY)
+                DayOfWeek.FRIDAY -> today.with(DayOfWeek.FRIDAY)
+                DayOfWeek.SATURDAY -> today.with(DayOfWeek.SATURDAY)
+                DayOfWeek.SUNDAY -> today.with(DayOfWeek.SUNDAY)
+            }
+        }
+        
+        val summary = StringBuilder()
+        summary.append("WEEKLY MEAL PLAN\n")
+        summary.append("===================================\n\n")
+        
+        // Sort the days
+        val sortedDays = DayOfWeek.values().toList()
+        
+        for (day in sortedDays) {
+            val formattedDate = dateByDay[day]?.format(dateFormatter) ?: day.toString()
+            summary.append("$formattedDate\n")
+            summary.append("-----------------------------------\n")
+            
+            val mealsForDay = mealPlanData[day] ?: emptyList()
+            if (mealsForDay.isEmpty()) {
+                summary.append("No meals planned for this day.\n")
+            } else {
+                // Group and sort meals by time
+                val mealsByType = mealsForDay.groupBy { it.name }
+                val mealTypes = listOf("Breakfast", "Lunch", "Dinner", "Snacks")
+                
+                for (mealType in mealTypes) {
+                    mealsByType[mealType]?.firstOrNull()?.let { meal ->
+                        summary.append("$mealType (${meal.time}): ${meal.description ?: meal.name} - ${meal.calories}kcal\n")
+                    }
+                }
+            }
+            
+            // Add daily nutrition summary if available
+            nutritionData[day]?.let { nutrition ->
+                summary.append("\nNutrition: ${nutrition.calories}kcal | ")
+                summary.append("Protein: ${nutrition.protein}g | ")
+                summary.append("Carbs: ${nutrition.carbs}g | ")
+                summary.append("Fat: ${nutrition.fat}g\n")
+            }
+            
+            summary.append("\n")
+        }
+        
+        // Add a footer
+        summary.append("===================================\n")
+        summary.append("Generated by IngreDiet | ${LocalDate.now().format(DateTimeFormatter.ISO_DATE)}")
+        
+        return summary.toString()
+    }
+    
+    fun saveMealPlanToFile(text: String): Result<String> {
+        return try {
+            val fileName = "MealPlan_${LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)}.txt"
+            val downloadsDir = appContext.getExternalFilesDir(null)
+            val file = File(downloadsDir?.path ?: "", fileName)
+            
+            file.outputStream().use { outputStream ->
+                outputStream.write(text.toByteArray())
+            }
+            
+            Result.success(file.absolutePath)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    fun shareMealPlan(): Pair<String, String> {
+        val text = generateMealPlanSummary()
+        val fileName = "MealPlan_${LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)}.txt"
+        
+        return Pair(text, fileName)
+    }
+
     fun generateMealPlan(calorieTarget: Int, dietType: String, allergies: List<String> = emptyList()) {
         viewModelScope.launch {
             try {
@@ -249,175 +1122,220 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                 // Short delay to show initial stage
                 kotlinx.coroutines.delay(300)
                 
-                // Use the RecipeRepository to get real recipes and generate a meal plan
-                _generationStage.value = "Finding breakfast recipes..."
-                _generationProgress.value = 0.1f
-                kotlinx.coroutines.delay(500)
+                // Start caching recipes in parallel for faster results
+                _generationStage.value = "Finding recipes for your meal plan..."
+                _generationProgress.value = 0.2f
                 
-                _generationStage.value = "Finding lunch recipes..."
-                _generationProgress.value = 0.25f
-                kotlinx.coroutines.delay(500)
-                
-                _generationStage.value = "Finding dinner recipes..."
-                _generationProgress.value = 0.4f
-                kotlinx.coroutines.delay(500)
-                
-                _generationStage.value = "Finding snack options..."
-                _generationProgress.value = 0.55f
-                kotlinx.coroutines.delay(500)
-                
-                // Create a direct meal plan if repository call is getting stuck
-                _generationStage.value = "Creating your personalized meal plan..."
-                _generationProgress.value = 0.7f
-                kotlinx.coroutines.delay(500)
-                
-                // Generate a simple meal plan without waiting for repository
-                val generatedPlan = createFallbackMealPlan(calorieTarget, dietType)
-
-                _generationStage.value = "Calculating nutrition values..."
-                _generationProgress.value = 0.85f
-                kotlinx.coroutines.delay(300)
-                
-                // Calculate nutrition summaries based on the meal plan
-                val nutritionSummaries = generatedPlan.mapValues { (_, meals) ->
-                    val totalCalories = meals.sumOf { it.calories }
-                    NutritionSummary(
-                        calories = totalCalories,
-                        protein = when (dietType) {
-                            "High-protein" -> (totalCalories * 0.4).toInt()
-                            "Low-carb" -> (totalCalories * 0.35).toInt()
-                            else -> (totalCalories * 0.3).toInt()
-                        },
-                        carbs = when (dietType) {
-                            "Low-carb" -> (totalCalories * 0.2).toInt()
-                            "High-protein" -> (totalCalories * 0.3).toInt()
-                            else -> (totalCalories * 0.45).toInt()
-                        },
-                        fat = when (dietType) {
-                            "Low-carb" -> (totalCalories * 0.45).toInt()
-                            "High-protein" -> (totalCalories * 0.3).toInt()
-                            else -> (totalCalories * 0.25).toInt()
+                // Launch concurrent API calls for faster recipe fetching
+                val cachingJob = viewModelScope.launch {
+                    try {
+                        withTimeoutOrNull(10000) { // 10-second timeout for pre-caching
+                            // Create query strings with diet type and allergy exclusions
+                            var baseQuery = dietType
+                            allergies.forEach { baseQuery += " -$it" }
+                            
+                            // Launch parallel requests for different meal types
+                            kotlinx.coroutines.coroutineScope {
+                                launch { repository.searchRecipes("breakfast $baseQuery", limit = 20).first() }
+                                launch { repository.searchRecipes("lunch $baseQuery", limit = 20).first() }
+                                launch { repository.searchRecipes("dinner $baseQuery", limit = 20).first() }
+                                launch { repository.getRandomRecipes(30).first() }
+                            }
                         }
-                    )
+                    } catch (e: Exception) {
+                        Log.w("MealPlannerViewModel", "Recipe pre-fetch interrupted: ${e.message}")
+                    }
                 }
                 
-                _generationStage.value = "Finalizing your meal plan..."
-                _generationProgress.value = 1f
-                kotlinx.coroutines.delay(400)
+                _generationStage.value = "Creating your personalized meal plan..."
+                _generationProgress.value = 0.4f
                 
-                _mealPlans.value = generatedPlan
+                // Use shorter timeout for the main meal plan generation
+                var usedRealData = false
+                val mealPlanData = withTimeoutOrNull(35000) { // Reduced from 60s to 35s
+                    try {
+                        // Wait for the caching job to complete (with a timeout)
+                        withTimeoutOrNull(5000) {
+                            cachingJob.join()
+                        }
+                        
+                        val result = mutableMapOf<DayOfWeek, List<MealPlanItem>>()
+                        val allDays = DayOfWeek.values().toList()
+                        
+                        repository.generateMealPlan(
+                            calorieTarget = calorieTarget,
+                            dietType = dietType,
+                            days = allDays,
+                            allergies = allergies
+                        ).collect { repoResult ->
+                            repoResult.onSuccess { mealPlanFromRepo ->
+                                _generationProgress.value = 0.6f
+                                _generationStage.value = "Optimizing meal variety..."
+                                
+                                // Track recipes we've used to avoid duplicates
+                                val usedRecipeIds = mutableSetOf<Int?>()
+                                
+                                // Transform repository meal plan data to our UI model
+                                result.clear()
+                                mealPlanFromRepo.forEach { (day, meals) ->
+                                    // Filter for unique meals that haven't been used yet
+                                    val uniqueMeals = meals.filter { meal -> 
+                                        meal.recipeId == null || !usedRecipeIds.contains(meal.recipeId)
+                                    }
+                                    
+                                    // If we have unique meals for this day, use them
+                                    if (uniqueMeals.isNotEmpty()) {
+                                        // Track recipe IDs so we don't reuse them
+                                        uniqueMeals.forEach { meal ->
+                                            if (meal.recipeId != null) {
+                                                usedRecipeIds.add(meal.recipeId)
+                                            }
+                                        }
+                                        
+                                        result[day] = uniqueMeals.map { meal ->
+                                            MealPlanItem(
+                                                id = meal.id,
+                                                name = meal.name,
+                                                calories = meal.calories,
+                                                day = day,
+                                                time = getMealTimeFromString(meal.time),
+                                                description = meal.description,
+                                                recipeId = meal.recipeId,
+                                                imageUrl = meal.imageUrl ?: getDefaultMealImage(meal.name)
+                                            )
+                                        }
+                                    }
+                                }
+                                
+                                // Accept any real data as long as we have at least one day
+                                if (result.isNotEmpty()) {
+                                    usedRealData = true
+                                    Log.d("MealPlannerViewModel", "Successfully fetched meal plan with ${result.size} days and ${usedRecipeIds.size} unique recipes")
+                                } else {
+                                    Log.w("MealPlannerViewModel", "No days with meals found")
+                                }
+                            }
+                            repoResult.onFailure { error ->
+                                Log.w("MealPlannerViewModel", "Error from repository: ${error.message}", error)
+                                usedRealData = false
+                                throw error
+                            }
+                        }
+                        result
+                    } catch (e: Exception) {
+                        Log.w("MealPlannerViewModel", "Exception during meal plan generation: ${e.message}", e)
+                        usedRealData = false
+                        null
+                    }
+                }
+                
+                // If the caching job is still running, cancel it
+                if (cachingJob.isActive) {
+                    cachingJob.cancel()
+                }
+                
+                // Prepare the final plan - either use the real data or fallback to offline
+                val finalPlan = if (mealPlanData != null && usedRealData && mealPlanData.isNotEmpty()) {
+                    Log.d("MealPlannerViewModel", "Using real recipe data for meal plan with ${mealPlanData.size} days")
+                    // Create a diverse meal plan with our improved helper function
+                    _generationStage.value = "Finalizing your meal plan..."
+                    _generationProgress.value = 0.8f
+                    createDiverseMealPlan(mealPlanData)
+                } else {
+                    // Use offline data as fallback
+                    Log.d("MealPlannerViewModel", "Using offline fallback data for meal plan")
+                    _generationStage.value = "Creating offline meal plan for you..."
+                    createOfflineMealPlan(calorieTarget, dietType)
+                }
+
+                _generationStage.value = "Calculating nutrition values..."
+                _generationProgress.value = 0.9f
+                kotlinx.coroutines.delay(300)
+                
+                // Calculate nutrition summaries
+                val nutritionSummaries = calculateNutritionSummaries(finalPlan)
+                
+                _generationProgress.value = 1f
+                
+                _mealPlans.value = finalPlan
                 _dailyNutrition.value = nutritionSummaries
                 
+                // Save the meal plan if user is authenticated
+                if (_isUserAuthenticated.value) {
+                    try {
+                        mealPlanRepository.saveUserMealPlans(finalPlan).collect { saveResult ->
+                            saveResult.onSuccess {
+                                Log.d("MealPlannerViewModel", "Successfully saved user meal plans")
+                            }
+                            saveResult.onFailure { error ->
+                                Log.e("MealPlannerViewModel", "Failed to save user meal plans", error)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MealPlannerViewModel", "Error saving user meal plans", e)
+                    }
+                }
+                
+                // Async background refresh for next time
+                viewModelScope.launch {
+                    refreshRecipeCacheInBackground(40)
+                }
+                
             } catch (e: Exception) {
+                Log.e("MealPlannerViewModel", "Error generating meal plan", e)
                 _error.value = e.message ?: "An unexpected error occurred"
+                
+                // Use offline fallback
+                try {
+                    val fallbackPlan = createOfflineMealPlan(2000, "balanced") // Use default values 
+                    val fallbackNutrition = calculateNutritionSummaries(fallbackPlan)
+                    
+                    _mealPlans.value = fallbackPlan
+                    _dailyNutrition.value = fallbackNutrition
+                } catch (fallbackError: Exception) {
+                    Log.e("MealPlannerViewModel", "Failed to create fallback plan", fallbackError)
+                }
             } finally {
                 _isGenerating.value = false
                 _generationStage.value = null
+                _generationProgress.value = 0f
             }
         }
     }
 
-    // Fallback method to create a meal plan if repository is not responding
-    private fun createFallbackMealPlan(calorieTarget: Int, dietType: String): Map<DayOfWeek, List<MealPlanItem>> {
-        val daysOfWeek = DayOfWeek.values()
-        val mealPlan = mutableMapOf<DayOfWeek, List<MealPlanItem>>()
+    /**
+     * Create a fallback meal plan to use when API calls fail
+     */
+    private fun createFallbackMealPlan(calorieTarget: Int, dietType: String) {
+        // Create offline fallback meal plan
+        _generationStage.value = "Creating offline meal plan for you..."
+        val fallbackPlan = createOfflineMealPlan(calorieTarget, dietType)
         
-        val breakfastCalories = (calorieTarget * 0.25).toInt()
-        val lunchCalories = (calorieTarget * 0.35).toInt()
-        val dinnerCalories = (calorieTarget * 0.30).toInt()
-        val snackCalories = (calorieTarget * 0.10).toInt()
+        // Calculate nutrition summaries
+        _generationStage.value = "Calculating nutrition values..."
+        val nutritionSummaries = calculateNutritionSummaries(fallbackPlan)
         
-        val breakfastOptions = listOf(
-            "Oatmeal with berries and nuts",
-            "Avocado toast with eggs",
-            "Greek yogurt with honey and granola",
-            "Protein smoothie bowl",
-            "Breakfast burrito with eggs and vegetables",
-            "Whole grain cereal with milk and fruit",
-            "Pancakes with fresh fruit"
-        )
+        // Update UI state
+        _mealPlans.value = fallbackPlan
+        _dailyNutrition.value = nutritionSummaries
         
-        val lunchOptions = listOf(
-            "Grilled chicken salad",
-            "Turkey and avocado wrap",
-            "Vegetable soup with whole grain bread",
-            "Quinoa bowl with roasted vegetables",
-            "Mediterranean pasta salad",
-            "Tuna salad sandwich",
-            "Rice bowl with beans and vegetables"
-        )
-        
-        val dinnerOptions = listOf(
-            "Grilled salmon with steamed vegetables",
-            "Chicken stir-fry with rice",
-            "Beef stew with vegetables",
-            "Vegetable lasagna",
-            "Baked chicken with roasted potatoes",
-            "Fish tacos with slaw",
-            "Pasta with marinara sauce and vegetables"
-        )
-        
-        val snackOptions = listOf(
-            "Apple with peanut butter",
-            "Greek yogurt with berries",
-            "Protein bar",
-            "Handful of mixed nuts",
-            "Carrot sticks with hummus",
-            "String cheese with crackers",
-            "Fruit smoothie"
-        )
-        
-        daysOfWeek.forEach { day ->
-            val dayIndex = day.ordinal
-            
-            val breakfast = MealPlanItem(
-                id = "${day}_BREAKFAST_${System.currentTimeMillis()}",
-                name = "Breakfast",
-                calories = breakfastCalories,
-                day = day,
-                time = "08:00",
-                description = breakfastOptions[dayIndex % breakfastOptions.size],
-                recipeId = 1000 + dayIndex,
-                imageUrl = "https://source.unsplash.com/random/300x200?breakfast,${dayIndex}"
+        _generationProgress.value = 1f
+        _generationStage.value = "Done!"
+        _isLoading.value = false
+    }
+
+    /**
+     * Calculate nutrition summaries for groups of meals
+     */
+    private fun calculateNutritionSummaries(mealPlan: Map<DayOfWeek, List<MealPlanItem>>): Map<DayOfWeek, NutritionSummary> {
+        return mealPlan.mapValues { (_, meals) ->
+            NutritionSummary(
+                calories = meals.sumOf { it.calories },
+                protein = (meals.sumOf { it.calories } * 0.2f / 4).toInt(), // 20% protein
+                carbs = (meals.sumOf { it.calories } * 0.5f / 4).toInt(),   // 50% carbs
+                fat = (meals.sumOf { it.calories } * 0.3f / 9).toInt()      // 30% fat
             )
-            
-            val lunch = MealPlanItem(
-                id = "${day}_LUNCH_${System.currentTimeMillis()}",
-                name = "Lunch",
-                calories = lunchCalories,
-                day = day,
-                time = "13:00",
-                description = lunchOptions[dayIndex % lunchOptions.size],
-                recipeId = 2000 + dayIndex,
-                imageUrl = "https://source.unsplash.com/random/300x200?lunch,${dayIndex}"
-            )
-            
-            val dinner = MealPlanItem(
-                id = "${day}_DINNER_${System.currentTimeMillis()}",
-                name = "Dinner",
-                calories = dinnerCalories,
-                day = day,
-                time = "19:00",
-                description = dinnerOptions[dayIndex % dinnerOptions.size],
-                recipeId = 3000 + dayIndex,
-                imageUrl = "https://source.unsplash.com/random/300x200?dinner,${dayIndex}"
-            )
-            
-            val snack = MealPlanItem(
-                id = "${day}_SNACKS_${System.currentTimeMillis()}",
-                name = "Snacks",
-                calories = snackCalories,
-                day = day,
-                time = "16:00",
-                description = snackOptions[dayIndex % snackOptions.size],
-                recipeId = 4000 + dayIndex,
-                imageUrl = "https://source.unsplash.com/random/300x200?snack,${dayIndex}"
-            )
-            
-            mealPlan[day] = listOf(breakfast, lunch, dinner, snack)
         }
-        
-        return mealPlan
     }
 }
 

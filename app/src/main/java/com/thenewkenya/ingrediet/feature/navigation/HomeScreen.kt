@@ -229,26 +229,56 @@ fun HomeScreenContent(navController: NavController) {
         
         try {
             // Use coroutineScope.launch to collect the flow properly
-            recipeRepository.getRecipes(
-                query = searchQuery.takeIf { it.isNotEmpty() },
-                category = selectedCategory.takeIf { it != "All Recipes" }
-            ).collect { result ->
-                isLoading = false
-                result.fold(
-                    onSuccess = { recipesList -> 
-                        recipes = recipesList.sortedByDescending { it.rating }
-                        Log.d("HomeScreen", "Loaded ${recipes.size} recipes")
-                    },
-                    onFailure = { error -> 
-                        errorMessage = error.message ?: "Failed to load recipes"
-                        Log.e("HomeScreen", "Error loading recipes", error)
+            coroutineScope.launch {
+                try {
+                    recipeRepository.getRecipes(
+                        query = searchQuery.takeIf { it.isNotEmpty() },
+                        category = selectedCategory.takeIf { it != "All Recipes" }
+                    ).collect { result ->
+                        if (isActive) { // Check if still active before updating state
+                            isLoading = false
+                            result.fold(
+                                onSuccess = { recipesList -> 
+                                    recipes = recipesList.sortedByDescending { it.rating }
+                                    Log.d("HomeScreen", "Loaded ${recipes.size} recipes")
+                                },
+                                onFailure = { error -> 
+                                    if (error is kotlinx.coroutines.CancellationException ||
+                                        error.message?.contains("composition") == true ||
+                                        error.cause is kotlinx.coroutines.CancellationException) {
+                                        Log.d("HomeScreen", "Recipe loading cancelled - screen likely left composition")
+                                    } else {
+                                        errorMessage = error.message ?: "Failed to load recipes"
+                                        Log.e("HomeScreen", "Error loading recipes", error)
+                                    }
+                                }
+                            )
+                        }
                     }
-                )
+                } catch (e: Exception) {
+                    // Only update UI state if still active and not a cancellation
+                    if (isActive && e !is kotlinx.coroutines.CancellationException && 
+                        e.message?.contains("composition") != true &&
+                        e.cause !is kotlinx.coroutines.CancellationException) {
+                        isLoading = false
+                        errorMessage = e.message ?: "An unexpected error occurred"
+                        Log.e("HomeScreen", "Error loading recipes", e)
+                    } else {
+                        Log.d("HomeScreen", "Recipe loading cancelled: ${e.message}")
+                    }
+                }
             }
         } catch (e: Exception) {
-            isLoading = false
-            errorMessage = e.message ?: "An unexpected error occurred"
-            Log.e("HomeScreen", "Error loading recipes", e)
+            // Handle exceptions outside of the coroutine scope
+            if (e !is kotlinx.coroutines.CancellationException && 
+                e.message?.contains("composition") != true &&
+                e.cause !is kotlinx.coroutines.CancellationException) {
+                isLoading = false
+                errorMessage = e.message ?: "An unexpected error occurred"
+                Log.e("HomeScreen", "Error launching recipe loader", e)
+            } else {
+                Log.d("HomeScreen", "Recipe loading cancelled during launch: ${e.message}")
+            }
         }
     }
 
@@ -518,9 +548,20 @@ private fun HomeHeader(
         
         // Search bar below profile section
         Spacer(modifier = Modifier.height(16.dp))
+        
+        // Use remember for the local search query to avoid recomposition issues
+        val localSearchQuery = remember(searchQuery) { mutableStateOf(searchQuery) }
+        val scope = rememberCoroutineScope()
+        
         OutlinedTextField(
-            value = searchQuery,
-            onValueChange = onSearchQueryChange,
+            value = localSearchQuery.value,
+            onValueChange = { newValue ->
+                localSearchQuery.value = newValue
+                // Use scope.launch to avoid composition cancellation issues
+                scope.launch {
+                    onSearchQueryChange(newValue)
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -532,8 +573,13 @@ private fun HomeHeader(
                 )
             },
             trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { onSearchQueryChange("") }) {
+                if (localSearchQuery.value.isNotEmpty()) {
+                    IconButton(onClick = { 
+                        localSearchQuery.value = ""
+                        scope.launch {
+                            onSearchQueryChange("")
+                        }
+                    }) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Clear search"
@@ -557,8 +603,8 @@ private fun HomeHeader(
                 onSearch = {
                     // Handle search action
                     focusManager.clearFocus()
-                    if (searchQuery.isNotEmpty()) {
-                        navController.navigate("search/$searchQuery")
+                    if (localSearchQuery.value.isNotEmpty()) {
+                        navController.navigate("search/${localSearchQuery.value}")
                     }
                 }
             )

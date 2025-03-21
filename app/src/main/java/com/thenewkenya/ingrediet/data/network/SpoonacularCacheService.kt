@@ -6,16 +6,22 @@ import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.network.api.SpoonacularService
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Service for caching Spoonacular API data to Supabase to reduce API usage
  */
 class SpoonacularCacheService(private val context: Context) {
-    private val spoonacularService = SpoonacularService()
+    private val TAG = "SpoonacularCacheService"
+    private val spoonacularService = SpoonacularService(context)
     private val cacheManager = CacheManager(context)
     private val recipeRepository = RecipeRepository(context)
     
@@ -31,154 +37,167 @@ class SpoonacularCacheService(private val context: Context) {
         // Reset request count every 24 hours
         android.os.Handler(android.os.Looper.getMainLooper()).postAtTime({
             dailyRequestCount.set(0)
-            Log.d("SpoonacularCacheService", "Reset daily API request count")
+            Log.d(TAG, "Reset daily API request count")
         }, System.currentTimeMillis() + CACHE_REFRESH_INTERVAL)
     }
     
     /**
-     * Search and cache recipes from Spoonacular
-     * @param query Search query
-     * @param maxResults Maximum number of results to return
-     * @return Flow of DetailedRecipe lists
+     * Search for recipes and cache the results
+     * @param query The search query
+     * @param limit Maximum number of recipes to return
+     * @return Flow of cached and new recipes matching the query
      */
-    fun searchAndCacheRecipes(query: String, maxResults: Int = 10): Flow<List<DetailedRecipe>> = flow {
+    suspend fun searchAndCacheRecipes(query: String, limit: Int = 10): Flow<List<DetailedRecipe>> = flow {
         try {
-            // Check if we're under the request limit
-            if (dailyRequestCount.get() >= MAX_DAILY_REQUESTS) {
-                Log.d("SpoonacularCacheService", "Daily API request limit reached")
-                // Fallback to cached results only
-                val cachedResults = getCachedResults(query)
+            Log.d(TAG, "Searching and caching recipes for query: $query")
+            
+            // First return cached results while we fetch new ones
+            val cachedResults = cacheManager.getCachedRecipesByQuery(query)
+            if (cachedResults.isNotEmpty()) {
+                Log.d(TAG, "Found ${cachedResults.size} cached results for query: $query")
                 emit(cachedResults)
+            }
+            
+            // If we've hit our API limit, just stop here with cached results
+            if (spoonacularService.shouldUseFallbackOnly()) {
+                Log.d(TAG, "API limit reached, using only cached results for query: $query")
                 return@flow
             }
             
-            // Increment the request counter
-            dailyRequestCount.incrementAndGet()
-            
-            // Get recipes from Spoonacular
-            val recipes = spoonacularService.searchRecipes(query)
-            
-            // Store recipes in Supabase and local cache
-            val cachedRecipes = mutableListOf<DetailedRecipe>()
-            for (recipe in recipes.take(maxResults)) {
-                cacheRecipe(recipe)
-                cachedRecipes.add(recipe)
+            // Then get new results from the API
+            val recipesFlow = spoonacularService.searchRecipes(query, limit)
+            recipesFlow.collect { recipes ->
+                if (recipes.isNotEmpty()) {
+                    Log.d(TAG, "Caching ${recipes.size} new recipes for query: $query")
+                    // Cache each recipe individually
+                    recipes.forEach { recipe ->
+                        cacheManager.cacheRecipe(recipe)
+                        Log.d(TAG, "Cached recipe: ${recipe.id}")
+                    }
+                    
+                    // If we found new recipes not in our initial cached results, emit them
+                    val combinedResults = LinkedHashSet<DetailedRecipe>()
+                    combinedResults.addAll(cachedResults)
+                    combinedResults.addAll(recipes)
+                    
+                    if (combinedResults.size > cachedResults.size) {
+                        emit(combinedResults.toList().take(limit))
+                    }
+                }
             }
-            
-            emit(cachedRecipes)
         } catch (e: Exception) {
-            Log.e("SpoonacularCacheService", "Error searching and caching recipes: ${e.message}", e)
-            // Fallback to cached results
-            val cachedResults = getCachedResults(query)
+            Log.e(TAG, "Error searching and caching recipes: ${e.message}", e)
+            // Just emit whatever cached results we have
+            val cachedResults = cacheManager.getCachedRecipesByQuery(query)
             emit(cachedResults)
         }
     }
     
     /**
-     * Get random recipes and cache them
-     * @param count Number of recipes to fetch
-     * @return Flow of DetailedRecipe lists
+     * Get and cache a specific recipe by ID
+     * @param recipeId The recipe ID
+     * @return The cached recipe or null if not found
      */
-    fun getAndCacheRandomRecipes(count: Int = 10): Flow<List<DetailedRecipe>> = flow {
+    suspend fun getAndCacheRecipeById(recipeId: Int): DetailedRecipe? {
         try {
-            // Check if we're under the request limit
-            if (dailyRequestCount.get() >= MAX_DAILY_REQUESTS) {
-                Log.d("SpoonacularCacheService", "Daily API request limit reached")
-                // Fallback to cached results only
-                val cachedResults = getCachedRandomRecipes(count)
-                emit(cachedResults)
-                return@flow
+            Log.d(TAG, "Getting and caching recipe ID: $recipeId")
+            
+            // First check our local cache
+            val cachedRecipe = cacheManager.getCachedRecipe(recipeId)
+            if (cachedRecipe != null) {
+                Log.d(TAG, "Found recipe $recipeId in cache")
+                return cachedRecipe
             }
             
-            // Check if we need to refresh the cache
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - lastCacheRefreshTime > CACHE_REFRESH_INTERVAL) {
-                // Increment the request counter
-                dailyRequestCount.incrementAndGet()
-                
-                // Get random recipes from Spoonacular
-                val recipes = spoonacularService.getRandomRecipes(count)
-                
-                // Store recipes in Supabase and local cache
-                val cachedRecipes = mutableListOf<DetailedRecipe>()
-                for (recipe in recipes) {
-                    cacheRecipe(recipe)
-                    cachedRecipes.add(recipe)
-                }
-                
-                lastCacheRefreshTime = currentTime
-                emit(cachedRecipes)
+            // If we've hit our API limit, just return null
+            if (spoonacularService.shouldUseFallbackOnly()) {
+                Log.d(TAG, "API limit reached, cannot fetch new recipe: $recipeId")
+                return null
+            }
+            
+            // Then get from the API and cache
+            var fetchedRecipe: DetailedRecipe? = null
+            spoonacularService.getRecipeById(recipeId).collect { recipe ->
+                fetchedRecipe = recipe
+            }
+            
+            if (fetchedRecipe != null) {
+                cacheManager.cacheRecipe(fetchedRecipe!!)
+                Log.d(TAG, "Successfully cached recipe $recipeId locally")
+            }
+            
+            return fetchedRecipe
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting and caching recipe: ${e.message}", e)
+            return null
+        }
+    }
+    
+    /**
+     * Get and cache random recipes
+     * @param count The number of recipes to fetch
+     * @return Flow of random recipes
+     */
+    suspend fun getAndCacheRandomRecipes(count: Int = 10): Flow<List<DetailedRecipe>> = flow {
+        try {
+            Log.d(TAG, "Fetching and caching random recipes")
+            
+            // First emit cached random recipes while we fetch new ones
+            val cachedRandomRecipes = cacheManager.getRandomCachedRecipes(count)
+            if (cachedRandomRecipes.isNotEmpty()) {
+                Log.d(TAG, "Found ${cachedRandomRecipes.size} cached random recipes")
+                emit(cachedRandomRecipes)
             } else {
-                // Use cached random recipes
-                val cachedResults = getCachedRandomRecipes(count)
-                emit(cachedResults)
+                // Always emit at least an empty list if no cached recipes
+                Log.d(TAG, "No cached random recipes found")
+                emit(emptyList())
+            }
+            
+            // If we've hit our API limit, just stop here with cached results
+            if (spoonacularService.shouldUseFallbackOnly()) {
+                Log.d(TAG, "API limit reached, using only cached random recipes")
+                return@flow
+            }
+            
+            // Then get new ones from API
+            try {
+                val recipesFlow = spoonacularService.getRandomRecipes(count)
+                recipesFlow.collect { recipes ->
+                    if (recipes.isNotEmpty()) {
+                        Log.d(TAG, "Caching ${recipes.size} new random recipes")
+                        // Cache each recipe individually
+                        recipes.forEach { recipe ->
+                            cacheManager.cacheRecipe(recipe)
+                        }
+                        
+                        // If we found new recipes not in our initial cached results, emit them
+                        val combinedResults = LinkedHashSet<DetailedRecipe>()
+                        combinedResults.addAll(cachedRandomRecipes)
+                        combinedResults.addAll(recipes)
+                        
+                        emit(combinedResults.toList().take(count))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching recipes from Spoonacular API: ${e.message}")
+                // No need to re-emit as we've already emitted cached results
             }
         } catch (e: Exception) {
-            Log.e("SpoonacularCacheService", "Error getting and caching random recipes: ${e.message}", e)
-            // Fallback to cached results
-            val cachedResults = getCachedRandomRecipes(count)
-            emit(cachedResults)
+            Log.e(TAG, "Error fetching and caching random recipes: ${e.message}", e)
+            // Always emit something to prevent "Expected at least one element" errors
+            emit(emptyList())
         }
     }
     
     /**
-     * Get recipe details by ID and cache it
-     * @param id Recipe ID
-     * @return DetailedRecipe if found, null otherwise
-     */
-    suspend fun getAndCacheRecipeById(id: Int): DetailedRecipe? {
-        return withContext(Dispatchers.IO) {
-            try {
-                // Check if recipe is in local cache first
-                val cachedRecipe = cacheManager.getCachedRecipe(id)
-                if (cachedRecipe != null) {
-                    Log.d("SpoonacularCacheService", "Found recipe $id in local cache")
-                    return@withContext cachedRecipe
-                }
-                
-                // If not in cache, check if we're under the request limit
-                if (dailyRequestCount.get() >= MAX_DAILY_REQUESTS) {
-                    Log.d("SpoonacularCacheService", "Daily API request limit reached")
-                    return@withContext null
-                }
-                
-                // Increment the request counter
-                dailyRequestCount.incrementAndGet()
-                
-                // Get recipe from Spoonacular
-                val recipe = spoonacularService.getRecipeById(id)
-                
-                // Store recipe in Supabase and local cache
-                if (recipe != null) {
-                    cacheRecipe(recipe)
-                }
-                
-                return@withContext recipe
-            } catch (e: Exception) {
-                Log.e("SpoonacularCacheService", "Error getting and caching recipe: ${e.message}", e)
-                return@withContext null
-            }
-        }
-    }
-    
-    /**
-     * Cache a recipe in both local storage and Supabase
+     * Cache a recipe in local storage only (no longer using Supabase)
      */
     private suspend fun cacheRecipe(recipe: DetailedRecipe) {
         withContext(Dispatchers.IO) {
             try {
-                // Store in local cache first
+                // Store in local cache only
                 cacheManager.cacheRecipe(recipe)
-                
-                // Then store in Supabase
-                try {
-                    recipeRepository.storeRecipeInSupabase(recipe)
-                } catch (e: Exception) {
-                    Log.e("SpoonacularCacheService", "Error storing recipe in Supabase: ${e.message}", e)
-                    // Continue even if Supabase storage fails
-                }
-                
-                Log.d("SpoonacularCacheService", "Successfully cached recipe ${recipe.id}")
+                Log.d("SpoonacularCacheService", "Successfully cached recipe ${recipe.id} locally")
             } catch (e: Exception) {
                 Log.e("SpoonacularCacheService", "Error caching recipe: ${e.message}", e)
             }
@@ -231,6 +250,47 @@ class SpoonacularCacheService(private val context: Context) {
             }
             
             return@withContext results
+        }
+    }
+    
+    /**
+     * Helper method to cache recipes in the background without blocking
+     */
+    private fun cacheRecipesInBackground(recipes: List<DetailedRecipe>) {
+        GlobalScope.launch(Dispatchers.IO) {
+            for (recipe in recipes) {
+                try {
+                    cacheRecipe(recipe)
+                } catch (e: Exception) {
+                    Log.e("SpoonacularCacheService", "Error caching recipe: ${e.message}", e)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Helper method to refresh the cache in the background
+     */
+    private fun refreshCacheInBackground(count: Int) {
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                if (dailyRequestCount.get() < MAX_DAILY_REQUESTS) {
+                    dailyRequestCount.incrementAndGet()
+                    val recipesFlow = spoonacularService.getRandomRecipes(count)
+                    recipesFlow.collect { recipes ->
+                        for (recipe in recipes) {
+                            try {
+                                cacheRecipe(recipe)
+                            } catch (e: Exception) {
+                                Log.e("SpoonacularCacheService", "Error caching recipe in background: ${e.message}", e)
+                            }
+                        }
+                    }
+                    lastCacheRefreshTime = System.currentTimeMillis()
+                }
+            } catch (e: Exception) {
+                Log.e("SpoonacularCacheService", "Error refreshing cache in background: ${e.message}", e)
+            }
         }
     }
 } 
