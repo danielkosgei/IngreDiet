@@ -200,6 +200,79 @@ class SpoonacularService(private val context: android.content.Context) {
     }
 
     /**
+     * Search for recipes by ingredient list
+     */
+    suspend fun searchRecipesByIngredients(ingredients: List<String>, limit: Int = 10): Flow<List<DetailedRecipe>> = flow {
+        // Early check for API limit to avoid unnecessary work
+        if (_apiLimitReached.value) {
+            Log.d(TAG, "API limit reached, skipping Spoonacular search by ingredients")
+            emit(emptyList())
+            return@flow
+        }
+
+        // Skip empty ingredient lists
+        if (ingredients.isEmpty()) {
+            Log.d(TAG, "Empty ingredient list, fetching random recipes instead")
+            getRandomRecipes(limit).collect { recipes -> 
+                emit(recipes)
+            }
+            return@flow
+        }
+
+        // Join the ingredients into a comma-separated string
+        val ingredientsString = ingredients.joinToString(",")
+        
+        Log.d(TAG, "Searching Spoonacular for recipes with ingredients: $ingredientsString")
+        val endpoint = "recipes/findByIngredients"
+        
+        val params = mapOf(
+            "ingredients" to ingredientsString,
+            "number" to limit.toString(),
+            "ranking" to "1", // 1 = maximize used ingredients, 2 = minimize missing ingredients
+            "ignorePantry" to "false"
+        )
+        
+        try {
+            val responseJson = makeApiCall(endpoint, params)
+            val recipeResults = json.decodeFromString<List<SpoonacularIngredientSearchResult>>(responseJson)
+            
+            // For each recipe ID found, get the full recipe details
+            val detailedRecipes = mutableListOf<DetailedRecipe>()
+            
+            for (result in recipeResults) {
+                // Get full recipe details for each result
+                getRecipeById(result.id).collect { recipe ->
+                    if (recipe != null) {
+                        detailedRecipes.add(recipe)
+                    }
+                }
+            }
+            
+            emit(detailedRecipes)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "API error during search by ingredients: ${e.message}")
+            
+            // Set API limit flag if appropriate
+            if (e is ApiLimitExceededException || e.message?.contains("402") == true) {
+                _apiLimitReached.value = true
+                Log.d(TAG, "API limit reached, skipping search by ingredients")
+            }
+            
+            // For cancellation, don't emit - just return
+            if (e is kotlinx.coroutines.CancellationException || 
+                e.message?.contains("composition") == true || 
+                e.cause is kotlinx.coroutines.CancellationException) {
+                Log.d(TAG, "Search by ingredients operation cancelled normally")
+                return@flow
+            }
+            
+            // For other errors, use an empty list
+            emit(emptyList())
+        }
+    }
+
+    /**
      * Get random recipes
      */
     suspend fun getRandomRecipes(limit: Int = 10): Flow<List<DetailedRecipe>> = flow {
@@ -502,23 +575,18 @@ data class SpoonacularRandomRecipe(
     val title: String,
     val image: String? = null,
     val summary: String? = null,
-    val instructions: String? = null,
-    val readyInMinutes: Int? = null,
     val preparationMinutes: Int? = null,
     val cookingMinutes: Int? = null,
+    val readyInMinutes: Int? = null,
     val servings: Int? = null,
     val vegetarian: Boolean? = null,
     val vegan: Boolean? = null,
     val glutenFree: Boolean? = null,
     val dairyFree: Boolean? = null,
     val veryHealthy: Boolean? = null,
-    val cuisines: List<String>? = null,
     val analyzedInstructions: List<SpoonacularInstructions>? = emptyList(),
     val extendedIngredients: List<SpoonacularIngredient>? = emptyList(),
-    val calories: Int? = null,
-    val protein: String? = null,
-    val carbs: String? = null,
-    val fat: String? = null
+    val nutrition: SpoonacularNutritionInfo? = null
 )
 
 @Serializable
@@ -555,6 +623,19 @@ data class SpoonacularNutritionIngredient(
     val name: String,
     val amount: Float? = null,
     val unit: String? = null
+)
+
+@Serializable
+data class SpoonacularIngredientSearchResult(
+    val id: Int,
+    val title: String,
+    val image: String? = null,
+    val usedIngredientCount: Int,
+    val missedIngredientCount: Int,
+    val missedIngredients: List<SpoonacularIngredient>? = emptyList(),
+    val usedIngredients: List<SpoonacularIngredient>? = emptyList(),
+    val unusedIngredients: List<SpoonacularIngredient>? = emptyList(),
+    val likes: Int? = 0
 )
 
 /**
@@ -629,20 +710,30 @@ private fun mapRandomToDetailedRecipe(recipe: SpoonacularRandomRecipe): Detailed
         )
     } ?: emptyList()
     
-    // Estimate nutrition facts if not provided
-    val nutritionFacts = NutritionFacts(
-        calories = (recipe.calories ?: (recipe.servings?.times(250) ?: 500)),
-        protein = recipe.protein?.toFloatOrNull() ?: 15f,
-        carbs = recipe.carbs?.toFloatOrNull() ?: 30f,
-        fat = recipe.fat?.toFloatOrNull() ?: 10f,
-        fiber = null,
-        sugar = null
-    )
+    // Extract nutrition facts
+    val nutritionFacts = if (recipe.nutrition != null) {
+        NutritionFacts(
+            calories = recipe.nutrition.nutrients?.find { it.name == "Calories" }?.amount?.toInt() ?: 0,
+            protein = recipe.nutrition.nutrients?.find { it.name == "Protein" }?.amount ?: 0f,
+            carbs = recipe.nutrition.nutrients?.find { it.name == "Carbohydrates" }?.amount ?: 0f,
+            fat = recipe.nutrition.nutrients?.find { it.name == "Fat" }?.amount ?: 0f,
+            fiber = recipe.nutrition.nutrients?.find { it.name == "Fiber" }?.amount,
+            sugar = recipe.nutrition.nutrients?.find { it.name == "Sugar" }?.amount
+        )
+    } else {
+        // Default nutrition if not provided
+        NutritionFacts(
+            calories = recipe.servings?.times(250) ?: 500,
+            protein = 15f,
+            carbs = 30f,
+            fat = 10f
+        )
+    }
     
     // Extract instructions
     val instructions = recipe.analyzedInstructions?.firstOrNull()?.steps?.map { 
         it.step 
-    } ?: recipe.instructions?.split(Regex("\\. |\\.\\s*"))?.filter { it.isNotBlank() } ?: emptyList()
+    } ?: emptyList()
     
     // Extract tags
     val tags = mutableListOf<String>()
@@ -651,9 +742,6 @@ private fun mapRandomToDetailedRecipe(recipe: SpoonacularRandomRecipe): Detailed
     if (recipe.glutenFree == true) tags.add("Gluten-Free")
     if (recipe.dairyFree == true) tags.add("Dairy-Free")
     if (recipe.veryHealthy == true) tags.add("Healthy")
-    
-    // Add cuisine as tag if available
-    recipe.cuisines?.firstOrNull()?.let { tags.add(it) }
     
     // Calculate preparation and cooking times
     val prepTime = recipe.preparationMinutes ?: 0
@@ -722,9 +810,6 @@ private fun mapRecipeToDetailedRecipe(recipe: SpoonacularRecipeResponse): Detail
     if (recipe.glutenFree == true) tags.add("Gluten-Free")
     if (recipe.dairyFree == true) tags.add("Dairy-Free")
     if (recipe.veryHealthy == true) tags.add("Healthy")
-    
-    // Add cuisine as tag if available
-    recipe.cuisines?.firstOrNull()?.let { tags.add(it) }
     
     // Calculate preparation and cooking times
     val prepTime = recipe.preparationMinutes ?: 0

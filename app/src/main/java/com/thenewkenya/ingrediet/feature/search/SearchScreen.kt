@@ -63,6 +63,18 @@ fun SearchScreen(
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                 singleLine = true
             )
+            
+            // Ingredient Search Button
+            OutlinedButton(
+                onClick = { navController.navigate("ingredient-search") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Text("Search by Ingredients in Your Kitchen")
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Loading indicator
             if (isLoading) {

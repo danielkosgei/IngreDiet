@@ -96,6 +96,7 @@ import com.thenewkenya.ingrediet.feature.favorites.FavoritesScreen
 import com.thenewkenya.ingrediet.feature.mealplanner.MealPlannerScreen
 import com.thenewkenya.ingrediet.feature.create.CreateRecipeScreen
 import com.thenewkenya.ingrediet.feature.shopping.ShoppingListScreen
+import com.thenewkenya.ingrediet.feature.search.IngredientSearchScreen
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
@@ -286,6 +287,7 @@ fun AppNavigation() {
                 composable("mealplanner") { MealPlannerScreen(navController) }
                 composable("create") { CreateRecipeScreen(navController) }
                 composable("shopping") { ShoppingListScreen(navController) }
+                composable("ingredient-search") { IngredientSearchScreen(navController) }
 
                 // Recipe details route with parameter
                 composable(
