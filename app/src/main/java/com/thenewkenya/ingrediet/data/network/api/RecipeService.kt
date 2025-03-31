@@ -3,123 +3,51 @@ package com.thenewkenya.ingrediet.data.network.api
 import android.content.Context
 import android.util.Log
 import com.thenewkenya.ingrediet.data.model.DetailedRecipe
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 
 /**
- * Unified service that combines recipes from both TheMealDB and Spoonacular APIs
+ * Unified service for recipe operations using IngreDiet API
  */
 class RecipeService(private val context: Context) {
-    private val mealDbService = TheMealDbService()
-    private val spoonacularService = SpoonacularService(context)
-
-    init {
-        // Check for saved API limit state in preferences
-        val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(context)
-        val apiLimitTimestamp = prefs.getLong(SpoonacularService.API_LIMIT_TIMESTAMP_KEY, 0L)
-        
-        // If it's been more than 24 hours since the API limit was reached, reset it
-        if (apiLimitTimestamp > 0) {
-            val now = System.currentTimeMillis()
-            val timeSinceLimit = now - apiLimitTimestamp
-            
-            if (timeSinceLimit > SpoonacularService.API_LIMIT_DURATION_MS) {
-                spoonacularService.resetApiLimitStatus()
-                Log.d("RecipeService", "Reset Spoonacular API limit status (24 hours passed)")
-            } else {
-                Log.d("RecipeService", "Spoonacular API limit still active (${timeSinceLimit/1000/60/60} hours remaining)")
-            }
-        }
-    }
+    private val edgeFunctionService = IngreDietService(context)
+    private val TAG = "RecipeService"
 
     /**
-     * Search for recipes across both APIs
+     * Search for recipes
      * @param query Search query
-     * @return Flow of DetailedRecipe lists from both APIs
+     * @return Flow of DetailedRecipe lists
      */
     fun searchRecipes(query: String): Flow<List<DetailedRecipe>> = flow {
-        Log.d("RecipeService", "Searching recipes with query: $query")
-        
-        var isCancelled = false
+        Log.d(TAG, "Searching recipes with query: $query")
         
         try {
-            // Get results from TheMealDB
-            val mealDbResults = try {
-                val result = mealDbService.searchMealsByName(query)
-                if (result.isEmpty()) {
-                    Log.d("RecipeService", "No results from TheMealDB")
+            val results = edgeFunctionService.searchRecipes(query).catch { e ->
+                // Check for cancellation
+                if (e is kotlinx.coroutines.CancellationException) {
+                    Log.d(TAG, "Recipe search cancelled")
+                    throw e
                 }
-                result
-            } catch (e: Exception) {
-                // Check specifically for cancellation
-                if (e is kotlinx.coroutines.CancellationException ||
-                    e.message?.contains("composition") == true ||
-                    e.cause is kotlinx.coroutines.CancellationException) {
-                    Log.d("RecipeService", "TheMealDB search cancelled")
-                    isCancelled = true
-                    emptyList<DetailedRecipe>()
-                } else {
-                    Log.e("RecipeService", "Error from TheMealDB: ${e.message}")
-                    emptyList<DetailedRecipe>()
-                }
-            }
+                
+                Log.e(TAG, "Error searching recipes: ${e.message}", e)
+                emit(emptyList<DetailedRecipe>())
+            }.first()
             
-            // Stop processing if cancelled
-            if (isCancelled) {
-                Log.d("RecipeService", "Search operation cancelled after TheMealDB fetch")
-                return@flow
-            }
-            
-            // Get results from Spoonacular
-            val spoonacularResults = try {
-                val result = spoonacularService.getRandomRecipes(10).first()
-                if (result.isEmpty()) {
-                    Log.d("RecipeService", "No results from Spoonacular")
-                }
-                result
-            } catch (e: Exception) {
-                // Check specifically for cancellation
-                if (e is kotlinx.coroutines.CancellationException ||
-                    e.message?.contains("composition") == true ||
-                    e.cause is kotlinx.coroutines.CancellationException) {
-                    Log.d("RecipeService", "Spoonacular search cancelled")
-                    isCancelled = true
-                    emptyList<DetailedRecipe>()
-                } else {
-                    Log.e("RecipeService", "Error from Spoonacular: ${e.message}")
-                    emptyList<DetailedRecipe>()
-                }
-            }
-            
-            // Stop processing if cancelled
-            if (isCancelled) {
-                Log.d("RecipeService", "Search operation cancelled after Spoonacular fetch")
-                return@flow
-            }
-
-            // Combine results
-            val combinedResults = mealDbResults + spoonacularResults
-            
-            Log.d("RecipeService", "Combined ${mealDbResults.size} TheMealDB results with ${spoonacularResults.size} Spoonacular results")
-            
-            // Only emit if not cancelled
-            if (!isCancelled) {
-                emit(combinedResults)
-            }
+            Log.d(TAG, "Found ${results.size} recipes for query: $query")
+            emit(results)
         } catch (e: Exception) {
             // Specifically handle cancellation without logging errors or emitting values
             if (e is kotlinx.coroutines.CancellationException || 
                 e.message?.contains("composition") == true || 
                 e.cause is kotlinx.coroutines.CancellationException) {
-                Log.d("RecipeService", "Search operation cancelled normally")
-                // Don't emit anything
+                Log.d(TAG, "Search operation cancelled normally")
+                // Don't emit anything for cancellation
             } else {
-                Log.e("RecipeService", "Error searching recipes: ${e.message}")
+                Log.e(TAG, "Error searching recipes: ${e.message}", e)
                 emit(emptyList())
             }
         }
@@ -131,85 +59,31 @@ class RecipeService(private val context: Context) {
      * @return Flow of random recipes
      */
     fun getRandomRecipes(count: Int = 5): Flow<List<DetailedRecipe>> = flow {
-        Log.d("RecipeService", "Getting $count random recipes")
+        Log.d(TAG, "Getting $count random recipes")
         
-        // We'll collect results in this list
-        val combinedResults = mutableListOf<DetailedRecipe>()
-        var isCancelled = false
-        
-        // Track seen IDs to avoid duplicates
-        val seenIds = mutableSetOf<Int>()
-        
-        // Wrap all operations in a single try block
         try {
-            // We'll try up to 2x the requested count to account for potential nulls
-            for (i in 1..(count * 2)) {
-                // Break early if we have enough recipes or if cancelled
-                if (isCancelled || combinedResults.size >= count) {
-                    break
+            val results = edgeFunctionService.getRandomRecipes(count).catch { e ->
+                // Check for cancellation
+                if (e is kotlinx.coroutines.CancellationException) {
+                    Log.d(TAG, "Random recipe fetch cancelled")
+                    throw e
                 }
                 
-                try {
-                    // Try to get a random meal - this shouldn't throw cancellation exceptions now
-                    // since we've updated TheMealDbService to handle those gracefully
-                    val meal = mealDbService.getRandomMeal()
-                    
-                    if (meal != null && meal.id > 0) {
-                        // Make sure we don't add duplicates
-                        if (meal.id !in seenIds) {
-                            Log.d("RecipeService", "Got random meal from TheMealDB: ${meal.name}")
-                            combinedResults.add(meal)
-                            seenIds.add(meal.id)
-                        } else {
-                            Log.d("RecipeService", "Skipping duplicate meal: ${meal.name}")
-                        }
-                    }
-                } catch (e: Exception) {
-                    // Check if this is a cancellation and break the loop
-                    if (e is kotlinx.coroutines.CancellationException ||
-                        e.message?.contains("composition") == true ||
-                        e.cause is kotlinx.coroutines.CancellationException) {
-                        Log.d("RecipeService", "Random recipe fetch cancelled")
-                        isCancelled = true
-                        // Do NOT throw or emit here - just break the loop
-                        break
-                    }
-                    
-                    // Log other errors but continue trying
-                    Log.e("RecipeService", "Error getting a single random meal: ${e.message}")
-                    // Continue with the next recipe
-                }
-                
-                // Small delay to avoid hammering the API
-                kotlinx.coroutines.delay(200) // 200ms delay between requests
-            }
+                Log.e(TAG, "Error getting random recipes: ${e.message}", e)
+                emit(emptyList<DetailedRecipe>())
+            }.first()
             
-            // Log the result status
-            if (combinedResults.isEmpty() && !isCancelled) {
-                Log.d("RecipeService", "No random meals returned from TheMealDB")
-            } else if (!isCancelled) {
-                Log.d("RecipeService", "Got ${combinedResults.size} random meals from TheMealDB")
-            }
-            
-            // Always emit exactly once, at the end of the flow
-            // This ensures we never violate flow transparency by emitting after a flow abortion
-            if (!isCancelled) {
-                // Even if we don't have the requested number, still emit what we have
-                emit(combinedResults)
-            } else {
-                Log.d("RecipeService", "Random recipes operation cancelled normally")
-                // We don't emit anything in the cancellation case
-            }
+            Log.d(TAG, "Found ${results.size} random recipes")
+            emit(results)
         } catch (e: Exception) {
             // Specifically handle cancellation without logging errors or emitting values
             if (e is kotlinx.coroutines.CancellationException || 
                 e.message?.contains("composition") == true || 
                 e.cause is kotlinx.coroutines.CancellationException) {
-                Log.d("RecipeService", "Random recipes operation cancelled normally")
-                // We don't emit anything or throw here
+                Log.d(TAG, "Random recipes operation cancelled normally")
+                // Don't emit anything for cancellation
             } else {
-                // For other errors, log and emit an empty list
-                Log.e("RecipeService", "Error in getRandomRecipes: ${e.message}")
+                Log.e(TAG, "Error getting random recipes: ${e.message}", e)
                 emit(emptyList())
             }
         }
@@ -218,26 +92,33 @@ class RecipeService(private val context: Context) {
     /**
      * Get recipe details by ID and source
      * @param id Recipe ID
-     * @param source Source API ("mealdb" or "spoonacular")
+     * @param source Source API (optional - kept for backward compatibility)
      * @return DetailedRecipe if found, null otherwise
      */
-    suspend fun getRecipeById(id: String, source: String): DetailedRecipe? {
+    suspend fun getRecipeById(id: String, source: String? = null): DetailedRecipe? {
         return try {
-            when (source.lowercase()) {
-                "mealdb" -> mealDbService.getMealById(id)
-                "spoonacular" -> {
-                    try {
-                        spoonacularService.getRecipeById(id.toInt()).first()
-                    } catch (e: Exception) {
-                        Log.e("RecipeService", "Error getting Spoonacular recipe: ${e.message}")
-                        null
-                    }
+            // Source parameter is ignored as we're now using a single source
+            edgeFunctionService.getRecipeById(id).catch { e ->
+                // Check for cancellation
+                if (e is kotlinx.coroutines.CancellationException) {
+                    Log.d(TAG, "Recipe details fetch cancelled")
+                    throw e
                 }
-                else -> null
-            }
+                
+                Log.e(TAG, "Error getting recipe details: ${e.message}", e)
+                emit(null)
+            }.first()
         } catch (e: Exception) {
-            Log.e("RecipeService", "Error getting recipe details: ${e.message}", e)
-            null
+            // Check for cancellation
+            if (e is kotlinx.coroutines.CancellationException || 
+                e.message?.contains("composition") == true || 
+                e.cause is kotlinx.coroutines.CancellationException) {
+                Log.d(TAG, "Recipe details operation cancelled normally")
+                null
+            } else {
+                Log.e(TAG, "Error getting recipe details: ${e.message}", e)
+                null
+            }
         }
     }
 
@@ -247,87 +128,71 @@ class RecipeService(private val context: Context) {
      * @return Flow of DetailedRecipe lists
      */
     fun getRecipesByCategory(category: String): Flow<List<DetailedRecipe>> = flow {
-        var isCancelled = false
-
+        Log.d(TAG, "Getting recipes by category: $category")
+        
         try {
-            // Get recipes by category from MealDB
-            val mealDbResults = try {
-                mealDbService.filterByCategory(category).first()
-            } catch (e: Exception) {
-                // Check specifically for cancellation
-                if (e is kotlinx.coroutines.CancellationException ||
-                    e.message?.contains("composition") == true ||
-                    e.cause is kotlinx.coroutines.CancellationException) {
-                    Log.d("RecipeService", "MealDB category fetch cancelled")
-                    isCancelled = true
-                    emptyList<DetailedRecipe>()
-                } else {
-                    Log.e("RecipeService", "Error from TheMealDB category: ${e.message}")
-                    emptyList<DetailedRecipe>()
+            // Using search function with category as query
+            val results = edgeFunctionService.searchRecipes(category).catch { e ->
+                // Check for cancellation
+                if (e is kotlinx.coroutines.CancellationException) {
+                    Log.d(TAG, "Category search cancelled")
+                    throw e
                 }
-            }
+                
+                Log.e(TAG, "Error getting recipes by category: ${e.message}", e)
+                emit(emptyList<DetailedRecipe>())
+            }.first()
             
-            // Stop processing if cancelled
-            if (isCancelled) {
-                Log.d("RecipeService", "Category search operation cancelled after MealDB fetch")
-                return@flow
-            }
-            
-            // For Spoonacular, we'll search using the category as a query
-            val spoonacularResults = try {
-                spoonacularService.searchRecipes(category).first()
-            } catch (e: Exception) {
-                // Check specifically for cancellation
-                if (e is kotlinx.coroutines.CancellationException ||
-                    e.message?.contains("composition") == true ||
-                    e.cause is kotlinx.coroutines.CancellationException) {
-                    Log.d("RecipeService", "Spoonacular category fetch cancelled")
-                    isCancelled = true
-                    emptyList<DetailedRecipe>()
-                } else {
-                    Log.e("RecipeService", "Error from Spoonacular search: ${e.message}")
-                    emptyList<DetailedRecipe>()
-                }
-            }
-
-            // Stop processing if cancelled
-            if (isCancelled) {
-                Log.d("RecipeService", "Category search operation cancelled after Spoonacular fetch")
-                return@flow
-            }
-
-            // Combine results
-            val combinedResults = mealDbResults + spoonacularResults
-            
-            // Only emit if not cancelled
-            if (!isCancelled) {
-                emit(combinedResults)
-            }
+            Log.d(TAG, "Found ${results.size} recipes for category: $category")
+            emit(results)
         } catch (e: Exception) {
             // Specifically handle cancellation without logging errors or emitting values
             if (e is kotlinx.coroutines.CancellationException || 
                 e.message?.contains("composition") == true || 
                 e.cause is kotlinx.coroutines.CancellationException) {
-                Log.d("RecipeService", "Category search operation cancelled normally")
-                // Don't emit anything
+                Log.d(TAG, "Category search operation cancelled normally")
+                // Don't emit anything for cancellation
             } else {
-                Log.e("RecipeService", "Error getting recipes by category: ${e.message}")
+                Log.e(TAG, "Error getting recipes by category: ${e.message}", e)
                 emit(emptyList())
             }
         }
     }
 
     /**
-     * Get all available categories
-     * @return Flow of category names
+     * Get recipes by ingredients
+     * @param ingredients List of ingredient names
+     * @param limit Maximum number of recipes to return
+     * @return Flow of DetailedRecipe lists
      */
-    fun getCategories(): Flow<List<String>> = flow {
+    fun getRecipesByIngredients(ingredients: List<String>, limit: Int = 10): Flow<List<DetailedRecipe>> = flow {
+        Log.d(TAG, "Getting recipes by ingredients: $ingredients")
+        
         try {
-            val categories = mealDbService.getCategories()
-            emit(categories)
+            val results = edgeFunctionService.getRecipesByIngredients(ingredients, limit).catch { e ->
+                // Check for cancellation
+                if (e is kotlinx.coroutines.CancellationException) {
+                    Log.d(TAG, "Ingredients search cancelled")
+                    throw e
+                }
+                
+                Log.e(TAG, "Error getting recipes by ingredients: ${e.message}", e)
+                emit(emptyList<DetailedRecipe>())
+            }.first()
+            
+            Log.d(TAG, "Found ${results.size} recipes for ingredients: $ingredients")
+            emit(results)
         } catch (e: Exception) {
-            Log.e("RecipeService", "Error getting categories: ${e.message}", e)
-            emit(emptyList())
+            // Specifically handle cancellation without logging errors or emitting values
+            if (e is kotlinx.coroutines.CancellationException || 
+                e.message?.contains("composition") == true || 
+                e.cause is kotlinx.coroutines.CancellationException) {
+                Log.d(TAG, "Ingredients search operation cancelled normally")
+                // Don't emit anything for cancellation
+            } else {
+                Log.e(TAG, "Error getting recipes by ingredients: ${e.message}", e)
+                emit(emptyList())
+            }
         }
     }
 }

@@ -6,7 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thenewkenya.ingrediet.SupabaseApplication
 import com.thenewkenya.ingrediet.data.model.DetailedRecipe
-import com.thenewkenya.ingrediet.data.network.api.SpoonacularService
+import com.thenewkenya.ingrediet.data.network.api.IngreDietService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,7 +16,7 @@ class CreateRecipeViewModel(
     private val context: Context = SupabaseApplication.instance
 ) : ViewModel() {
     private val TAG = "CreateRecipeVM"
-    private val spoonacularService = SpoonacularService(context)
+    private val edgeFunctionService = IngreDietService(context)
     
     private val _recipeName = MutableStateFlow("")
     val recipeName: StateFlow<String> = _recipeName.asStateFlow()
@@ -102,7 +102,7 @@ class CreateRecipeViewModel(
                 
                 Log.d(TAG, "Searching for recipes with ingredients: ${_ingredients.value}")
                 
-                spoonacularService.searchRecipesByIngredients(_ingredients.value).collect { recipes ->
+                edgeFunctionService.getRecipesByIngredients(_ingredients.value).collect { recipes ->
                     _matchingRecipes.value = recipes
                     _isSearching.value = false
                     

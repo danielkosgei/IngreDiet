@@ -87,6 +87,7 @@ dependencies {
     implementation(libs.auth.kt)
     implementation(libs.storage.kt)
     implementation(libs.postgrest.kt)
+    implementation(libs.functions.kt)
 
     // Ktor
     implementation(libs.ktor.client.okhttp)

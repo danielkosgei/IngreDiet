@@ -82,7 +82,7 @@ import androidx.navigation.navArgument
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.LocalSupabase
 import com.thenewkenya.ingrediet.data.network.SessionManager
-import com.thenewkenya.ingrediet.data.network.SpoonacularCacheService
+import com.thenewkenya.ingrediet.data.network.RecipeCacheService
 import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
 import com.thenewkenya.ingrediet.feature.navigation.LoadingScreen
@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
         
         val sessionManager = SessionManager(applicationContext)
         val authManager = AuthManager(applicationContext)
-        val spoonacularCacheService = SpoonacularCacheService(applicationContext)
+        val recipeCacheService = RecipeCacheService(applicationContext)
         
         // Preload a few recipes in the background
         preloadRecipes()
@@ -131,7 +131,7 @@ class MainActivity : ComponentActivity() {
                         LocalSupabase provides supabase,
                         LocalSessionManager provides sessionManager,
                         LocalAuthManager provides authManager,
-                        LocalSpoonacularCacheService provides spoonacularCacheService
+                        LocalRecipeCacheService provides recipeCacheService
                     ) {
                         AppNavigation()
                     }
@@ -178,8 +178,8 @@ val LocalAuthManager = staticCompositionLocalOf<AuthManager> {
     error("No AuthManager provided")
 }
 
-val LocalSpoonacularCacheService = staticCompositionLocalOf<SpoonacularCacheService> {
-    error("No SpoonacularCacheService provided")
+val LocalRecipeCacheService = staticCompositionLocalOf<RecipeCacheService> {
+    error("No RecipeCacheService provided")
 }
 
 @Composable

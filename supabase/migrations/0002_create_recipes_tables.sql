@@ -1,16 +1,12 @@
 -- Recipes table
 CREATE TABLE recipes (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   description TEXT,
+  ingredients JSONB NOT NULL,
+  instructions TEXT NOT NULL,
   image_url TEXT,
-  preparation_time INTEGER,
-  cooking_time INTEGER,
-  servings INTEGER,
-  difficulty TEXT,
-  tags TEXT[],
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  category TEXT
 );
 
 -- Ingredients table
@@ -23,7 +19,7 @@ CREATE TABLE ingredients (
 -- Recipe ingredients junction table
 CREATE TABLE recipe_ingredients (
   id SERIAL PRIMARY KEY,
-  recipe_id INTEGER REFERENCES recipes(id) ON DELETE CASCADE,
+  recipe_id UUID REFERENCES recipes(id) ON DELETE CASCADE,
   ingredient_id INTEGER REFERENCES ingredients(id) ON DELETE CASCADE,
   quantity REAL NOT NULL,
   unit TEXT NOT NULL,
@@ -33,7 +29,7 @@ CREATE TABLE recipe_ingredients (
 -- Instructions table
 CREATE TABLE recipe_instructions (
   id SERIAL PRIMARY KEY,
-  recipe_id INTEGER REFERENCES recipes(id) ON DELETE CASCADE,
+  recipe_id UUID REFERENCES recipes(id) ON DELETE CASCADE,
   step_number INTEGER NOT NULL,
   instruction TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -42,7 +38,7 @@ CREATE TABLE recipe_instructions (
 -- Nutrition facts table
 CREATE TABLE recipe_nutrition (
   id SERIAL PRIMARY KEY,
-  recipe_id INTEGER REFERENCES recipes(id) ON DELETE CASCADE,
+  recipe_id UUID REFERENCES recipes(id) ON DELETE CASCADE,
   calories INTEGER,
   protein REAL,
   carbs REAL,
@@ -56,7 +52,7 @@ CREATE TABLE recipe_nutrition (
 CREATE TABLE user_favorites (
   id SERIAL PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  recipe_id INTEGER REFERENCES recipes(id) ON DELETE CASCADE,
+  recipe_id UUID REFERENCES recipes(id) ON DELETE CASCADE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(user_id, recipe_id)
 );

@@ -7,7 +7,7 @@ import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.data.model.NutritionFacts
 import com.thenewkenya.ingrediet.data.model.Recipe
 import com.thenewkenya.ingrediet.data.network.CacheManager
-import com.thenewkenya.ingrediet.data.network.SpoonacularCacheService
+import com.thenewkenya.ingrediet.data.network.RecipeCacheService
 import com.thenewkenya.ingrediet.data.network.api.KenyanFoodsService
 import com.thenewkenya.ingrediet.data.network.api.OpenFoodFactsService
 import com.thenewkenya.ingrediet.data.network.api.RecipeService
@@ -32,13 +32,14 @@ import java.time.DayOfWeek
 import kotlin.random.Random
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.CancellationException
 
 class RecipeRepository(context: Context) {
     private val cacheManager = CacheManager(context)
     private val recipeService = RecipeService(context)
     private val openFoodFactsService = OpenFoodFactsService()
     private val kenyanFoodsService = KenyanFoodsService()
-    private val spoonacularCacheService by lazy { SpoonacularCacheService(context) }
+    private val recipeCacheService by lazy { RecipeCacheService(context) }
     
     // Schedule periodic cache cleanup
     init {
@@ -163,170 +164,29 @@ class RecipeRepository(context: Context) {
             return@flow
         }
 
-        // If not in cache, try APIs directly - skipping Supabase to reduce network requests
-        Log.d("RecipeRepository", "Recipe not in cache, trying APIs directly")
+        // If not in cache, try the IngreDiet API through RecipeCacheService
+        Log.d("RecipeRepository", "Recipe not in cache, trying IngreDiet API via RecipeCacheService")
         
-        // First try SpoonacularCacheService for Spoonacular API
-        val spoonacularRecipe = spoonacularCacheService.getAndCacheRecipeById(recipeId)
+        val recipe = recipeCacheService.getAndCacheRecipeById(recipeId)
         
-        if (spoonacularRecipe != null) {
-            Log.d("RecipeRepository", "Found recipe $recipeId in Spoonacular API")
-            emit(Result.success(spoonacularRecipe))
-            return@flow
-        }
-        
-        // If not found in Spoonacular, try TheMealDB API
-        val mealDbRecipe = recipeService.getRecipeById(recipeId.toString(), "mealdb")
-        
-        if (mealDbRecipe != null) {
-            Log.d("RecipeRepository", "Found recipe $recipeId in TheMealDB API")
-            // Cache the recipe locally
-            cacheManager.cacheRecipe(mealDbRecipe)
-            emit(Result.success(mealDbRecipe))
+        if (recipe != null) {
+            Log.d("RecipeRepository", "Found recipe $recipeId in Edge Function")
+            emit(Result.success(recipe))
         } else {
-            // As a last resort, try Supabase since the user might have created this recipe
-            try {
-                val recipeList = supabase.from("recipes")
-                    .select() {
-                        filter { eq("id", recipeId) }
-                    }
-                    .decodeList<RecipeDto>()
-
-                if (recipeList.isNotEmpty()) {
-                    // Recipe exists in Supabase, proceed with fetching all details
-                    val recipeResponse = recipeList.first()
-
-                    // 2. Fetch ingredients
-                    val ingredients = supabase.from("recipe_ingredients")
-                        .select() {
-                            filter { eq("recipe_id", recipeId) }
-                        }
-                        .decodeList<RecipeIngredientDto>()
-
-                    Log.d("RecipeRepository", "Found ${ingredients.size} ingredients for recipe $recipeId")
-
-                    // 3. Fetch ingredient details
-                    val ingredientDetails = mutableListOf<IngredientItem>()
-
-                    for (ingredient in ingredients) {
-                        try {
-                            val ingredientDataList = supabase.from("ingredients")
-                                .select() {
-                                    filter { eq("id", ingredient.ingredient_id) }
-                                }
-                                .decodeList<IngredientDto>()
-
-                            if (ingredientDataList.isNotEmpty()) {
-                                val ingredientData = ingredientDataList.first()
-                                ingredientDetails.add(
-                                    IngredientItem(
-                                        id = ingredient.ingredient_id,
-                                        name = ingredientData.name,
-                                        quantity = ingredient.quantity,
-                                        unit = ingredient.unit
-                                    )
-                                )
-                            }
-                        } catch (e: Exception) {
-                            Log.e("RecipeRepository", "Error fetching ingredient ${ingredient.ingredient_id}: ${e.message}", e)
-                        }
-                    }
-
-                    // 4. Fetch instructions
-                    val instructions = supabase.from("recipe_instructions")
-                        .select() {
-                            filter { eq("recipe_id", recipeId) }
-                            order("step_number", Order.ASCENDING)
-                        }
-                        .decodeList<RecipeInstructionDto>()
-                        .map { it.instruction }
-
-                    // 5. Fetch nutrition facts
-                    val nutritionList = supabase.from("recipe_nutrition")
-                        .select() {
-                            filter { eq("recipe_id", recipeId) }
-                        }
-                        .decodeList<RecipeNutritionDto>()
-
-                    val nutritionResponse = if (nutritionList.isNotEmpty()) {
-                        nutritionList.first()
-                    } else {
-                        // Default nutrition data
-                        RecipeNutritionDto(
-                            id = 0,
-                            recipe_id = recipeId,
-                            calories = 0,
-                            protein = 0f,
-                            carbs = 0f,
-                            fat = 0f,
-                            fiber = null,
-                            sugar = null
-                        )
-                    }
-
-                    // 6. Check favorite status
-                    val isFavorite = try {
-                        val currentUser = supabase.auth.currentUserOrNull()
-                        if (currentUser != null) {
-                            // Use the proper DTO class for deserialization
-                            val favoritesList = supabase.from("user_favorites")
-                                .select(columns = Columns.list("id")) {
-                                    filter {
-                                        eq("user_id", currentUser.id)
-                                        eq("recipe_id", recipeId)
-                                    }
-                                }
-                                .decodeList<FavoriteDto>()
-
-                            favoritesList.isNotEmpty()
-                        } else {
-                            // User not logged in, can't have favorites
-                            false
-                        }
-                    } catch (e: Exception) {
-                        Log.e("RecipeRepository", "Error checking favorite status: ${e.message}", e)
-                        false
-                    }
-
-                    // Create the final recipe object
-                    val detailedRecipe = DetailedRecipe(
-                        id = recipeResponse.id,
-                        name = recipeResponse.name,
-                        description = recipeResponse.description ?: "",
-                        imageUrl = recipeResponse.image_url ?: "",
-                        preparationTime = recipeResponse.preparation_time ?: 0,
-                        cookingTime = recipeResponse.cooking_time ?: 0,
-                        servings = recipeResponse.servings ?: 0,
-                        difficulty = recipeResponse.difficulty ?: "Medium",
-                        ingredients = ingredientDetails,
-                        instructions = instructions,
-                        nutritionFacts = NutritionFacts(
-                            calories = nutritionResponse.calories ?: 0,
-                            protein = nutritionResponse.protein ?: 0f,
-                            carbs = nutritionResponse.carbs ?: 0f,
-                            fat = nutritionResponse.fat ?: 0f,
-                            fiber = nutritionResponse.fiber,
-                            sugar = nutritionResponse.sugar
-                        ),
-                        tags = recipeResponse.tags ?: emptyList(),
-                        isFavorite = isFavorite
-                    )
-                    
-                    // Cache the recipe for future use
-                    cacheManager.cacheRecipe(detailedRecipe)
-
-                    emit(Result.success(detailedRecipe))
-                } else {
-                    emit(Result.failure(Exception("Recipe not found in any source")))
-                }
-            } catch (e: Exception) {
-                Log.e("RecipeRepository", "Error fetching from Supabase: ${e.message}", e)
-                emit(Result.failure(Exception("Recipe not found in any source")))
+            // If not found in Edge Function, try the recipe service directly
+            val serviceRecipe = recipeService.getRecipeById(recipeId.toString())
+            
+            if (serviceRecipe != null) {
+                Log.d("RecipeRepository", "Found recipe $recipeId in Recipe Service")
+                // Cache the recipe locally
+                cacheManager.cacheRecipe(serviceRecipe)
+                emit(Result.success(serviceRecipe))
+            } else {
+                // If still not found, return a failure
+                Log.e("RecipeRepository", "Recipe $recipeId not found anywhere")
+                emit(Result.failure(NoSuchElementException("Recipe not found")))
             }
         }
-    }.catch { e ->
-        Log.e("RecipeRepository", "Error in getRecipeDetails: ${e.message}", e)
-        emit(Result.failure(e))
     }
     
     /**
@@ -339,121 +199,89 @@ class RecipeRepository(context: Context) {
     }
     
     /**
-     * Search for recipes by query
-     * @param query Search query
-     * @param limit Maximum number of results to return (default: 10)
+     * Search for recipes using IngreDiet API
+     * @param query Optional search query (or null for random recipes)
+     * @param limit Maximum number of recipes to return
      * @return Flow of search results
      */
-    fun searchRecipes(query: String, limit: Int = 10): Flow<Result<List<DetailedRecipe>>> = flow {
-        Log.d("RecipeRepository", "Searching for recipes with query: $query, limit: $limit")
-        
-        val results = mutableListOf<DetailedRecipe>()
-        var emitFallbackOnError = true
-        
+    suspend fun searchRecipes(query: String?, limit: Int = 10): Flow<Result<List<DetailedRecipe>>> = flow {
         try {
-            // First try to get recipes from Spoonacular
-            try {
-                val spoonacularRecipes = try {
-                    spoonacularCacheService.searchAndCacheRecipes(query, limit)
-                        .catch { e ->
-                            // Check for cancellation first
-                            if (e is kotlinx.coroutines.CancellationException) throw e
-                            
-                            // Handle Spoonacular errors gracefully without emitting
-                            if (e.message?.contains("402") == true || e.message?.contains("Payment Required") == true) {
-                                Log.w("RecipeRepository", "Spoonacular payment limit reached: ${e.message}")
-                            } else {
-                                Log.e("RecipeRepository", "Error searching recipes from Spoonacular: ${e.message}")
-                            }
-                            // Don't emit from within catch block
-                        }
-                        .first() as? List<DetailedRecipe> ?: emptyList()
-                } catch (e: Exception) {
-                    // Check for cancellation first
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    
-                    Log.e("RecipeRepository", "Error searching recipes from Spoonacular: ${e.message}")
-                    emptyList<DetailedRecipe>()
-                }
-                
-                if (spoonacularRecipes.isNotEmpty()) {
-                    Log.d("RecipeRepository", "Got ${spoonacularRecipes.size} recipes from Spoonacular search")
-                    results.addAll(spoonacularRecipes)
-                } else {
-                    Log.d("RecipeRepository", "No recipes from Spoonacular search")
-                }
-            } catch (e: Exception) {
-                // Check for cancellation first
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                
-                Log.e("RecipeRepository", "Error searching Spoonacular recipes: ${e.message}")
-                // Continue to other sources
+            Log.d("RecipeRepository", "Searching recipes with query: $query, limit: $limit")
+            
+            // Try to get recipes from local cache first
+            var recipesFound = false
+            val cachedResults = if (query != null) {
+                cacheManager.getCachedRecipesByQuery(query)
+            } else {
+                cacheManager.getRandomCachedRecipes(limit)
             }
             
-            // Then try to get recipes from TheMealDB
+            if (cachedResults.isNotEmpty()) {
+                Log.d("RecipeRepository", "Found ${cachedResults.size} recipes in local cache")
+                emit(Result.success(cachedResults))
+                recipesFound = true
+            }
+            
+            // Then use the recipe service which now uses the IngreDiet API
             try {
-                val mealDbRecipes = try {
+                val results = if (query != null) {
                     recipeService.searchRecipes(query)
                         .catch { e ->
-                            // Check for cancellation first
-                            if (e is kotlinx.coroutines.CancellationException) throw e
-                            
-                            Log.e("RecipeRepository", "Error in TheMealDB search flow: ${e.message}")
-                            // Don't emit from within catch block
+                            if (e is CancellationException) {
+                                Log.d("RecipeRepository", "Recipe search cancelled")
+                                throw e
+                            } else {
+                                Log.e("RecipeRepository", "Error searching recipes: ${e.message}", e)
+                                // Don't emit from catch to avoid flow transparency violation
+                            }
                         }
-                        .first() as? List<DetailedRecipe> ?: emptyList()
-                } catch (e: Exception) {
-                    // Check for cancellation first
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    
-                    Log.e("RecipeRepository", "Error searching recipes from TheMealDB: ${e.message}")
-                    emptyList<DetailedRecipe>()
-                }
-                
-                if (mealDbRecipes.isNotEmpty()) {
-                    Log.d("RecipeRepository", "Got ${mealDbRecipes.size} recipes from TheMealDB search")
-                    
-                    // Add unique recipes from TheMealDB
-                    mealDbRecipes.forEach { recipe ->
-                        if (results.none { it.id == recipe.id }) {
-                            results.add(recipe)
-                        }
-                    }
+                        .first()
                 } else {
-                    Log.d("RecipeRepository", "No recipes from TheMealDB search")
+                    recipeService.getRandomRecipes(limit)
+                        .catch { e ->
+                            if (e is CancellationException) {
+                                Log.d("RecipeRepository", "Random recipe fetch cancelled")
+                                throw e
+                            } else {
+                                Log.e("RecipeRepository", "Error getting random recipes: ${e.message}", e)
+                                // Don't emit from catch to avoid flow transparency violation
+                            }
+                        }
+                        .first()
                 }
-            } catch (e: Exception) {
-                // Check for cancellation first
-                if (e is kotlinx.coroutines.CancellationException) throw e
                 
-                Log.e("RecipeRepository", "Error searching TheMealDB recipes: ${e.message}")
-                // Continue with existing results
+                if (results.isNotEmpty()) {
+                    Log.d("RecipeRepository", "Found ${results.size} recipes from IngreDiet API")
+                    
+                    // Cache the results
+                    results.forEach { recipe ->
+                        cacheManager.cacheRecipe(recipe)
+                    }
+                    
+                    // Emit the new results
+                    emit(Result.success(results))
+                    recipesFound = true
+                } else if (!recipesFound) {
+                    // Only emit empty list if we haven't already emitted cached results
+                    Log.d("RecipeRepository", "No recipes found from any source")
+                    emit(Result.success(emptyList()))
+                }
+            } catch (e: CancellationException) {
+                Log.d("RecipeRepository", "Recipe search was cancelled")
+                throw e
+            } catch (e: Exception) {
+                Log.e("RecipeRepository", "Error in searchRecipes API call: ${e.message}", e)
+                // Only emit if we haven't already emitted cached results
+                if (!recipesFound) {
+                    emit(Result.success(emptyList()))
+                }
             }
-            
-            // If no recipes found, add a fallback recipe
-            if (results.isEmpty()) {
-                Log.d("RecipeRepository", "No search results found, using fallback")
-                results.add(getFallbackRecipe())
-            }
-            
-            Log.d("RecipeRepository", "Returning ${results.size} search results")
-            emit(Result.success(results.take(limit)))
-            emitFallbackOnError = false // We've successfully emitted results
+        } catch (e: CancellationException) {
+            Log.d("RecipeRepository", "Recipe search was cancelled")
+            throw e
         } catch (e: Exception) {
-            // Don't try to handle cancellation, just let it propagate
-            if (e is kotlinx.coroutines.CancellationException) {
-                Log.d("RecipeRepository", "Search request was cancelled: ${e.message}")
-                throw e // Rethrow cancellation exception to properly cancel the flow
-            }
-            
-            Log.e("RecipeRepository", "Error searching recipes: ${e.message}", e)
-            
-            // Only emit a fallback if we haven't already emitted something
-            if (emitFallbackOnError) {
-                // Final fallback - always return at least one recipe
-                val fallbackResult = listOf(getFallbackRecipe())
-                emit(Result.success(fallbackResult))
-            }
+            Log.e("RecipeRepository", "Error in searchRecipes: ${e.message}", e)
+            emit(Result.failure(e))
         }
     }
     
@@ -566,186 +394,74 @@ class RecipeRepository(context: Context) {
         }
     }
 
-    suspend fun getRecipes(
-        query: String? = null,
-        category: String? = null,
-        limit: Int = 10
-    ): Flow<Result<List<RecipeListItem>>> = flow {
-        val combinedRecipes = mutableListOf<RecipeListItem>()
-        var apiRecipesCount = 0
+    /**
+     * Get recipes for browsing (now using Supabase Edge Function)
+     */
+    suspend fun getRecipes(category: String? = null, limit: Int = 20, tags: List<String>? = null, query: String? = null): Flow<Result<List<RecipeListItem>>> = flow {
+        Log.d("RecipeRepository", "Getting recipes: category=$category, tags=$tags, query=$query, limit=$limit")
         
         try {
-            // First try to get recipes from local cache
+            // Collect all recipes here
+            val combinedRecipes = mutableListOf<RecipeListItem>()
+            
+            // First try to get recipes from the Edge Function via recipe service
             try {
-                // Local cache logic will go here in the future
-                // For now, we'll still use Supabase but with fewer queries
-            } catch (e: Exception) {
-                // Skip errors specific to composition cancellation
-                if (e is kotlinx.coroutines.CancellationException || 
-                    e.message?.contains("composition") == true || 
-                    e.cause is kotlinx.coroutines.CancellationException) {
-                    Log.d("RecipeRepository", "Cache fetch cancelled due to composition change - this is normal")
+                val recipeFlow = if (query != null) {
+                    recipeService.searchRecipes(query)
+                } else if (category != null) {
+                    recipeService.getRecipesByCategory(category)
+                } else if (tags != null && tags.isNotEmpty()) {
+                    // Create an ingredients search if the tags are ingredient names
+                    recipeService.getRecipesByIngredients(tags)
                 } else {
-                    Log.e("RecipeRepository", "Error fetching from cache: ${e.message}")
+                    recipeService.getRandomRecipes(limit)
                 }
+                
+                recipeFlow.catch { e ->
+                    Log.e("RecipeRepository", "Error getting recipes from Edge Function: ${e.message}", e)
+                }.collect { recipes ->
+                    recipes.forEach { recipe ->
+                        // Add to combined results if not already there
+                        if (combinedRecipes.none { it.id == recipe.id }) {
+                            combinedRecipes.add(
+                                RecipeListItem(
+                                    id = recipe.id,
+                                    name = recipe.name,
+                                    imageUrl = recipe.imageUrl,
+                                    time = "${recipe.preparationTime + recipe.cookingTime} min",
+                                    calories = recipe.nutritionFacts.calories,
+                                    category = recipe.category.ifEmpty { recipe.tags.firstOrNull() ?: "" },
+                                    rating = recipe.rating,
+                                    dietaryInfo = recipe.dietaryInfo.ifEmpty { recipe.tags }
+                                )
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Check for cancellation
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                
+                Log.e("RecipeRepository", "Error getting recipes: ${e.message}", e)
             }
             
-            // If local cache doesn't have enough, try Supabase
-            // But only if we really need to (user created recipes)
-            if (combinedRecipes.size < limit && (query == null || category != null)) {
-                try {
-                    Log.d("RecipeRepository", "Fetching recipes from Supabase")
-                    val recipes = supabase.from("recipes")
-                        .select(columns = Columns.list("id, name, image_url, preparation_time, cooking_time, difficulty, tags")) {
-                            // Apply filters if provided
-                            filter {
-                                if (!query.isNullOrEmpty()) {
-                                    ilike("name", "%$query%")
-                                }
-
-                                if (!category.isNullOrEmpty() && category.lowercase() != "all recipes") {
-                                    contains("tags", arrayOf(category).toList())
-                                }
-                            }
-
-                            limit(limit.toLong())
-                            order("id", Order.DESCENDING)
-                        }
-                        .decodeList<RecipeListItemDto>()
-
-                    // Map DTOs to domain objects
-                    val recipeItems = recipes.map { dto ->
-                        RecipeListItem(
-                            id = dto.id,
-                            name = dto.name,
-                            imageUrl = dto.imageUrl,
-                            time = "${dto.preparationTime + dto.cookingTime} min",
-                            calories = 0, // We'll need to fetch this from nutrition facts table
-                            category = dto.tags.first(),
-                            rating = 0f, // Default rating since we don't have it in the database yet
-                            dietaryInfo = dto.tags.drop(1) // Use remaining tags as dietary info
-                        )
-                    }
-                    
-                    combinedRecipes.addAll(recipeItems)
-                    Log.d("RecipeRepository", "Found ${recipeItems.size} recipes in Supabase")
-                } catch (e: Exception) {
-                    // Skip errors specific to composition cancellation
-                    if (e is kotlinx.coroutines.CancellationException || 
-                        e.message?.contains("composition") == true || 
-                        e.cause is kotlinx.coroutines.CancellationException) {
-                        Log.d("RecipeRepository", "Supabase fetch cancelled due to composition change - this is normal")
-                    } else {
-                        Log.e("RecipeRepository", "Error fetching from Supabase: ${e.message}")
-                    }
-                    // Continue to API even if Supabase fetch fails
-                }
-            }
-            
-            // Always search the API if a query is provided to get the most comprehensive results
-            // Also search if we need more recipes to meet the limit
-            if (combinedRecipes.size < limit || query != null) {
-                try {
-                    Log.d("RecipeRepository", "Fetching recipes from API")
-                    val apiQuery = query ?: ""  // Use empty string if query is null
-                    
-                    // Track the initial size before adding API results
-                    val initialSize = combinedRecipes.size
-                    
-                    // Use SpoonacularCacheService for Spoonacular API calls
-                    try {
-                        spoonacularCacheService.searchAndCacheRecipes(apiQuery, limit).collect { recipes ->
-                            recipes.forEach { recipe ->
-                                if (combinedRecipes.none { it.id == recipe.id }) {
-                                    combinedRecipes.add(
-                                        RecipeListItem(
-                                            id = recipe.id,
-                                            name = recipe.name,
-                                            imageUrl = recipe.imageUrl,
-                                            time = "${recipe.preparationTime + recipe.cookingTime} min",
-                                            calories = recipe.nutritionFacts.calories,
-                                            category = recipe.tags.firstOrNull() ?: "",
-                                            rating = 4.5f,  // Default rating for API recipes
-                                            dietaryInfo = recipe.tags
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        // Skip errors specific to composition cancellation
-                        if (e is kotlinx.coroutines.CancellationException || 
-                            e.message?.contains("composition") == true || 
-                            e.cause is kotlinx.coroutines.CancellationException) {
-                            Log.d("RecipeRepository", "Spoonacular API fetch cancelled due to composition change - this is normal")
-                        } else {
-                            Log.e("RecipeRepository", "Error fetching from Spoonacular API: ${e.message}")
-                        }
-                    }
-                    
-                    // Still use recipeService for TheMealDB API calls
-                    try {
-                        recipeService.searchRecipes(apiQuery)
-                            .collect { recipes ->
-                                recipes.forEach { recipe ->
-                                    if (combinedRecipes.none { it.id == recipe.id }) {
-                                        combinedRecipes.add(
-                                            RecipeListItem(
-                                                id = recipe.id,
-                                                name = recipe.name,
-                                                imageUrl = recipe.imageUrl,
-                                                time = "${recipe.preparationTime + recipe.cookingTime} min",
-                                                calories = recipe.nutritionFacts.calories,
-                                                category = recipe.tags.firstOrNull() ?: "",
-                                                rating = 4.5f,  // Default rating for API recipes
-                                                dietaryInfo = recipe.tags
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-                    } catch (e: Exception) {
-                        // Skip errors specific to composition cancellation
-                        if (e is kotlinx.coroutines.CancellationException || 
-                            e.message?.contains("composition") == true || 
-                            e.cause is kotlinx.coroutines.CancellationException) {
-                            Log.d("RecipeRepository", "TheMealDB API fetch cancelled due to composition change - this is normal")
-                        } else {
-                            Log.e("RecipeRepository", "Error fetching from TheMealDB API: ${e.message}")
-                        }
-                    }
-                    
-                    apiRecipesCount = combinedRecipes.size - initialSize
-                    Log.d("RecipeRepository", "Added $apiRecipesCount new recipes from APIs")
-                } catch (e: Exception) {
-                    // Skip errors specific to composition cancellation
-                    if (e is kotlinx.coroutines.CancellationException || 
-                        e.message?.contains("composition") == true || 
-                        e.cause is kotlinx.coroutines.CancellationException) {
-                        Log.d("RecipeRepository", "API fetch cancelled due to composition change - this is normal")
-                    } else {
-                        Log.e("RecipeRepository", "Error fetching from API: ${e.message}")
-                    }
-                    // Continue with existing Supabase results even if API fetch fails
-                }
-            }
-            
-            // Limit the final list to the requested size
-            val finalRecipes = combinedRecipes.take(limit)
-            Log.d("RecipeRepository", "Returning ${finalRecipes.size} recipes (${finalRecipes.size - apiRecipesCount} from Supabase, $apiRecipesCount from API)")
-            
-            emit(Result.success(finalRecipes))
-        } catch (e: Exception) {
-            // Handle cancellation exceptions differently to avoid alarming log messages
-            if (e is kotlinx.coroutines.CancellationException || 
-                e.message?.contains("composition") == true || 
-                e.cause is kotlinx.coroutines.CancellationException) {
-                Log.d("RecipeRepository", "Recipe fetch cancelled due to composition change - this is normal")
-                emit(Result.success(emptyList())) // Return empty list but as a success
+            if (combinedRecipes.isNotEmpty()) {
+                Log.d("RecipeRepository", "Found ${combinedRecipes.size} recipes")
+                emit(Result.success(combinedRecipes.take(limit)))
             } else {
-                Log.e("RecipeRepository", "Error in getRecipes: ${e.message}", e)
-                emit(Result.failure(e))
+                // Return at least an empty list
+                Log.d("RecipeRepository", "No recipes found, returning empty list")
+                emit(Result.success(emptyList()))
             }
+        } catch (e: Exception) {
+            // Check for cancellation
+            if (e is kotlinx.coroutines.CancellationException) {
+                Log.d("RecipeRepository", "getRecipes was cancelled")
+                throw e
+            }
+            
+            Log.e("RecipeRepository", "Error in getRecipes: ${e.message}", e)
+            emit(Result.failure(e))
         }
     }
 
@@ -993,165 +709,64 @@ class RecipeRepository(context: Context) {
     )
 
     /**
-     * Get random recipes
-     * @param count Number of recipes to get (default: 10)
-     * @return Flow of randomly selected recipes
+     * Get random recipes from various sources
+     * @param count Number of recipes to fetch
      */
-    fun getRandomRecipes(count: Int = 10): Flow<Result<List<DetailedRecipe>>> = flow {
+    suspend fun getRandomRecipes(count: Int = 10): Flow<Result<List<DetailedRecipe>>> = flow {
         Log.d("RecipeRepository", "Fetching $count random recipes")
         
-        val results = mutableListOf<DetailedRecipe>()
-        var emitFallbackOnError = true
-        
         try {
-            // First try to get recipes from Spoonacular
+            // Try to get recipes from local cache first
+            var recipesFound = false
+            val cachedRecipes = cacheManager.getRandomCachedRecipes(count)
+            
+            if (cachedRecipes.isNotEmpty()) {
+                Log.d("RecipeRepository", "Found ${cachedRecipes.size} random recipes in local cache")
+                emit(Result.success(cachedRecipes))
+                recipesFound = true
+            }
+            
+            // Then try IngreDiet API through the cache service
             try {
-                val spoonacularRecipes = try {
-                    spoonacularCacheService.getAndCacheRandomRecipes(count)
-                        .catch { e ->
-                            // Check for cancellation first
-                            if (e is kotlinx.coroutines.CancellationException) throw e
-                            
-                            // Handle Spoonacular errors gracefully without emitting
-                            if (e.message?.contains("402") == true || e.message?.contains("Payment Required") == true) {
-                                Log.w("RecipeRepository", "Spoonacular payment limit reached: ${e.message}")
-                            } else if (e.message?.contains("Expected at least one element") == true) {
-                                Log.w("RecipeRepository", "No recipes returned from Spoonacular: ${e.message}")
-                            } else {
-                                Log.e("RecipeRepository", "Error fetching random recipes from Spoonacular: ${e.message}")
-                            }
-                            // Don't emit from within catch block
+                val ingreDietRecipes = recipeCacheService.getAndCacheRandomRecipes(count)
+                    .catch { e ->
+                        // Handle cancellation explicitly
+                        if (e is CancellationException) {
+                            Log.d("RecipeRepository", "Random recipe fetch cancelled")
+                            throw e
+                        } else {
+                            Log.e("RecipeRepository", "Error fetching random recipes from API: ${e.message}", e)
+                            // Don't emit here to avoid transparency violations
                         }
-                        .onEach { result ->
-                            // Log empty results instead of failing
-                            if (result.isEmpty()) {
-                                Log.d("RecipeRepository", "Empty result from Spoonacular API")
-                            }
-                        }
-                        .first()
-                } catch (e: Exception) {
-                    // Check for cancellation first
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    
-                    if (e.message?.contains("402") == true || e.message?.contains("Payment Required") == true) {
-                        Log.w("RecipeRepository", "Payment error - skipping Spoonacular random recipes: ${e.message}")
-                    } else if (e.message?.contains("Expected at least one element") == true) {
-                        Log.w("RecipeRepository", "No recipes returned from Spoonacular API: ${e.message}")
-                    } else {
-                        Log.e("RecipeRepository", "Error fetching random recipes from Spoonacular: ${e.message}")
                     }
-                    emptyList<DetailedRecipe>()
-                }
+                    .first()
                 
-                if (spoonacularRecipes.isNotEmpty()) {
-                    Log.d("RecipeRepository", "Got ${spoonacularRecipes.size} random recipes from Spoonacular")
-                    results.addAll(spoonacularRecipes)
+                if (ingreDietRecipes.isNotEmpty()) {
+                    Log.d("RecipeRepository", "Found ${ingreDietRecipes.size} random recipes from API")
+                    emit(Result.success(ingreDietRecipes))
+                    recipesFound = true
                 } else {
-                    Log.d("RecipeRepository", "No random recipes from Spoonacular")
+                    Log.d("RecipeRepository", "No recipes returned from API")
                 }
+            } catch (e: CancellationException) {
+                Log.d("RecipeRepository", "Random recipe fetch was cancelled")
+                throw e
             } catch (e: Exception) {
-                // Check for cancellation first
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                
-                Log.e("RecipeRepository", "Error fetching Spoonacular random recipes: ${e.message}")
-                // Continue to other sources
+                Log.e("RecipeRepository", "Error fetching random recipes from API", e)
+                // Don't emit here if we've already emitted something
             }
             
-            // Then try to get recipes from TheMealDB
-            if (results.size < count) {
-                try {
-                    val mealDbRecipes = try {
-                        recipeService.getRandomRecipes(count - results.size)
-                            .catch { e ->
-                                // Check for cancellation first
-                                if (e is kotlinx.coroutines.CancellationException) throw e
-                                
-                                Log.e("RecipeRepository", "Error in TheMealDB random recipes flow: ${e.message}")
-                                // Don't emit from within catch block
-                            }
-                            .first() as? List<DetailedRecipe> ?: emptyList()
-                    } catch (e: Exception) {
-                        // Check for cancellation first
-                        if (e is kotlinx.coroutines.CancellationException) throw e
-                        
-                        Log.e("RecipeRepository", "Error fetching random recipes from TheMealDB: ${e.message}")
-                        emptyList<DetailedRecipe>()
-                    }
-                    
-                    if (mealDbRecipes.isNotEmpty()) {
-                        Log.d("RecipeRepository", "Got ${mealDbRecipes.size} random recipes from TheMealDB")
-                        
-                        // Add unique recipes from TheMealDB
-                        mealDbRecipes.forEach { recipe ->
-                            if (results.none { it.id == recipe.id }) {
-                                results.add(recipe)
-                                // Cache the recipe
-                                cacheManager.cacheRecipeSync(recipe)
-                            }
-                        }
-                    } else {
-                        Log.d("RecipeRepository", "No random recipes from TheMealDB")
-                    }
-                } catch (e: Exception) {
-                    // Check for cancellation first
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    
-                    Log.e("RecipeRepository", "Error fetching TheMealDB random recipes: ${e.message}")
-                    // Continue with existing results
-                }
+            // If we didn't find any recipes from any source, emit an empty list
+            if (!recipesFound) {
+                Log.d("RecipeRepository", "No random recipes found from any source")
+                emit(Result.success(emptyList()))
             }
-            
-            // If no recipes found, try to get cached recipes
-            if (results.isEmpty()) {
-                Log.d("RecipeRepository", "No random recipes found from APIs, checking cache")
-                try {
-                    // Get cached recipes
-                    val cachedRecipes = mutableListOf<DetailedRecipe>()
-                    
-                    for (i in 0 until 10.coerceAtMost(count)) {
-                        cacheManager.getCachedRecipe(i)?.let { recipe ->
-                            if (cachedRecipes.none { it.id == recipe.id }) {
-                                cachedRecipes.add(recipe)
-                            }
-                        }
-                    }
-                    
-                    if (cachedRecipes.isNotEmpty()) {
-                        Log.d("RecipeRepository", "Using ${cachedRecipes.size} cached recipes")
-                        results.addAll(cachedRecipes)
-                    }
-                } catch (e: Exception) {
-                    // Check for cancellation first
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    
-                    Log.e("RecipeRepository", "Error getting cached recipes: ${e.message}")
-                }
-            }
-            
-            // If still no recipes, add a fallback recipe
-            if (results.isEmpty()) {
-                Log.d("RecipeRepository", "No recipes found from any source, using fallback")
-                results.add(getFallbackRecipe())
-            }
-            
-            Log.d("RecipeRepository", "Returning ${results.size} random recipes")
-            emit(Result.success(results.take(count)))
-            emitFallbackOnError = false // We've successfully emitted results
+        } catch (e: CancellationException) {
+            Log.d("RecipeRepository", "Random recipe fetch was cancelled")
+            throw e
         } catch (e: Exception) {
-            // Don't try to handle cancellation, just let it propagate
-            if (e is kotlinx.coroutines.CancellationException) {
-                Log.d("RecipeRepository", "Random recipes request was cancelled: ${e.message}")
-                throw e // Rethrow cancellation exception to properly cancel the flow
-            }
-            
-            Log.e("RecipeRepository", "Error getting random recipes: ${e.message}", e)
-            
-            // Only emit a fallback if we haven't already emitted something
-            if (emitFallbackOnError) {
-                // Final fallback - always return at least one recipe
-                val fallbackResult = listOf(getFallbackRecipe())
-                emit(Result.success(fallbackResult))
-            }
+            Log.e("RecipeRepository", "Error in getRandomRecipes", e)
+            emit(Result.failure(e))
         }
     }
 
@@ -1506,7 +1121,7 @@ class RecipeRepository(context: Context) {
                 
                 // Try to get cached results instead
                 try {
-                    val cachedRecipes = cacheManager.getCachedRecipeSync(0)?.let { listOf(it) } ?: emptyList()
+                    val cachedRecipes = cacheManager.getCachedRecipesByQuery(query)
                     if (cachedRecipes.isNotEmpty()) {
                         Log.d("RecipeRepository", "Using ${cachedRecipes.size} cached recipes as fallback")
                         return Result.success(cachedRecipes)
@@ -1570,7 +1185,7 @@ class RecipeRepository(context: Context) {
             // First try to get recipes from Spoonacular
             try {
                 val spoonacularRecipes = try {
-                    spoonacularCacheService.searchAndCacheRecipes(category, limit)
+                    recipeCacheService.searchAndCacheRecipes(category, limit)
                         .catch { e ->
                             // Check for cancellation first
                             if (e is kotlinx.coroutines.CancellationException) throw e
