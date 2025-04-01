@@ -174,7 +174,7 @@ fun getProgressColor(progress: Float): Color {
 @Composable
 fun RecipeDetailScreen(
     navController: NavController,
-    recipeId: Int,
+    recipeId: String,
     viewModel: RecipeDetailViewModel
 ) {
     val uiState by viewModel.uiState.collectAsState()

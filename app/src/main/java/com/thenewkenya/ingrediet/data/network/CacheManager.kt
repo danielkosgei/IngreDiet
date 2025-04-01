@@ -66,10 +66,11 @@ class CacheManager(private val context: Context) {
     }
     
     /**
-     * Get a cached recipe by ID
-     * @return The cached recipe or null if not found or expired
+     * Get a cached recipe by its ID
+     * @param recipeId The recipe ID
+     * @return The cached DetailedRecipe or null if not found/expired
      */
-    suspend fun getCachedRecipe(recipeId: Int): DetailedRecipe? = withContext(Dispatchers.IO) {
+    suspend fun getCachedRecipe(recipeId: String): DetailedRecipe? = withContext(Dispatchers.IO) {
         try {
             val recipeKey = "$RECIPE_PREFIX$recipeId"
             val recipeJson = prefs.getString(recipeKey, null) ?: return@withContext null
@@ -91,7 +92,7 @@ class CacheManager(private val context: Context) {
      * For use in non-suspending contexts like callbacks
      * @return The cached recipe or null if not found or expired
      */
-    fun getCachedRecipeSync(recipeId: Int): DetailedRecipe? {
+    fun getCachedRecipeSync(recipeId: String): DetailedRecipe? {
         try {
             val recipeKey = "$RECIPE_PREFIX$recipeId"
             val recipeJson = prefs.getString(recipeKey, null) ?: return null
@@ -128,7 +129,7 @@ class CacheManager(private val context: Context) {
      * Get a cached ingredient by ID
      * @return The cached ingredient or null if not found or expired
      */
-    suspend fun getCachedIngredient(ingredientId: Int): IngredientItem? = withContext(Dispatchers.IO) {
+    suspend fun getCachedIngredient(ingredientId: String): IngredientItem? = withContext(Dispatchers.IO) {
         try {
             val ingredientKey = "$INGREDIENT_PREFIX$ingredientId"
             val ingredientJson = prefs.getString(ingredientKey, null) ?: return@withContext null
@@ -148,7 +149,7 @@ class CacheManager(private val context: Context) {
     /**
      * Check if a recipe exists in the cache and is not expired
      */
-    fun isRecipeCached(recipeId: Int): Boolean {
+    fun isRecipeCached(recipeId: String): Boolean {
         val recipeKey = "$RECIPE_PREFIX$recipeId"
         return prefs.contains(recipeKey) && !isCacheExpired(recipeKey)
     }
@@ -156,7 +157,7 @@ class CacheManager(private val context: Context) {
     /**
      * Check if an ingredient exists in the cache and is not expired
      */
-    fun isIngredientCached(ingredientId: Int): Boolean {
+    fun isIngredientCached(ingredientId: String): Boolean {
         val ingredientKey = "$INGREDIENT_PREFIX$ingredientId"
         return prefs.contains(ingredientKey) && !isCacheExpired(ingredientKey)
     }
@@ -281,5 +282,20 @@ class CacheManager(private val context: Context) {
         }
         
         return cachedRecipes
+    }
+
+    private fun getRecipeCacheFile(recipeId: String): File {
+        val cacheDir = context.cacheDir
+        // Ensure directory exists
+        val recipeCacheDir = File(cacheDir, RECIPE_CACHE_DIR)
+        recipeCacheDir.mkdirs()
+        return File(recipeCacheDir, "$RECIPE_PREFIX$recipeId")
+    }
+
+    private suspend fun loadRecipeFromCache(file: File): DetailedRecipe? {
+        if (!file.exists()) return null
+        
+        val content = file.readText()
+        return json.decodeFromString<DetailedRecipe>(content)
     }
 }

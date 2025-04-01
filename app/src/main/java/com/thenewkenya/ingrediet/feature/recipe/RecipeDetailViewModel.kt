@@ -36,7 +36,7 @@ class RecipeDetailViewModel(
     private val _addToShoppingListResult = MutableStateFlow<AddToShoppingListResult?>(null)
     val addToShoppingListResult: StateFlow<AddToShoppingListResult?> = _addToShoppingListResult.asStateFlow()
 
-    fun loadRecipe(recipeId: Int) {
+    fun loadRecipe(recipeId: String) {
         viewModelScope.launch {
             _uiState.value = RecipeDetailUiState.Loading
             Log.d("RecipeDetailViewModel", "Started loading recipe: $recipeId")
@@ -85,7 +85,7 @@ class RecipeDetailViewModel(
     }
 
 
-    private fun createSampleRecipe(recipeId: Int): DetailedRecipe {
+    private fun createSampleRecipe(recipeId: String): DetailedRecipe {
         return DetailedRecipe(
             id = recipeId,
             name = "Sample Vegetarian Breakfast Bowl",
@@ -96,11 +96,11 @@ class RecipeDetailViewModel(
             servings = 2,
             difficulty = "Medium",
             ingredients = listOf(
-                IngredientItem(id = 1, name = "Avocado", quantity = 1f, unit = "whole"),
-                IngredientItem(id = 2, name = "Eggs", quantity = 2f, unit = "large"),
-                IngredientItem(id = 3, name = "Spinach", quantity = 2f, unit = "cups"),
-                IngredientItem(id = 4, name = "Cherry Tomatoes", quantity = 0.5f, unit = "cup"),
-                IngredientItem(id = 5, name = "Quinoa", quantity = 0.5f, unit = "cup")
+                IngredientItem(id = "1", name = "Avocado", quantity = 1f, unit = "whole"),
+                IngredientItem(id = "2", name = "Eggs", quantity = 2f, unit = "large"),
+                IngredientItem(id = "3", name = "Spinach", quantity = 2f, unit = "cups"),
+                IngredientItem(id = "4", name = "Cherry Tomatoes", quantity = 0.5f, unit = "cup"),
+                IngredientItem(id = "5", name = "Quinoa", quantity = 0.5f, unit = "cup")
             ),
             instructions = listOf(
                 "Cook quinoa according to package instructions and set aside.",
@@ -273,17 +273,4 @@ sealed class AddToShoppingListResult {
     data class Success(val count: Int) : AddToShoppingListResult()
     data class PartialSuccess(val successCount: Int, val totalCount: Int) : AddToShoppingListResult()
     data class Error(val message: String) : AddToShoppingListResult()
-}
-
-class RecipeDetailViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(RecipeDetailViewModel::class.java)) {
-            return RecipeDetailViewModel(
-                recipeRepository = RecipeRepository(context),
-                shoppingListRepository = ShoppingListRepository(context),
-                context = context
-            ) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
 }

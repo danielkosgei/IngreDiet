@@ -52,7 +52,7 @@ class KenyanFoodsService {
             return@withContext (localKenyanRecipes as List<Any>)
                 .filter { recipe -> (recipe as? LocalKenyanRecipe)?.name?.contains(query, ignoreCase = true) ?: false }
                 .map { recipe -> (recipe as? LocalKenyanRecipe)?.toDetailedRecipe() ?: DetailedRecipe(
-                    id = 0,
+                    id = "0",
                     name = "",
                     description = "",
                     preparationTime = 0,
@@ -117,7 +117,7 @@ class KenyanFoodsService {
     /**
      * Get a complete recipe with all its details using the get_complete_kenyan_recipe function
      */
-    suspend fun getCompleteRecipe(recipeId: Int): DetailedRecipe? = withContext(Dispatchers.IO) {
+    suspend fun getCompleteRecipe(recipeId: String): DetailedRecipe? = withContext(Dispatchers.IO) {
         try {
             Log.d("KenyanFoodsService", "Fetching complete recipe for ID: $recipeId")
             
@@ -211,7 +211,7 @@ class KenyanFoodsService {
             return@withContext (localKenyanRecipes as List<Any>)
                 .filter { recipe -> (recipe as? LocalKenyanRecipe)?.region?.equals(region, ignoreCase = true) ?: false }
                 .map { recipe -> (recipe as? LocalKenyanRecipe)?.toDetailedRecipe() ?: DetailedRecipe(
-                    id = 0,
+                    id = "0",
                     name = "",
                     description = "",
                     preparationTime = 0,
@@ -280,7 +280,7 @@ class KenyanFoodsService {
 
     @Serializable
     private data class SearchResultDto(
-        val id: Int,
+        val id: String,
         val name: String,
         val description: String,
         val image_url: String = "",
@@ -344,7 +344,7 @@ class KenyanFoodsService {
                 id = recipe.id,
                 name = recipe.name,
                 description = recipe.description,
-                imageUrl = recipe.image_url,
+                imageUrl = recipe.image_url ?: "",
                 preparationTime = recipe.preparation_time,
                 cookingTime = recipe.cooking_time,
                 servings = recipe.servings,
@@ -380,24 +380,23 @@ class KenyanFoodsService {
 
     @Serializable
     private data class BasicRecipeDto(
-        val id: Int,
+        val id: String,
         val name: String,
         val description: String,
-        val image_url: String,
-        val preparation_time: Int,
-        val cooking_time: Int,
-        val servings: Int = 4,
-        val difficulty: String = "Medium",
-        val region: String? = null,
-        val calories: Int? = null,
-        val tags: List<String> = emptyList()
+        @SerialName("image_url") val image_url: String? = null,
+        @SerialName("preparation_time") val preparation_time: Int,
+        @SerialName("cooking_time") val cooking_time: Int,
+        val servings: Int,
+        val difficulty: String,
+        val region: String,
+        val calories: Int? = null
     ) {
         fun toBasicDetailedRecipe(): DetailedRecipe {
             return DetailedRecipe(
                 id = id,
                 name = name,
                 description = description,
-                imageUrl = image_url,
+                imageUrl = image_url ?: "",
                 preparationTime = preparation_time,
                 cookingTime = cooking_time,
                 servings = servings,
@@ -417,7 +416,7 @@ class KenyanFoodsService {
                     region?.takeIf { it.isNotBlank() }?.let { add(it) } ?: add("Traditional")
                     
                     // Add additional tags, excluding duplicates
-                    tags.asSequence()
+                    listOf(region ?: "Traditional").asSequence()
                         .map { it.trim() }
                         .filter { tag ->
                             tag.isNotBlank() &&
@@ -434,61 +433,87 @@ class KenyanFoodsService {
     @Serializable
     private data class IngredientDto(
         val name: String,
-        val quantity: Float,
+        val quantity: Double,
         val unit: String,
-        val order_index: Int
+        @SerialName("order_index") val order_index: Int
     ) {
         fun toIngredientItem(): IngredientItem {
             return IngredientItem(
-                id = order_index,
+                id = order_index.toString(),
                 name = name,
-                quantity = quantity,
-                unit = unit
+                quantity = quantity.toFloat(),
+                unit = unit,
+                calories = null,
+                imageUrl = null,
+                alternatives = emptyList()
             )
         }
     }
 
     @Serializable
     private data class InstructionDto(
-        val instruction_text: String,
-        val step_number: Int
+        @SerialName("instruction_text") val instruction_text: String,
+        @SerialName("step_number") val step_number: Int
     )
     
     @Serializable
     private data class LocalKenyanRecipe(
-        val id: Int,
+        val id: String,
         val name: String,
         val description: String,
         val region: String,
-        val calories: Int,
-        val ingredients: List<String>,
-        val instructions: List<String>
+        val image_url: String? = null,
+        val preparation_time: Int = 30,
+        val cooking_time: Int = 30,
+        val servings: Int = 4,
+        val difficulty: String = "Medium",
+        val calories: Int = 0,
+        val ingredients: List<LocalIngredient> = emptyList(),
+        val instructions: List<String> = emptyList(),
+        val tags: List<String> = emptyList()
     ) {
         fun toDetailedRecipe(): DetailedRecipe {
             return DetailedRecipe(
                 id = id,
                 name = name,
                 description = description,
-                preparationTime = 30,  // Default values since not in local data
-                cookingTime = 60,      // Default values since not in local data
-                servings = 4,          // Default values since not in local data
-                difficulty = "Medium",  // Default values since not in local data
-                ingredients = ingredients.mapIndexed { index, ingredient ->
-                    IngredientItem(
-                        id = index,
-                        name = ingredient,
-                        quantity = 1f,
-                        unit = "unit"
-                    )
-                },
+                imageUrl = image_url ?: "",
+                preparationTime = preparation_time,
+                cookingTime = cooking_time,
+                servings = servings,
+                difficulty = difficulty,
+                ingredients = ingredients.map { it.toIngredientItem() },
                 instructions = instructions,
                 nutritionFacts = NutritionFacts(
                     calories = calories,
-                    protein = 0f,      // Default values since not in local data
-                    carbs = 0f,        // Default values since not in local data
-                    fat = 0f          // Default values since not in local data
+                    protein = 0f,
+                    carbs = 0f,
+                    fat = 0f
                 ),
-                tags = emptyList()     // Default values since not in local data
+                tags = tags
+            )
+        }
+    }
+    
+    /**
+     * Local ingredient for offline use
+     */
+    @Serializable
+    private data class LocalIngredient(
+        val name: String,
+        val quantity: Double,
+        val unit: String,
+        val order_index: Int
+    ) {
+        fun toIngredientItem(): IngredientItem {
+            return IngredientItem(
+                id = order_index.toString(),
+                name = name,
+                quantity = quantity.toFloat(),
+                unit = unit,
+                calories = null,
+                imageUrl = null,
+                alternatives = emptyList()
             )
         }
     }
@@ -497,12 +522,31 @@ class KenyanFoodsService {
     // This can be expanded with more detailed information
     private val localKenyanRecipes: List<LocalKenyanRecipe> = listOf(
         LocalKenyanRecipe(
-            id = 1001,
+            id = "1001",
             name = "Ugali",
             description = "A staple food in Kenya made from maize flour and water, similar to polenta but firmer.",
             region = "National",
             calories = 150,
-            ingredients = listOf("Maize flour", "Water", "Salt"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Maize flour",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Water",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 0.5,
+                    unit = "teaspoon",
+                    order_index = 2
+                )
+            ),
             instructions = listOf(
                 "Boil water in a pot",
                 "Gradually add maize flour while stirring",
@@ -512,12 +556,37 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1002,
+            id = "1002",
             name = "Nyama Choma",
             description = "Grilled meat, usually goat or beef, seasoned with salt and sometimes spices.",
             region = "National",
             calories = 300,
-            ingredients = listOf("Goat meat or beef", "Salt", "Black pepper", "Optional spices"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Goat meat or beef",
+                    quantity = 1.0,
+                    unit = "pound",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 1.0,
+                    unit = "teaspoon",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Black pepper",
+                    quantity = 0.5,
+                    unit = "teaspoon",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Optional spices",
+                    quantity = 0.5,
+                    unit = "teaspoon",
+                    order_index = 3
+                )
+            ),
             instructions = listOf(
                 "Cut meat into pieces",
                 "Season with salt and pepper",
@@ -526,12 +595,43 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1003,
+            id = "1003",
             name = "Sukuma Wiki",
             description = "A simple dish made with collard greens, onions, and tomatoes.",
             region = "National",
             calories = 80,
-            ingredients = listOf("Collard greens (kale)", "Onions", "Tomatoes", "Oil", "Salt"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Collard greens (kale)",
+                    quantity = 1.0,
+                    unit = "pound",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Onions",
+                    quantity = 0.5,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Tomatoes",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Oil",
+                    quantity = 2.0,
+                    unit = "tablespoons",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 0.5,
+                    unit = "teaspoon",
+                    order_index = 4
+                )
+            ),
             instructions = listOf(
                 "Chop collard greens into small pieces",
                 "Dice onions and tomatoes",
@@ -542,12 +642,49 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1004,
+            id = "1004",
             name = "Githeri",
             description = "A traditional Kenyan dish made with maize and beans, sometimes with vegetables added.",
             region = "Central",
             calories = 250,
-            ingredients = listOf("Maize kernels", "Beans", "Onions", "Tomatoes", "Salt", "Oil"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Maize kernels",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Beans",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Onions",
+                    quantity = 0.5,
+                    unit = "cup",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Tomatoes",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 0.5,
+                    unit = "teaspoon",
+                    order_index = 4
+                ),
+                LocalIngredient(
+                    name = "Oil",
+                    quantity = 2.0,
+                    unit = "tablespoons",
+                    order_index = 5
+                )
+            ),
             instructions = listOf(
                 "Soak maize and beans overnight",
                 "Boil until soft",
@@ -557,12 +694,55 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1005,
+            id = "1005",
             name = "Pilau",
             description = "Spiced rice dish with meat, popular in coastal Kenya.",
             region = "Coastal",
             calories = 400,
-            ingredients = listOf("Rice", "Meat (beef or chicken)", "Onions", "Pilau masala", "Garlic", "Ginger", "Oil"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Rice",
+                    quantity = 2.0,
+                    unit = "cups",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Meat (beef or chicken)",
+                    quantity = 0.5,
+                    unit = "kg",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Onions",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Pilau masala",
+                    quantity = 2.0,
+                    unit = "tablespoons",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Garlic",
+                    quantity = 2.0,
+                    unit = "cloves",
+                    order_index = 4
+                ),
+                LocalIngredient(
+                    name = "Ginger",
+                    quantity = 1.0,
+                    unit = "tablespoon",
+                    order_index = 5
+                ),
+                LocalIngredient(
+                    name = "Oil",
+                    quantity = 3.0,
+                    unit = "tablespoons",
+                    order_index = 6
+                )
+            ),
             instructions = listOf(
                 "Brown meat with onions, garlic, and ginger",
                 "Add pilau masala and stir",
@@ -571,12 +751,37 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1006,
+            id = "1006",
             name = "Chapati",
             description = "Flatbread common in Kenya, similar to Indian chapati.",
             region = "National",
             calories = 150,
-            ingredients = listOf("Wheat flour", "Water", "Salt", "Oil"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Wheat flour",
+                    quantity = 2.0,
+                    unit = "cups",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Water",
+                    quantity = 0.75,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 0.5,
+                    unit = "teaspoon",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Oil",
+                    quantity = 2.0,
+                    unit = "tablespoons",
+                    order_index = 3
+                )
+            ),
             instructions = listOf(
                 "Mix flour with water and let ferment overnight",
                 "Knead until smooth",
@@ -585,12 +790,55 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1007,
+            id = "1007",
             name = "Mandazi",
             description = "Sweet, triangular-shaped fried bread, similar to a doughnut.",
             region = "Coastal",
             calories = 200,
-            ingredients = listOf("Flour", "Sugar", "Milk", "Eggs", "Baking powder", "Cardamom", "Oil for frying"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Flour",
+                    quantity = 2.0,
+                    unit = "cups",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Sugar",
+                    quantity = 0.25,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Milk",
+                    quantity = 0.5,
+                    unit = "cup",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Eggs",
+                    quantity = 1.0,
+                    unit = "",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Baking powder",
+                    quantity = 1.0,
+                    unit = "teaspoon",
+                    order_index = 4
+                ),
+                LocalIngredient(
+                    name = "Cardamom",
+                    quantity = 0.5,
+                    unit = "teaspoon",
+                    order_index = 5
+                ),
+                LocalIngredient(
+                    name = "Oil for frying",
+                    quantity = 2.0,
+                    unit = "cups",
+                    order_index = 6
+                )
+            ),
             instructions = listOf(
                 "Mix dry ingredients",
                 "Add wet ingredients to form dough",
@@ -599,12 +847,49 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1008,
+            id = "1008",
             name = "Mukimo",
             description = "Mashed potatoes mixed with peas, corn, and greens.",
             region = "Central",
             calories = 200,
-            ingredients = listOf("Potatoes", "Green peas", "Corn", "Spinach or pumpkin leaves", "Onions", "Salt"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Potatoes",
+                    quantity = 4.0,
+                    unit = "medium",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Green peas",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Corn",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Spinach or pumpkin leaves",
+                    quantity = 2.0,
+                    unit = "cups",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Onions",
+                    quantity = 1.0,
+                    unit = "medium",
+                    order_index = 4
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 1.0,
+                    unit = "teaspoon",
+                    order_index = 5
+                )
+            ),
             instructions = listOf(
                 "Boil potatoes until soft",
                 "Cook peas, corn, and greens separately",
@@ -613,12 +898,43 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1009,
+            id = "1009",
             name = "Irio",
             description = "Similar to Mukimo, but with mashed green peas, corn, and potatoes.",
             region = "Central",
             calories = 220,
-            ingredients = listOf("Potatoes", "Green peas", "Corn", "Onions", "Salt"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Potatoes",
+                    quantity = 4.0,
+                    unit = "medium",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Green peas",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Corn",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Onions",
+                    quantity = 1.0,
+                    unit = "medium",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 1.0,
+                    unit = "teaspoon",
+                    order_index = 4
+                )
+            ),
             instructions = listOf(
                 "Boil potatoes, peas, and corn until soft",
                 "Mash together",
@@ -626,12 +942,49 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1010,
+            id = "1010",
             name = "Matoke",
             description = "Plantain stew, popular in Western Kenya.",
             region = "Western",
             calories = 250,
-            ingredients = listOf("Green plantains", "Onions", "Tomatoes", "Bell peppers", "Oil", "Salt"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Green plantains",
+                    quantity = 4.0,
+                    unit = "medium",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Onions",
+                    quantity = 1.0,
+                    unit = "medium",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Tomatoes",
+                    quantity = 2.0,
+                    unit = "medium",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Bell peppers",
+                    quantity = 1.0,
+                    unit = "medium",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Oil",
+                    quantity = 2.0,
+                    unit = "tablespoons",
+                    order_index = 4
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 1.0,
+                    unit = "teaspoon",
+                    order_index = 5
+                )
+            ),
             instructions = listOf(
                 "Peel and chop plantains",
                 "Sauté onions, tomatoes, and bell peppers",
@@ -640,12 +993,49 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1011,
+            id = "1011",
             name = "Bhajia",
             description = "Spiced potato fritters, popular street food.",
             region = "Urban",
             calories = 180,
-            ingredients = listOf("Potatoes", "Gram flour", "Turmeric", "Chili powder", "Salt", "Oil for frying"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Potatoes",
+                    quantity = 4.0,
+                    unit = "medium",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Gram flour",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Turmeric",
+                    quantity = 0.5,
+                    unit = "teaspoon",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Chili powder",
+                    quantity = 0.5,
+                    unit = "teaspoon",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 1.0,
+                    unit = "teaspoon",
+                    order_index = 4
+                ),
+                LocalIngredient(
+                    name = "Oil for frying",
+                    quantity = 2.0,
+                    unit = "cups",
+                    order_index = 5
+                )
+            ),
             instructions = listOf(
                 "Slice potatoes thinly",
                 "Make batter with gram flour and spices",
@@ -654,12 +1044,43 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1012,
+            id = "1012",
             name = "Kachumbari",
             description = "Fresh tomato and onion salad, often served with nyama choma.",
             region = "National",
             calories = 50,
-            ingredients = listOf("Tomatoes", "Onions", "Cilantro", "Lemon juice", "Salt"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Tomatoes",
+                    quantity = 3.0,
+                    unit = "medium",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Onions",
+                    quantity = 1.0,
+                    unit = "medium",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Cilantro",
+                    quantity = 0.25,
+                    unit = "cup",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Lemon juice",
+                    quantity = 2.0,
+                    unit = "tablespoons",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 0.5,
+                    unit = "teaspoon",
+                    order_index = 4
+                )
+            ),
             instructions = listOf(
                 "Dice tomatoes and onions",
                 "Chop cilantro",
@@ -667,12 +1088,37 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1013,
+            id = "1013",
             name = "Mutura",
             description = "Kenyan blood sausage made with meat, blood, and spices.",
             region = "Central",
             calories = 300,
-            ingredients = listOf("Meat trimmings", "Animal blood", "Intestines for casing", "Spices"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Meat trimmings",
+                    quantity = 500.0,
+                    unit = "grams",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Animal blood",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Intestines for casing",
+                    quantity = 1.0,
+                    unit = "set",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Spices",
+                    quantity = 2.0,
+                    unit = "tablespoons",
+                    order_index = 3
+                )
+            ),
             instructions = listOf(
                 "Clean intestines thoroughly",
                 "Mix meat, blood, and spices",
@@ -681,12 +1127,37 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1014,
+            id = "1014",
             name = "Mahindi Choma",
             description = "Roasted corn on the cob, a popular street food.",
             region = "Urban",
             calories = 120,
-            ingredients = listOf("Corn on the cob", "Lime or lemon", "Salt", "Chili powder (optional)"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Corn on the cob",
+                    quantity = 4.0,
+                    unit = "ears",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Lime or lemon",
+                    quantity = 2.0,
+                    unit = "medium",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 1.0,
+                    unit = "teaspoon",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Chili powder (optional)",
+                    quantity = 0.5,
+                    unit = "teaspoon",
+                    order_index = 3
+                )
+            ),
             instructions = listOf(
                 "Roast corn over open fire or grill",
                 "Rub with lime/lemon",
@@ -694,12 +1165,49 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1015,
+            id = "1015",
             name = "Viazi Karai",
             description = "Deep-fried potatoes coated in a spiced gram flour batter.",
             region = "Coastal",
             calories = 200,
-            ingredients = listOf("Potatoes", "Gram flour", "Garlic", "Turmeric", "Salt", "Oil for frying"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Potatoes",
+                    quantity = 4.0,
+                    unit = "medium",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Gram flour",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Garlic",
+                    quantity = 2.0,
+                    unit = "cloves",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Turmeric",
+                    quantity = 1.0,
+                    unit = "teaspoon",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 1.0,
+                    unit = "teaspoon",
+                    order_index = 4
+                ),
+                LocalIngredient(
+                    name = "Oil for frying",
+                    quantity = 2.0,
+                    unit = "cups",
+                    order_index = 5
+                )
+            ),
             instructions = listOf(
                 "Boil potatoes until just tender",
                 "Make batter with gram flour and spices",
@@ -708,12 +1216,37 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1016,
+            id = "1016",
             name = "Uji",
             description = "Fermented porridge made from millet, sorghum, or maize flour.",
             region = "National",
             calories = 100,
-            ingredients = listOf("Millet flour", "Water", "Sugar or honey", "Lemon (optional)"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Millet flour",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Water",
+                    quantity = 3.0,
+                    unit = "cups",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Sugar or honey",
+                    quantity = 2.0,
+                    unit = "tablespoons",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Lemon (optional)",
+                    quantity = 0.5,
+                    unit = "medium",
+                    order_index = 3
+                )
+            ),
             instructions = listOf(
                 "Mix flour with water and let ferment overnight",
                 "Cook the mixture until it thickens",
@@ -722,12 +1255,43 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1017,
+            id = "1017",
             name = "Omena",
             description = "Small dried fish, usually cooked with tomatoes and onions.",
             region = "Lake Region",
             calories = 150,
-            ingredients = listOf("Dried omena fish", "Onions", "Tomatoes", "Oil", "Salt"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Dried omena fish",
+                    quantity = 250.0,
+                    unit = "grams",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Onions",
+                    quantity = 1.0,
+                    unit = "medium",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Tomatoes",
+                    quantity = 2.0,
+                    unit = "medium",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Oil",
+                    quantity = 2.0,
+                    unit = "tablespoons",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 1.0,
+                    unit = "teaspoon",
+                    order_index = 4
+                )
+            ),
             instructions = listOf(
                 "Rinse omena thoroughly",
                 "Sauté onions and tomatoes",
@@ -736,12 +1300,31 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1018,
+            id = "1018",
             name = "Mursik",
             description = "Fermented milk, traditional among the Kalenjin community.",
             region = "Rift Valley",
             calories = 120,
-            ingredients = listOf("Milk", "Special gourd", "Special herb ash"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Milk",
+                    quantity = 2.0,
+                    unit = "liters",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Special gourd",
+                    quantity = 1.0,
+                    unit = "",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Special herb ash",
+                    quantity = 2.0,
+                    unit = "tablespoons",
+                    order_index = 2
+                )
+            ),
             instructions = listOf(
                 "Clean gourd with special herb ash",
                 "Pour fresh milk into gourd",
@@ -749,12 +1332,43 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1019,
+            id = "1019",
             name = "Samosa",
             description = "Triangular pastry filled with spiced meat or vegetables.",
             region = "Urban",
             calories = 180,
-            ingredients = listOf("Flour", "Oil", "Minced meat or vegetables", "Onions", "Spices"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Flour",
+                    quantity = 2.0,
+                    unit = "cups",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Oil",
+                    quantity = 0.25,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Minced meat or vegetables",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Onions",
+                    quantity = 1.0,
+                    unit = "medium",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Spices",
+                    quantity = 1.0,
+                    unit = "tablespoon",
+                    order_index = 4
+                )
+            ),
             instructions = listOf(
                 "Make dough with flour and water",
                 "Prepare filling with meat/vegetables and spices",
@@ -763,12 +1377,49 @@ class KenyanFoodsService {
             )
         ),
         LocalKenyanRecipe(
-            id = 1020,
+            id = "1020",
             name = "Mahamri",
             description = "Sweet, spiced triangular donuts, popular at the coast.",
             region = "Coastal",
             calories = 200,
-            ingredients = listOf("Flour", "Coconut milk", "Sugar", "Cardamom", "Yeast", "Oil for frying"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Flour",
+                    quantity = 2.0,
+                    unit = "cups",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Coconut milk",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Sugar",
+                    quantity = 0.5,
+                    unit = "cup",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Cardamom",
+                    quantity = 1.0,
+                    unit = "teaspoon",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Yeast",
+                    quantity = 1.0,
+                    unit = "tablespoon",
+                    order_index = 4
+                ),
+                LocalIngredient(
+                    name = "Oil for frying",
+                    quantity = 2.0,
+                    unit = "cups",
+                    order_index = 5
+                )
+            ),
             instructions = listOf(
                 "Mix flour, sugar, cardamom, and yeast",
                 "Add coconut milk to form dough",
@@ -779,12 +1430,49 @@ class KenyanFoodsService {
         ),
         // New recipe added
         LocalKenyanRecipe(
-            id = 1021,
+            id = "1021",
             name = "Nyoyo",
             description = "A traditional Luo dish made with beans and maize, similar to githeri but with specific preparation methods.",
             region = "Nyanza",
             calories = 280,
-            ingredients = listOf("Beans", "Maize", "Onions", "Tomatoes", "Salt", "Oil"),
+            ingredients = listOf(
+                LocalIngredient(
+                    name = "Beans",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 0
+                ),
+                LocalIngredient(
+                    name = "Maize",
+                    quantity = 1.0,
+                    unit = "cup",
+                    order_index = 1
+                ),
+                LocalIngredient(
+                    name = "Onions",
+                    quantity = 1.0,
+                    unit = "medium",
+                    order_index = 2
+                ),
+                LocalIngredient(
+                    name = "Tomatoes",
+                    quantity = 2.0,
+                    unit = "medium",
+                    order_index = 3
+                ),
+                LocalIngredient(
+                    name = "Salt",
+                    quantity = 1.0,
+                    unit = "teaspoon",
+                    order_index = 4
+                ),
+                LocalIngredient(
+                    name = "Oil",
+                    quantity = 2.0,
+                    unit = "tablespoons",
+                    order_index = 5
+                )
+            ),
             instructions = listOf(
                 "Soak beans and maize overnight",
                 "Boil together until soft",

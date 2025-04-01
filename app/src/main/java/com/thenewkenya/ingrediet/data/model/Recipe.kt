@@ -4,7 +4,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class DetailedRecipe(
-    val id: Int,
+    val id: String,
+    val recipeId: String = "",
     val name: String,
     val description: String,
     val imageUrl: String = "",
@@ -28,6 +29,7 @@ data class DetailedRecipe(
     fun toRecipe(): Recipe {
         return Recipe(
             id = this.id,
+            recipeId = this.recipeId,
             name = this.name,
             description = this.description,
             imageUrl = this.imageUrl,
@@ -52,7 +54,7 @@ data class DetailedRecipe(
 
 @Serializable
 data class IngredientItem(
-    val id: Int,
+    val id: String,
     val name: String,
     val quantity: Float,
     val unit: String,
@@ -94,7 +96,8 @@ data class NutritionFacts(
 
 @Serializable
 data class Recipe(
-    val id: Int,
+    val id: String,
+    val recipeId: String = "",
     val name: String,
     val description: String,
     val imageUrl: String,
@@ -117,6 +120,7 @@ data class Recipe(
     fun toDetailedRecipe(): DetailedRecipe {
         return DetailedRecipe(
             id = this.id,
+            recipeId = this.recipeId,
             name = this.name,
             description = this.description,
             imageUrl = this.imageUrl,

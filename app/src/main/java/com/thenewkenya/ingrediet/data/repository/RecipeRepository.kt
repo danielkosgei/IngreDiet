@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.model.IngredientItem
+import com.thenewkenya.ingrediet.data.model.KenyanRecipe
 import com.thenewkenya.ingrediet.data.model.NutritionFacts
 import com.thenewkenya.ingrediet.data.model.Recipe
 import com.thenewkenya.ingrediet.data.network.CacheManager
@@ -34,6 +35,12 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.CancellationException
 
+// Define a DTO specifically for checking UUID existence
+@Serializable
+private data class UuidDto(
+    val id: String // Expecting a UUID string
+)
+
 class RecipeRepository(context: Context) {
     private val cacheManager = CacheManager(context)
     private val recipeService = RecipeService(context)
@@ -57,24 +64,51 @@ class RecipeRepository(context: Context) {
         }, TimeUnit.DAYS.toMillis(1))
     }
 
-    suspend fun validateRecipeData(recipeId: Int): Map<String, Boolean> {
+    suspend fun validateRecipeData(recipeId: String): Map<String, Boolean> {
         val result = mutableMapOf<String, Boolean>()
 
         try {
             // Log the process
             Log.d("RecipeRepository", "Validating recipe data for ID: $recipeId")
 
-            // Check if recipe exists
-            val recipeExists = try {
-                val recipeList = supabase.from("recipes")
-                    .select(columns = Columns.list("id")) {
-                        filter { eq("id", recipeId) }
-                    }
-                    .decodeList<IdDto>() // Use our serializable DTO
+            // First check if this is one of our sample recipes
+            val isSampleRecipe = isSampleRecipeId(recipeId)
+            
+            // We'll just return false for all DB checks for sample recipes
+            // since they don't exist in the database
+            if (isSampleRecipe) {
+                Log.d("RecipeRepository", "Recipe $recipeId appears to be a sample recipe")
+                result["recipe_exists"] = false
+                result["ingredients_exist"] = false
+                result["nutrition_exists"] = false
+                result["instructions_exist"] = false
+                return@validateRecipeData result
+            }
 
-                val exists = recipeList.isNotEmpty()
-                Log.d("RecipeRepository", "Recipe $recipeId exists check: exists = $exists")
-                exists
+            // For non-sample recipes, check if recipe exists in Supabase
+            // Check if recipe exists - use string conversion for UUID formatting
+            val recipeExists = try {
+                val recipeIdStr = recipeId
+                // First check if this might be a UUID
+                if (isValidUuid(recipeIdStr)) {
+                    // If it looks like a UUID, do a direct lookup by the primary 'id' column
+                    val recipeList = supabase.from("recipes")
+                        .select(columns = Columns.list("id")) { // Only select 'id'
+                            filter { eq("id", recipeIdStr) }
+                        }
+                        .decodeList<UuidDto>() // Use the UuidDto
+
+                    // Check if any result was returned
+                    val exists = recipeList.isNotEmpty()
+                    Log.d("RecipeRepository", "Recipe UUID $recipeIdStr exists check: exists = $exists")
+                    exists
+                } else {
+                    // If it's not a UUID (like our sample numeric IDs, but not in the sample range),
+                    // it cannot be the primary key in the 'recipes' table based on this format.
+                    // Therefore, it doesn't exist in the main table by this non-UUID ID.
+                    Log.d("RecipeRepository", "Recipe ID $recipeIdStr is not a valid UUID and not a sample ID. Assuming it doesn't exist in the 'recipes' table via this ID.")
+                    false // Recipe doesn't exist if the ID isn't a valid UUID
+                }
             } catch (e: Exception) {
                 Log.e("RecipeRepository", "Error checking if recipe exists: ${e.message}", e)
                 false
@@ -89,7 +123,7 @@ class RecipeRepository(context: Context) {
                         .select(columns = Columns.list("id")) {
                             filter { eq("recipe_id", recipeId) }
                         }
-                        .decodeList<IdDto>() // Use our serializable DTO
+                        .decodeList<UuidDto>() // Use UuidDto for consistency if 'id' is UUID
 
                     val exists = ingredientsList.isNotEmpty()
                     Log.d("RecipeRepository", "Recipe $recipeId ingredients check: exists = $exists")
@@ -106,7 +140,7 @@ class RecipeRepository(context: Context) {
                         .select(columns = Columns.list("id")) {
                             filter { eq("recipe_id", recipeId) }
                         }
-                        .decodeList<IdDto>() // Use our serializable DTO
+                        .decodeList<UuidDto>() // Use UuidDto
 
                     val exists = nutritionList.isNotEmpty()
                     Log.d("RecipeRepository", "Recipe $recipeId nutrition check: exists = $exists")
@@ -123,7 +157,7 @@ class RecipeRepository(context: Context) {
                         .select(columns = Columns.list("id")) {
                             filter { eq("recipe_id", recipeId) }
                         }
-                        .decodeList<IdDto>() // Use our serializable DTO
+                        .decodeList<UuidDto>() // Use UuidDto
 
                     val exists = instructionsList.isNotEmpty()
                     Log.d("RecipeRepository", "Recipe $recipeId instructions check: exists = $exists")
@@ -152,8 +186,34 @@ class RecipeRepository(context: Context) {
 
         return result
     }
+    
+    /**
+     * Check if a recipe ID corresponds to one of our sample recipes
+     */
+    private fun isSampleRecipeId(recipeId: String): Boolean {
+        // Sample recipes have String IDs like "101", "102", "103" now in edge function
+        // Check against these String representations
+        val sampleIds = (100..199).map { it.toString() }.toSet()
+        return recipeId in sampleIds
+    }
+    
+    /**
+     * Check if a string looks like a valid UUID
+     */
+    private fun isValidUuid(str: String): Boolean {
+        val uuidPattern = Regex("[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
+        return uuidPattern.matches(str)
+    }
+    
+    // DTO for checking recipe IDs
+    @Serializable
+    private data class RecipeIdDto(
+        val id: String? = null,
+        // Remove the non-existent recipeId field if not used elsewhere, or keep if other DTOs need it
+        // val recipeId: String? = null 
+    )
 
-    suspend fun getRecipeDetails(recipeId: Int): Flow<Result<DetailedRecipe>> = flow {
+    suspend fun getRecipeDetails(recipeId: String): Flow<Result<DetailedRecipe>> = flow {
         Log.d("RecipeRepository", "Fetching recipe details for ID: $recipeId")
         
         // Check if recipe is in local cache first
@@ -174,14 +234,14 @@ class RecipeRepository(context: Context) {
             emit(Result.success(recipe))
         } else {
             // If not found in Edge Function, try the recipe service directly
-            val serviceRecipe = recipeService.getRecipeById(recipeId.toString())
+            val serviceRecipe = recipeService.getRecipeById(recipeId)
             
             if (serviceRecipe != null) {
                 Log.d("RecipeRepository", "Found recipe $recipeId in Recipe Service")
-                // Cache the recipe locally
+            // Cache the recipe locally
                 cacheManager.cacheRecipe(serviceRecipe)
                 emit(Result.success(serviceRecipe))
-            } else {
+        } else {
                 // If still not found, return a failure
                 Log.e("RecipeRepository", "Recipe $recipeId not found anywhere")
                 emit(Result.failure(NoSuchElementException("Recipe not found")))
@@ -212,7 +272,7 @@ class RecipeRepository(context: Context) {
             var recipesFound = false
             val cachedResults = if (query != null) {
                 cacheManager.getCachedRecipesByQuery(query)
-            } else {
+                            } else {
                 cacheManager.getRandomCachedRecipes(limit)
             }
             
@@ -269,7 +329,7 @@ class RecipeRepository(context: Context) {
             } catch (e: CancellationException) {
                 Log.d("RecipeRepository", "Recipe search was cancelled")
                 throw e
-            } catch (e: Exception) {
+        } catch (e: Exception) {
                 Log.e("RecipeRepository", "Error in searchRecipes API call: ${e.message}", e)
                 // Only emit if we haven't already emitted cached results
                 if (!recipesFound) {
@@ -346,7 +406,7 @@ class RecipeRepository(context: Context) {
             } else {
                 // If not found anywhere, create a basic ingredient
                 val basicIngredient = IngredientItem(
-                    id = name.hashCode(),
+                    id = name.hashCode().toString(),
                     name = name,
                     quantity = 1f,
                     unit = "unit"
@@ -360,7 +420,7 @@ class RecipeRepository(context: Context) {
         }
     }
 
-    suspend fun toggleFavorite(recipeId: Int, isFavorite: Boolean): Flow<Result<Boolean>> = flow {
+    suspend fun toggleFavorite(recipeId: String, isFavorite: Boolean): Flow<Result<Boolean>> = flow {
         try {
             val currentUser = supabase.auth.currentUserOrNull()?.id ?: run {
                 emit(Result.failure(Exception("User not authenticated")))
@@ -395,7 +455,12 @@ class RecipeRepository(context: Context) {
     }
 
     /**
-     * Get recipes for browsing (now using Supabase Edge Function)
+     * Get recipes with pagination and filtering
+     * @param category Optional category filter
+     * @param limit Maximum number of recipes to return
+     * @param tags Optional tags filter
+     * @param query Optional search query
+     * @return Flow of RecipeListItem lists wrapped in Result
      */
     suspend fun getRecipes(category: String? = null, limit: Int = 20, tags: List<String>? = null, query: String? = null): Flow<Result<List<RecipeListItem>>> = flow {
         Log.d("RecipeRepository", "Getting recipes: category=$category, tags=$tags, query=$query, limit=$limit")
@@ -414,7 +479,8 @@ class RecipeRepository(context: Context) {
                     // Create an ingredients search if the tags are ingredient names
                     recipeService.getRecipesByIngredients(tags)
                 } else {
-                    recipeService.getRandomRecipes(limit)
+                    // Use our new dedicated method for getting recipes instead of random recipes
+                    recipeService.getRecipes(limit)
                 }
                 
                 recipeFlow.catch { e ->
@@ -443,6 +509,7 @@ class RecipeRepository(context: Context) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 
                 Log.e("RecipeRepository", "Error getting recipes: ${e.message}", e)
+                // Continue execution - we'll return either combined recipes collected so far or an empty list
             }
             
             if (combinedRecipes.isNotEmpty()) {
@@ -468,7 +535,7 @@ class RecipeRepository(context: Context) {
     // DTO classes for deserialization
     @Serializable
     private data class RecipeDto(
-        val id: Int,
+        val id: String,
         val name: String,
         val description: String?,
         @SerialName("image_url") val image_url: String?,
@@ -481,7 +548,7 @@ class RecipeRepository(context: Context) {
 
     @Serializable
     data class RecipeListItem(
-        val id: Int,
+        val id: String,
         val name: String,
         val imageUrl: String,
         val time: String,
@@ -494,7 +561,7 @@ class RecipeRepository(context: Context) {
     @Serializable
     private data class RecipeIngredientDto(
         val id: Int,
-        @SerialName("recipe_id") val recipe_id: Int,
+        @SerialName("recipe_id") val recipe_id: String,
         @SerialName("ingredient_id") val ingredient_id: Int,
         val quantity: Float,
         val unit: String,
@@ -503,14 +570,14 @@ class RecipeRepository(context: Context) {
 
     @Serializable
     private data class IngredientDto(
-        val id: Int,
+        val id: String,
         val name: String
     )
 
     @Serializable
     private data class RecipeInstructionDto(
         val id: Int,
-        @SerialName("recipe_id") val recipe_id: Int,
+        @SerialName("recipe_id") val recipe_id: String,
         @SerialName("step_number") val step_number: Int,
         val instruction: String
     )
@@ -518,7 +585,7 @@ class RecipeRepository(context: Context) {
     @Serializable
     private data class RecipeNutritionDto(
         val id: Int,
-        @SerialName("recipe_id") val recipe_id: Int,
+        @SerialName("recipe_id") val recipe_id: String,
         val calories: Int?,
         val protein: Float?,
         val carbs: Float?,
@@ -529,7 +596,7 @@ class RecipeRepository(context: Context) {
 
     @Serializable
     private data class RecipeListItemDto(
-        val id: Int,
+        val id: String,
         val name: String,
         @SerialName("image_url") val imageUrl: String,
         @SerialName("preparation_time") val preparationTime: Int,
@@ -540,29 +607,24 @@ class RecipeRepository(context: Context) {
 
     @Serializable
     private data class RecipeNutritionSimpleDto(
-        @SerialName("recipe_id") val recipe_id: Int,
+        @SerialName("recipe_id") val recipe_id: String,
         val calories: Int
     )
 
     @Serializable
     private data class UserFavoriteDto(
         @SerialName("user_id") val user_id: String,
-        @SerialName("recipe_id") val recipe_id: Int
-    )
-
-    @Serializable
-    private data class NutritiondataDto(
-        val calories: Int? = null
+        @SerialName("recipe_id") val recipe_id: String
     )
 
     @Serializable
     private data class FavoriteDto(
-        val id: Int
+        val id: String
     )
 
     @Serializable
     private data class IdDto(
-        val id: Int? = null
+        val id: String? = null
     )
     
     @Serializable
@@ -654,7 +716,7 @@ class RecipeRepository(context: Context) {
 
             // Get the full recipe details for each favorite
             return favoriteRecipes.mapNotNull { favorite ->
-                getRecipeDetails(favorite.recipeId).first().getOrNull()
+                getRecipeDetails(favorite.recipe_id).first().getOrNull()
             }
         } catch (e: Exception) {
             Log.e("RecipeRepository", "Error fetching favorite recipes: ${e.message}", e)
@@ -662,7 +724,7 @@ class RecipeRepository(context: Context) {
         }
     }
 
-    suspend fun addToFavorites(recipeId: Int) {
+    suspend fun addToFavorites(recipeId: String) {
         try {
             val currentUser = supabase.auth.currentUserOrNull()
             if (currentUser == null) {
@@ -674,14 +736,14 @@ class RecipeRepository(context: Context) {
                 .insert(FavoriteRecipeDto(
                     id = 0, // Will be auto-assigned
                     userId = currentUser.id,
-                    recipeId = recipeId
+                    recipe_id = recipeId
                 ))
         } catch (e: Exception) {
             Log.e("RecipeRepository", "Error adding recipe to favorites: ${e.message}", e)
         }
     }
 
-    suspend fun removeFromFavorites(recipeId: Int) {
+    suspend fun removeFromFavorites(recipeId: String) {
         try {
             val currentUser = supabase.auth.currentUserOrNull()
             if (currentUser == null) {
@@ -705,7 +767,7 @@ class RecipeRepository(context: Context) {
     private data class FavoriteRecipeDto(
         val id: Int,
         @SerialName("user_id") val userId: String,
-        @SerialName("recipe_id") val recipeId: Int
+        @SerialName("recipe_id") val recipe_id: String
     )
 
     /**
@@ -729,7 +791,7 @@ class RecipeRepository(context: Context) {
             // Then try IngreDiet API through the cache service
             try {
                 val ingreDietRecipes = recipeCacheService.getAndCacheRandomRecipes(count)
-                    .catch { e ->
+                            .catch { e ->
                         // Handle cancellation explicitly
                         if (e is CancellationException) {
                             Log.d("RecipeRepository", "Random recipe fetch cancelled")
@@ -745,13 +807,13 @@ class RecipeRepository(context: Context) {
                     Log.d("RecipeRepository", "Found ${ingreDietRecipes.size} random recipes from API")
                     emit(Result.success(ingreDietRecipes))
                     recipesFound = true
-                } else {
+                    } else {
                     Log.d("RecipeRepository", "No recipes returned from API")
-                }
+                    }
             } catch (e: CancellationException) {
                 Log.d("RecipeRepository", "Random recipe fetch was cancelled")
                 throw e
-            } catch (e: Exception) {
+                } catch (e: Exception) {
                 Log.e("RecipeRepository", "Error fetching random recipes from API", e)
                 // Don't emit here if we've already emitted something
             }
@@ -764,7 +826,7 @@ class RecipeRepository(context: Context) {
         } catch (e: CancellationException) {
             Log.d("RecipeRepository", "Random recipe fetch was cancelled")
             throw e
-        } catch (e: Exception) {
+                } catch (e: Exception) {
             Log.e("RecipeRepository", "Error in getRandomRecipes", e)
             emit(Result.failure(e))
         }
@@ -981,7 +1043,7 @@ class RecipeRepository(context: Context) {
         // Assign recipes to each day of the week
         for (day in days) {
             // Create a list to track all recipe IDs used for this day to avoid duplicates
-            val usedRecipeIds = mutableSetOf<Int>()
+            val usedRecipeIds = mutableSetOf<String>()
             
             // Breakfast
             if (breakfastRecipes.isNotEmpty()) {
@@ -1105,7 +1167,7 @@ class RecipeRepository(context: Context) {
         val id: String,
         val name: String,
         val description: String,
-        val recipeId: Int,
+        val recipeId: String,
         val calories: Int,
         val time: String,
         val imageUrl: String? = null
@@ -1141,7 +1203,7 @@ class RecipeRepository(context: Context) {
     private fun getFallbackRecipe(): DetailedRecipe {
         // Create a basic fallback recipe
         return DetailedRecipe(
-            id = 0,
+            id = "0",
             name = "Default Recipe",
             description = "A simple healthy meal",
             imageUrl = "",
@@ -1151,7 +1213,7 @@ class RecipeRepository(context: Context) {
             difficulty = "Medium",
             ingredients = listOf(
                 IngredientItem(
-                    id = 1,
+                    id = "1",
                     name = "Ingredient",
                     quantity = 1f,
                     unit = "cup"
@@ -1285,6 +1347,134 @@ class RecipeRepository(context: Context) {
                 val fallbackResult = listOf(getFallbackRecipe())
                 emit(Result.success(fallbackResult))
             }
+        }
+    }
+
+    /**
+     * Get Kenyan recipes
+     * @param limit Maximum number of recipes to return (default: 10)
+     * @return Flow of Kenyan recipes
+     */
+    suspend fun getKenyanRecipes(limit: Int = 10): Flow<Result<List<KenyanRecipe>>> = flow {
+        Log.d("RecipeRepository", "Fetching Kenyan recipes, limit: $limit")
+        
+        try {
+            // Get Kenyan recipes from IngreDiet API
+            recipeService.getKenyanRecipes(limit)
+                .catch { e ->
+                    if (e is CancellationException) {
+                        Log.d("RecipeRepository", "Kenyan recipes fetch cancelled")
+                        throw e
+                    } else {
+                        Log.e("RecipeRepository", "Error fetching Kenyan recipes: ${e.message}", e)
+                        emit(Result.success(emptyList<KenyanRecipe>()))
+                    }
+                }
+                .collect { recipes ->
+                    Log.d("RecipeRepository", "Found ${recipes.size} Kenyan recipes")
+                    emit(Result.success(recipes))
+                }
+        } catch (e: CancellationException) {
+            Log.d("RecipeRepository", "Kenyan recipes fetch cancelled")
+            throw e
+        } catch (e: Exception) {
+            Log.e("RecipeRepository", "Error fetching Kenyan recipes: ${e.message}", e)
+            emit(Result.failure(e))
+        }
+    }
+
+    /**
+     * Get Kenyan recipe by ID
+     * @param recipeId The ID of the Kenyan recipe
+     * @return Flow with the Kenyan recipe or null if not found
+     */
+    suspend fun getKenyanRecipeById(recipeId: String): Flow<Result<KenyanRecipe?>> = flow {
+        Log.d("RecipeRepository", "Fetching Kenyan recipe by ID: $recipeId")
+        
+        try {
+            // Get Kenyan recipe from IngreDiet API
+            recipeService.getKenyanRecipeById(recipeId)
+                ?.let { recipe ->
+                    Log.d("RecipeRepository", "Found Kenyan recipe: ${recipe.name}")
+                    emit(Result.success(recipe))
+                } ?: run {
+                    Log.d("RecipeRepository", "Kenyan recipe not found")
+                    emit(Result.success(null))
+                }
+        } catch (e: CancellationException) {
+            Log.d("RecipeRepository", "Kenyan recipe fetch cancelled")
+            throw e
+        } catch (e: Exception) {
+            Log.e("RecipeRepository", "Error fetching Kenyan recipe: ${e.message}", e)
+            emit(Result.failure(e))
+        }
+    }
+
+    /**
+     * Get Kenyan recipes by region
+     * @param region The region of Kenya (e.g., "Central", "Coastal", "Nyanza", etc.)
+     * @param limit Maximum number of recipes to return (default: 10)
+     * @return Flow of Kenyan recipes in the specified region
+     */
+    suspend fun getKenyanRecipesByRegion(region: String, limit: Int = 10): Flow<Result<List<KenyanRecipe>>> = flow {
+        Log.d("RecipeRepository", "Fetching Kenyan recipes by region: $region, limit: $limit")
+        
+        try {
+            // Get Kenyan recipes by region from IngreDiet API
+            recipeService.getKenyanRecipesByRegion(region, limit)
+                .catch { e ->
+                    if (e is CancellationException) {
+                        Log.d("RecipeRepository", "Kenyan recipes by region fetch cancelled")
+                        throw e
+                    } else {
+                        Log.e("RecipeRepository", "Error fetching Kenyan recipes by region: ${e.message}", e)
+                        emit(Result.success(emptyList<KenyanRecipe>()))
+                    }
+                }
+                .collect { recipes ->
+                    Log.d("RecipeRepository", "Found ${recipes.size} Kenyan recipes for region: $region")
+                    emit(Result.success(recipes))
+                }
+        } catch (e: CancellationException) {
+            Log.d("RecipeRepository", "Kenyan recipes by region fetch cancelled")
+            throw e
+        } catch (e: Exception) {
+            Log.e("RecipeRepository", "Error fetching Kenyan recipes by region: ${e.message}", e)
+            emit(Result.failure(e))
+        }
+    }
+
+    /**
+     * Search for Kenyan recipes
+     * @param query The search query
+     * @param limit Maximum number of recipes to return (default: 10)
+     * @return Flow of Kenyan recipes matching the search query
+     */
+    suspend fun searchKenyanRecipes(query: String, limit: Int = 10): Flow<Result<List<KenyanRecipe>>> = flow {
+        Log.d("RecipeRepository", "Searching Kenyan recipes with query: $query, limit: $limit")
+        
+        try {
+            // Search Kenyan recipes from IngreDiet API
+            recipeService.searchKenyanRecipes(query, limit)
+                .catch { e ->
+                    if (e is CancellationException) {
+                        Log.d("RecipeRepository", "Kenyan recipes search cancelled")
+                        throw e
+                    } else {
+                        Log.e("RecipeRepository", "Error searching Kenyan recipes: ${e.message}", e)
+                        emit(Result.success(emptyList<KenyanRecipe>()))
+                    }
+                }
+                .collect { recipes ->
+                    Log.d("RecipeRepository", "Found ${recipes.size} Kenyan recipes for query: $query")
+                    emit(Result.success(recipes))
+                }
+        } catch (e: CancellationException) {
+            Log.d("RecipeRepository", "Kenyan recipes search cancelled")
+            throw e
+        } catch (e: Exception) {
+            Log.e("RecipeRepository", "Error searching Kenyan recipes: ${e.message}", e)
+            emit(Result.failure(e))
         }
     }
 }

@@ -541,10 +541,10 @@ fun DailyMealPlan(
     date: LocalDate,
     meals: List<MealPlanItem>,
     onDeleteMeal: (String) -> Unit,
-    onAddMeal: (mealTime: String, name: String, description: String, calories: Int, recipeId: Int?) -> Unit,
+    onAddMeal: (mealTime: String, name: String, description: String, calories: Int, recipeId: String?) -> Unit,
     colors: ColorScheme,
     typography: Typography,
-    onRecipeClick: (Int?) -> Unit
+    onRecipeClick: (String?) -> Unit
 ) {
     val mealTimes = listOf("Breakfast", "Lunch", "Dinner", "Snacks")
     
@@ -572,10 +572,10 @@ fun DailyMealPlan(
                     mealTime = mealTime,
                     meal = mealForTime,
                     onDeleteMeal = onDeleteMeal,
+                    onAddMeal = onAddMeal,
                     colors = colors,
                     typography = typography,
-                    onRecipeClick = onRecipeClick,
-                    onAddMeal = onAddMeal
+                    onRecipeClick = onRecipeClick
                 )
             }
             
@@ -591,10 +591,10 @@ fun MealTimeCard(
     mealTime: String,
     meal: MealPlanItem?,
     onDeleteMeal: (String) -> Unit,
+    onAddMeal: (mealTime: String, name: String, description: String, calories: Int, recipeId: String?) -> Unit,
     colors: ColorScheme,
     typography: Typography,
-    onRecipeClick: (Int?) -> Unit,
-    onAddMeal: (mealTime: String, name: String, description: String, calories: Int, recipeId: Int?) -> Unit = { _, _, _, _, _ -> }
+    onRecipeClick: (String?) -> Unit
 ) {
     val mealTimeIcon = when(mealTime) {
         "Breakfast" -> Icons.Default.FreeBreakfast
@@ -885,7 +885,7 @@ fun AutoGenerateMealPlanDialog(
 fun AddCustomMealDialog(
     mealTime: String,
     onDismiss: () -> Unit,
-    onAddMeal: (name: String, description: String, calories: Int, recipeId: Int?) -> Unit
+    onAddMeal: (name: String, description: String, calories: Int, recipeId: String?) -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -945,16 +945,8 @@ fun AddCustomMealDialog(
                 
                 OutlinedTextField(
                     value = recipeIdText,
-                    onValueChange = { 
-                        // Only allow numbers
-                        if (it.isEmpty() || it.all { char -> char.isDigit() }) {
-                            recipeIdText = it
-                        }
-                    },
+                    onValueChange = { recipeIdText = it },
                     label = { Text("Recipe ID (optional)") },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number
-                    ),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -964,7 +956,7 @@ fun AddCustomMealDialog(
             Button(
                 onClick = {
                     val calories = caloriesText.toIntOrNull() ?: 0
-                    val recipeId = recipeIdText.toIntOrNull()
+                    val recipeId = if (recipeIdText.isBlank()) null else recipeIdText
                     onAddMeal(mealName, mealDescription, calories, recipeId)
                 },
                 enabled = isAddEnabled,
@@ -986,7 +978,7 @@ fun AddCustomMealDialog(
 @Composable
 fun AddCustomMealTimeDialog(
     onDismiss: () -> Unit,
-    onSelectMealTime: (mealTime: String, name: String, description: String, calories: Int, recipeId: Int?) -> Unit
+    onSelectMealTime: (mealTime: String, name: String, description: String, calories: Int, recipeId: String?) -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -1072,16 +1064,8 @@ fun AddCustomMealTimeDialog(
                 
                 OutlinedTextField(
                     value = recipeIdText,
-                    onValueChange = { 
-                        // Only allow numbers
-                        if (it.isEmpty() || it.all { char -> char.isDigit() }) {
-                            recipeIdText = it
-                        }
-                    },
+                    onValueChange = { recipeIdText = it },
                     label = { Text("Recipe ID (optional)") },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number
-                    ),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1091,7 +1075,7 @@ fun AddCustomMealTimeDialog(
             Button(
                 onClick = {
                     val calories = caloriesText.toIntOrNull() ?: 0
-                    val recipeId = recipeIdText.toIntOrNull()
+                    val recipeId = if (recipeIdText.isBlank()) null else recipeIdText
                     onSelectMealTime(selectedMealTime, mealName, mealDescription, calories, recipeId)
                 },
                 enabled = isAddEnabled,

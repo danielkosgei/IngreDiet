@@ -35,7 +35,7 @@ class OpenFoodFactsService {
             
             return@withContext searchResponse.products.mapIndexed { index, product ->
                 IngredientItem(
-                    id = index,
+                    id = index.toString(),
                     name = product.productName ?: query,
                     quantity = 1f,
                     unit = "unit",
@@ -65,7 +65,7 @@ class OpenFoodFactsService {
             if (productResponse.status == 1) {
                 val product = productResponse.product
                 return@withContext IngredientItem(
-                    id = barcode.hashCode(),
+                    id = barcode,
                     name = product.productName ?: "Unknown",
                     quantity = 1f,
                     unit = "unit",

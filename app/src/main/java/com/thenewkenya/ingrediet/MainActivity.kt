@@ -293,17 +293,17 @@ fun AppNavigation() {
                 composable(
                     route = "recipe/{recipeId}",
                     arguments = listOf(
-                        navArgument("recipeId") { type = NavType.IntType }
+                        navArgument("recipeId") { type = NavType.StringType }
                     )
                 ) { backStackEntry ->
-                    val recipeId = backStackEntry.arguments?.getInt("recipeId") ?: 1
+                    val recipeId = backStackEntry.arguments?.getString("recipeId") ?: ""
                     val context = LocalContext.current
                     val viewModel = viewModel<com.thenewkenya.ingrediet.feature.recipe.RecipeDetailViewModel>(
                         factory = com.thenewkenya.ingrediet.feature.recipe.RecipeDetailViewModelFactory(context)
                     )
                     RecipeDetailScreen(
                         navController = navController, 
-                        recipeId = recipeId, 
+                        recipeId = recipeId,
                         viewModel = viewModel
                     )
                 }

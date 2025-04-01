@@ -41,7 +41,7 @@ data class MealPlanItem(
     val day: DayOfWeek,
     val time: MealTime,
     val description: String? = null,
-    val recipeId: Int? = null,
+    val recipeId: String? = null,
     val imageUrl: String? = null
 )
 
@@ -420,7 +420,7 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
             }
             
             // Track used recipe IDs to avoid duplicates
-            val usedRecipeIds = mutableSetOf<Int?>()
+            val usedRecipeIds = mutableSetOf<String?>()
             
             // Group meals by their type (breakfast, lunch, dinner, etc.)
             val mealsByTime = allMeals.groupBy { it.time }
@@ -1169,7 +1169,7 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                                 _generationStage.value = "Optimizing meal variety..."
                                 
                                 // Track recipes we've used to avoid duplicates
-                                val usedRecipeIds = mutableSetOf<Int?>()
+                                val usedRecipeIds = mutableSetOf<String?>()
                                 
                                 // Transform repository meal plan data to our UI model
                                 result.clear()
