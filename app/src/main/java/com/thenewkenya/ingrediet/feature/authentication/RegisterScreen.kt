@@ -5,11 +5,13 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
@@ -27,6 +30,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -51,7 +55,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.thenewkenya.ingrediet.Gradient
 import com.thenewkenya.ingrediet.R
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.AuthResponse
@@ -143,8 +146,6 @@ fun RegisterScreen(navController: NavController) {
             .background(colors.background),
         contentAlignment = Alignment.Center
     ) {
-        Gradient()
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -171,7 +172,7 @@ fun RegisterScreen(navController: NavController) {
                 color = colors.onBackground.copy(alpha = 0.7f)
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             TextField(
                 value = emailValue,
@@ -183,13 +184,14 @@ fun RegisterScreen(navController: NavController) {
                     )
                 },
                 colors = TextFieldDefaults.colors(
-                    unfocusedContainerColor = colors.surfaceVariant,
-                    focusedContainerColor = colors.surfaceVariant,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedIndicatorColor = colors.outline,
+                    focusedIndicatorColor = colors.primary,
                     unfocusedLabelColor = colors.onSurfaceVariant,
                     focusedLabelColor = colors.primary
                 ),
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
 
@@ -220,19 +222,19 @@ fun RegisterScreen(navController: NavController) {
                     }
                 },
                 colors = TextFieldDefaults.colors(
-                    unfocusedContainerColor = colors.surfaceVariant,
-                    focusedContainerColor = colors.surfaceVariant,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedIndicatorColor = colors.outline,
+                    focusedIndicatorColor = colors.primary,
                     unfocusedLabelColor = colors.onSurfaceVariant,
                     focusedLabelColor = colors.primary
                 ),
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
 
             // Password Strength Indicator
             if (passwordValue.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -266,7 +268,6 @@ fun RegisterScreen(navController: NavController) {
                 }
                 
                 // Password requirements
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Password should have at least 8 characters, including uppercase, lowercase, numbers and special characters.",
                     style = MaterialTheme.typography.bodySmall,
@@ -297,19 +298,19 @@ fun RegisterScreen(navController: NavController) {
                     }
                 },
                 colors = TextFieldDefaults.colors(
-                    unfocusedContainerColor = colors.surfaceVariant,
-                    focusedContainerColor = colors.surfaceVariant,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedIndicatorColor = colors.outline,
+                    focusedIndicatorColor = colors.primary,
                     unfocusedLabelColor = colors.onSurfaceVariant,
                     focusedLabelColor = colors.primary
                 ),
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
 
             // Password match indicator
             if (confirmPasswordValue.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -344,7 +345,7 @@ fun RegisterScreen(navController: NavController) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Button(
                 onClick = {
@@ -390,34 +391,63 @@ fun RegisterScreen(navController: NavController) {
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(48.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = colors.primary
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(8.dp)
             ) {
                 if (authState == AuthState.Loading) {
                     CircularProgressIndicator(
                         color = colors.onPrimary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 } else {
                     Text(
                         text = "Sign Up",
-                        style = typography.bodyLarge,
+                        style = typography.titleMedium,
                         color = colors.onPrimary
                     )
                 }
             }
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // OR Divider
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Spacer(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(1.dp)
+                        .background(colors.onBackground.copy(alpha = 0.1f))
+                )
+                
+                Text(
+                    text = "  OR  ",
+                    style = typography.bodyMedium,
+                    color = colors.onBackground.copy(alpha = 0.5f)
+                )
+                
+                Spacer(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(1.dp)
+                        .background(colors.onBackground.copy(alpha = 0.1f))
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
-            GoogleSignInButton(
+            // Google Sign In Button
+            OutlinedButton(
                 onClick = {
                     if (!isOnline) {
                         errorMessage = "No internet connection"
                         errorType = LoginError.NETWORK_ERROR
-                        return@GoogleSignInButton
+                        return@OutlinedButton
                     }
 
                     coroutineScope.launch {
@@ -442,14 +472,49 @@ fun RegisterScreen(navController: NavController) {
                         isGoogleSignInLoading = false
                     }
                 },
-                isLoading = isGoogleSignInLoading
-            )
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                enabled = !isGoogleSignInLoading,
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = colors.surface,
+                    contentColor = colors.onSurface
+                ),
+                border = BorderStroke(1.dp, colors.outline)
+            ) {
+                if (isGoogleSignInLoading) {
+                    CircularProgressIndicator(
+                        color = colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_google),
+                            contentDescription = "Google Logo",
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Continue with Google",
+                            style = typography.titleSmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "Already have an account? ",
@@ -457,35 +522,16 @@ fun RegisterScreen(navController: NavController) {
                     color = colors.onBackground.copy(alpha = 0.7f)
                 )
                 TextButton(
-                    onClick = { navController.navigate("login") }
+                    onClick = { navController.navigate("login") },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
                     Text(
                         text = "Sign In",
-                        style = typography.bodyMedium,
+                        style = typography.titleSmall,
                         color = colors.primary
                     )
                 }
             }
         }
     }
-}
-
-@Composable
-private fun RegisterHeader() {
-    val colors = MaterialTheme.colorScheme // Access dynamic theme colors
-
-    Text(
-        text = "Register",
-        style = MaterialTheme.typography.titleLarge,
-        color = colors.onBackground, // Adapts to light/dark mode
-        fontWeight = FontWeight.Bold
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Text(
-        text = "Create an account to get started",
-        style = MaterialTheme.typography.bodyMedium,
-        color = colors.onBackground.copy(alpha = 0.8f) // Softer contrast for subtitle
-    )
 }

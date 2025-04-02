@@ -5,10 +5,13 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,7 +57,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.thenewkenya.ingrediet.Gradient
 import com.thenewkenya.ingrediet.R
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.AuthResponse
@@ -109,7 +111,8 @@ fun LoginScreen(navController: NavController) {
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
     }
 
-    val colors = MaterialTheme.colorScheme // Access theme colors
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
 
     Box(
         modifier = Modifier
@@ -120,12 +123,31 @@ fun LoginScreen(navController: NavController) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            LoginHeader()
+            // Logo
+            Image(
+                painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                contentDescription = "App Logo",
+                modifier = Modifier.size(80.dp)
+            )
+            
+            Text(
+                text = "Sign In",
+                style = typography.headlineMedium,
+                color = colors.onBackground,
+                fontWeight = FontWeight.Bold
+            )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Text(
+                text = "Welcome back to IngreDiet",
+                style = typography.bodyMedium,
+                color = colors.onBackground.copy(alpha = 0.7f)
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Email TextField
             TextField(
@@ -134,27 +156,20 @@ fun LoginScreen(navController: NavController) {
                 label = {
                     Text(
                         text = "Email",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurface.copy(alpha = 0.7f)
+                        style = typography.bodyMedium
                     )
                 },
-                modifier = Modifier.fillMaxWidth(),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = colors.surface,
-                    unfocusedContainerColor = colors.surface,
-                    focusedTextColor = colors.onSurface,
-                    unfocusedTextColor = colors.onSurface,
-                    focusedLabelColor = colors.primary,
-                    unfocusedLabelColor = colors.onSurface.copy(alpha = 0.7f),
-                    cursorColor = colors.primary,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedIndicatorColor = colors.outline,
                     focusedIndicatorColor = colors.primary,
-                    unfocusedIndicatorColor = colors.onSurface.copy(alpha = 0.2f)
+                    unfocusedLabelColor = colors.onSurfaceVariant,
+                    focusedLabelColor = colors.primary
                 ),
-                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-
-            Spacer(modifier = Modifier.height(16.dp))
 
             // Password TextField
             TextField(
@@ -163,93 +178,90 @@ fun LoginScreen(navController: NavController) {
                 label = {
                     Text(
                         text = "Password",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurface.copy(alpha = 0.7f)
+                        style = typography.bodyMedium
                     )
                 },
-                modifier = Modifier.fillMaxWidth(),
                 visualTransformation = if (passwordVisibility) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     IconButton(onClick = { passwordVisibility = !passwordVisibility }) {
                         Icon(
-                            imageVector = if (passwordVisibility) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = if (passwordVisibility) "Hide password" else "Show password",
-                            tint = colors.onSurface.copy(alpha = 0.7f)
+                            imageVector = if (passwordVisibility) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = if (passwordVisibility) "Hide password" else "Show password"
                         )
                     }
                 },
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = colors.surface,
-                    unfocusedContainerColor = colors.surface,
-                    focusedTextColor = colors.onSurface,
-                    unfocusedTextColor = colors.onSurface,
-                    focusedLabelColor = colors.primary,
-                    unfocusedLabelColor = colors.onSurface.copy(alpha = 0.7f),
-                    cursorColor = colors.primary,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedIndicatorColor = colors.outline,
                     focusedIndicatorColor = colors.primary,
-                    unfocusedIndicatorColor = colors.onSurface.copy(alpha = 0.2f)
+                    unfocusedLabelColor = colors.onSurfaceVariant,
+                    focusedLabelColor = colors.primary
                 ),
-                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
 
             if (errorMessage != null) {
-                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = errorMessage!!,
                     color = colors.error,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
             
             // Forgot Password Button
-            TextButton(
-                onClick = {
-                    if (!isOnline) {
-                        errorMessage = "No internet connection"
-                        errorType = LoginError.NETWORK_ERROR
-                        return@TextButton
-                    }
-                    
-                    if (emailValue.isEmpty()) {
-                        errorMessage = "Please enter your email address"
-                        errorType = LoginError.EMPTY_FIELDS
-                        return@TextButton
-                    }
-                    
-                    coroutineScope.launch {
-                        authState = AuthState.Loading
-                        authManager.resetPassword(emailValue).collect { response ->
-                            when (response) {
-                                is AuthResponse.Success -> {
-                                    Toast.makeText(
-                                        context,
-                                        "Password reset email sent. Please check your inbox.",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                    authState = AuthState.Success
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = {
+                        if (!isOnline) {
+                            errorMessage = "No internet connection"
+                            errorType = LoginError.NETWORK_ERROR
+                            return@TextButton
+                        }
+                        
+                        if (emailValue.isEmpty()) {
+                            errorMessage = "Please enter your email address"
+                            errorType = LoginError.EMPTY_FIELDS
+                            return@TextButton
+                        }
+                        
+                        coroutineScope.launch {
+                            authState = AuthState.Loading
+                            authManager.resetPassword(emailValue).collect { response ->
+                                when (response) {
+                                    is AuthResponse.Success -> {
+                                        Toast.makeText(
+                                            context,
+                                            "Password reset email sent. Please check your inbox.",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        authState = AuthState.Success
+                                    }
+                                    is AuthResponse.Error -> {
+                                        authState = AuthState.Error(response.message)
+                                        errorMessage = response.message
+                                        errorType = LoginError.UNKNOWN_ERROR
+                                    }
+                                    else -> {}
                                 }
-                                is AuthResponse.Error -> {
-                                    authState = AuthState.Error(response.message)
-                                    errorMessage = response.message
-                                    errorType = LoginError.UNKNOWN_ERROR
-                                }
-                                else -> {}
                             }
                         }
-                    }
+                    },
+                    modifier = Modifier.padding(vertical = 0.dp)
+                ) {
+                    Text(
+                        text = "Forgot Password?",
+                        style = typography.bodyMedium,
+                        color = colors.primary
+                    )
                 }
-            ) {
-                Text(
-                    text = "Forgot Password?",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.primary
-                )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Sign In Button
             Button(
@@ -291,34 +303,59 @@ fun LoginScreen(navController: NavController) {
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp),
+                    .height(48.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.primary,
-                    contentColor = colors.onPrimary,
-                    disabledContainerColor = colors.primary.copy(alpha = 0.5f),
-                    disabledContentColor = colors.onPrimary.copy(alpha = 0.5f)
+                    containerColor = colors.primary
                 ),
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(8.dp),
                 enabled = authState != AuthState.Loading
             ) {
                 if (authState == AuthState.Loading) {
                     CircularProgressIndicator(
                         color = colors.onPrimary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 } else {
                     Text(
                         text = "Sign In",
-                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                        style = typography.titleMedium,
                         color = colors.onPrimary
                     )
                 }
             }
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // OR Divider
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Spacer(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(1.dp)
+                        .background(colors.onBackground.copy(alpha = 0.1f))
+                )
+                
+                Text(
+                    text = "  OR  ",
+                    style = typography.bodyMedium,
+                    color = colors.onBackground.copy(alpha = 0.5f)
+                )
+                
+                Spacer(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(1.dp)
+                        .background(colors.onBackground.copy(alpha = 0.1f))
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             // Google Sign In Button
-            GoogleSignInButton(
+            OutlinedButton(
                 onClick = {
                     isGoogleSignInLoading = true
                     coroutineScope.launch {
@@ -342,97 +379,66 @@ fun LoginScreen(navController: NavController) {
                         }
                     }
                 },
-                isLoading = isGoogleSignInLoading
-            )
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                enabled = !isGoogleSignInLoading,
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = colors.surface,
+                    contentColor = colors.onSurface
+                ),
+                border = BorderStroke(1.dp, colors.outline)
+            ) {
+                if (isGoogleSignInLoading) {
+                    CircularProgressIndicator(
+                        color = colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_google),
+                            contentDescription = "Google Logo",
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Continue with Google",
+                            style = typography.titleSmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
             // Sign Up Link
-            TextButton(
-                onClick = { navController.navigate("register") }
-            ) {
-                Text(
-                    text = buildAnnotatedString {
-                        withStyle(
-                            style = SpanStyle(
-                                fontWeight = FontWeight.Normal,
-                                color = colors.onBackground.copy(alpha = 0.7f)
-                            )
-                        ) {
-                            append("Don't have an account? ")
-                        }
-                        withStyle(
-                            style = SpanStyle(
-                                fontWeight = FontWeight.Bold,
-                                color = colors.primary
-                            )
-                        ) {
-                            append("Sign Up")
-                        }
-                    }
-                )
-            }
-        }
-    }
-
-}
-
-@Composable
-private fun LoginHeader() {
-    val textColor = MaterialTheme.colorScheme.onBackground
-
-    Text(
-        text = "Sign In",
-        style = MaterialTheme.typography.titleLarge,
-        color = textColor,
-        fontWeight = FontWeight.Bold
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Text(
-        text = "Welcome back! Sign in to continue",
-        style = MaterialTheme.typography.bodyMedium,
-        color = textColor.copy(alpha = 0.8f)
-    )
-}
-
-@Composable
-fun GoogleSignInButton(
-    onClick: () -> Unit,
-    isLoading: Boolean = false
-) {
-    val buttonColor = MaterialTheme.colorScheme.primary
-    val textColor = MaterialTheme.colorScheme.onPrimary
-
-    OutlinedButton(
-        onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth(),
-        enabled = !isLoading
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                color = textColor,
-                modifier = Modifier.size(24.dp)
-            )
-        } else {
             Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_google),
-                    contentDescription = "Google Logo",
-                    modifier = Modifier.size(24.dp)
-                )
-
-                Spacer(modifier = Modifier.width(10.dp))
-
                 Text(
-                    text = "Continue with Google",
-                    color = textColor,
-                    modifier = Modifier.padding(vertical = 4.dp)
+                    text = "Don't have an account? ",
+                    style = typography.bodyMedium,
+                    color = colors.onBackground.copy(alpha = 0.7f)
                 )
+                TextButton(
+                    onClick = { navController.navigate("register") },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text(
+                        text = "Sign Up",
+                        style = typography.titleSmall,
+                        color = colors.primary
+                    )
+                }
             }
         }
     }
