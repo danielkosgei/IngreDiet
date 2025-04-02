@@ -61,6 +61,39 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.onEach
 
+enum class PasswordStrength {
+    WEAK, MEDIUM, STRONG
+}
+
+// Password strength calculator
+private fun calculatePasswordStrength(password: String): PasswordStrength {
+    if (password.length < 8) {
+        return PasswordStrength.WEAK
+    }
+    
+    var hasUppercase = false
+    var hasLowercase = false
+    var hasDigit = false
+    var hasSpecialChar = false
+    
+    for (char in password) {
+        when {
+            char.isUpperCase() -> hasUppercase = true
+            char.isLowerCase() -> hasLowercase = true
+            char.isDigit() -> hasDigit = true
+            !char.isLetterOrDigit() -> hasSpecialChar = true
+        }
+    }
+    
+    val score = listOf(hasUppercase, hasLowercase, hasDigit, hasSpecialChar).count { it }
+    
+    return when {
+        score <= 2 -> PasswordStrength.WEAK
+        score == 3 -> PasswordStrength.MEDIUM
+        else -> PasswordStrength.STRONG
+    }
+}
+
 @Composable
 fun RegisterScreen(navController: NavController) {
     var emailValue by remember { mutableStateOf("") }
@@ -76,6 +109,9 @@ fun RegisterScreen(navController: NavController) {
     var authState by remember { mutableStateOf<AuthState>(AuthState.Success) }
     var isGoogleSignInLoading by remember { mutableStateOf(false) }
     var isOnline by remember { mutableStateOf(true) }
+    var passwordStrength by remember { mutableStateOf<PasswordStrength?>(null) }
+    // Password match state
+    var passwordsMatch by remember { mutableStateOf<Boolean?>(null) }
 
     LaunchedEffect(emailValue, passwordValue, confirmPasswordValue) {
         errorMessage = null
@@ -159,7 +195,15 @@ fun RegisterScreen(navController: NavController) {
 
             TextField(
                 value = passwordValue,
-                onValueChange = { passwordValue = it },
+                onValueChange = { 
+                    passwordValue = it
+                    // Calculate password strength
+                    passwordStrength = calculatePasswordStrength(it)
+                    // Update password match status if confirm password is not empty
+                    if (confirmPasswordValue.isNotEmpty()) {
+                        passwordsMatch = confirmPasswordValue == it
+                    }
+                },
                 label = {
                     Text(
                         text = "Password",
@@ -186,9 +230,57 @@ fun RegisterScreen(navController: NavController) {
                 singleLine = true
             )
 
+            // Password Strength Indicator
+            if (passwordValue.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Password Strength: ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurface.copy(alpha = 0.7f)
+                    )
+                    
+                    val strengthColor = when (passwordStrength) {
+                        PasswordStrength.WEAK -> Color.Red
+                        PasswordStrength.MEDIUM -> Color(0xFFFFA500) // Orange
+                        PasswordStrength.STRONG -> Color.Green
+                        null -> colors.onSurface.copy(alpha = 0.7f)
+                    }
+                    
+                    val strengthText = when (passwordStrength) {
+                        PasswordStrength.WEAK -> "Weak"
+                        PasswordStrength.MEDIUM -> "Medium"
+                        PasswordStrength.STRONG -> "Strong"
+                        null -> "Unknown"
+                    }
+                    
+                    Text(
+                        text = strengthText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = strengthColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                // Password requirements
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Password should have at least 8 characters, including uppercase, lowercase, numbers and special characters.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurface.copy(alpha = 0.5f)
+                )
+            }
+
             TextField(
                 value = confirmPasswordValue,
-                onValueChange = { confirmPasswordValue = it },
+                onValueChange = { 
+                    confirmPasswordValue = it
+                    // Check if passwords match
+                    passwordsMatch = if (it.isEmpty()) null else it == passwordValue
+                },
                 label = {
                     Text(
                         text = "Confirm Password",
@@ -214,6 +306,34 @@ fun RegisterScreen(navController: NavController) {
                 shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
+
+            // Password match indicator
+            if (confirmPasswordValue.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val matchColor = when(passwordsMatch) {
+                        true -> Color.Green
+                        false -> Color.Red
+                        null -> colors.onSurface.copy(alpha = 0.7f)
+                    }
+                    
+                    val matchText = when(passwordsMatch) {
+                        true -> "Passwords match"
+                        false -> "Passwords do not match"
+                        null -> ""
+                    }
+                    
+                    Text(
+                        text = matchText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = matchColor,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
 
             errorMessage?.let { message ->
                 Text(

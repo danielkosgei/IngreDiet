@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -197,6 +199,53 @@ fun LoginScreen(navController: NavController) {
                     text = errorMessage!!,
                     color = colors.error,
                     style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Forgot Password Button
+            TextButton(
+                onClick = {
+                    if (!isOnline) {
+                        errorMessage = "No internet connection"
+                        errorType = LoginError.NETWORK_ERROR
+                        return@TextButton
+                    }
+                    
+                    if (emailValue.isEmpty()) {
+                        errorMessage = "Please enter your email address"
+                        errorType = LoginError.EMPTY_FIELDS
+                        return@TextButton
+                    }
+                    
+                    coroutineScope.launch {
+                        authState = AuthState.Loading
+                        authManager.resetPassword(emailValue).collect { response ->
+                            when (response) {
+                                is AuthResponse.Success -> {
+                                    Toast.makeText(
+                                        context,
+                                        "Password reset email sent. Please check your inbox.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    authState = AuthState.Success
+                                }
+                                is AuthResponse.Error -> {
+                                    authState = AuthState.Error(response.message)
+                                    errorMessage = response.message
+                                    errorType = LoginError.UNKNOWN_ERROR
+                                }
+                                else -> {}
+                            }
+                        }
+                    }
+                }
+            ) {
+                Text(
+                    text = "Forgot Password?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.primary
                 )
             }
 

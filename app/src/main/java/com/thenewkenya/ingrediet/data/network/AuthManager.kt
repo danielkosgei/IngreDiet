@@ -64,8 +64,10 @@ class AuthManager(private val context: Context) {
             val errorMessage = when {
                 e.message?.contains("User already registered") == true -> "Email already registered"
                 e.message?.contains("network") == true -> "Network error. Please check your connection"
-                e.message?.contains("password") == true -> "Password is too weak"
-                e.message?.contains("email") == true -> "Invalid email format"
+                e.message?.contains("Invalid email") == true -> "Invalid email format"
+                e.message?.contains("password") == true || passwordValue.length < 6 -> 
+                    "Password is too weak. It should be at least 6 characters long."
+                e.message?.contains("rate") == true -> "Too many attempts. Please try again later."
                 else -> e.localizedMessage ?: "An unknown error occurred"
             }
             emit(AuthResponse.Error(errorMessage))
@@ -90,6 +92,10 @@ class AuthManager(private val context: Context) {
             val errorMessage = when {
                 e.message?.contains("Invalid login credentials") == true -> "Invalid email or password"
                 e.message?.contains("network") == true -> "Network error. Please check your connection"
+                e.message?.contains("Invalid email") == true -> "Invalid email format"
+                e.message?.contains("rate") == true -> "Too many attempts. Please try again later."
+                e.message?.contains("User is disabled") == true -> "This account has been disabled. Please contact support."
+                e.message?.contains("email is not confirmed") == true -> "Please confirm your email address before signing in."
                 else -> e.localizedMessage ?: "An unknown error occurred"
             }
             emit(AuthResponse.Error(errorMessage))
@@ -223,6 +229,27 @@ class AuthManager(private val context: Context) {
             emit(AuthResponse.Success)
         } catch (e: Exception) {
             emit(AuthResponse.Error(e.localizedMessage))
+        }
+    }
+
+    // Add reset password functionality
+    fun resetPassword(email: String): Flow<AuthResponse> = flow {
+        try {
+            emit(AuthResponse.Loading)
+            
+            // Send password reset email
+            supabase.auth.resetPasswordForEmail(email)
+            
+            emit(AuthResponse.Success)
+        } catch (e: Exception) {
+            Log.e("AuthManager", "Password reset error", e)
+            val errorMessage = when {
+                e.message?.contains("network") == true -> "Network error. Please check your connection"
+                e.message?.contains("email") == true -> "Invalid email format"
+                e.message?.contains("not found") == true -> "Email not found"
+                else -> e.localizedMessage ?: "An unknown error occurred"
+            }
+            emit(AuthResponse.Error(errorMessage))
         }
     }
 }
