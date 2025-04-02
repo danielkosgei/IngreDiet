@@ -295,7 +295,7 @@ fun ProfileScreen(navController: NavController) {
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(24.dp)
+                                .padding(vertical = 32.dp)
                         ) {
                             // Profile Image
                             Surface(
@@ -318,7 +318,6 @@ fun ProfileScreen(navController: NavController) {
                                             model = ImageRequest.Builder(LocalContext.current)
                                                 .data(profileImageUrl)
                                                 .crossfade(true)
-                                                .size(coil3.size.Size.ORIGINAL)
                                                 .build(),
                                             contentDescription = "Profile picture",
                                             contentScale = ContentScale.Crop,
@@ -355,7 +354,7 @@ fun ProfileScreen(navController: NavController) {
                                 }
                             }
                             
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(20.dp))
                             
                             // User name display below image
                             if (!isEditMode) {
@@ -367,6 +366,8 @@ fun ProfileScreen(navController: NavController) {
                                     textAlign = TextAlign.Center
                                 )
                                 
+                                Spacer(modifier = Modifier.height(4.dp))
+                                
                                 Text(
                                     text = currentProfile.email,
                                     style = typography.bodyMedium,
@@ -376,7 +377,13 @@ fun ProfileScreen(navController: NavController) {
                             }
                         }
                         
-                        HorizontalDivider(thickness = 1.dp, color = colors.outlineVariant)
+                        HorizontalDivider(
+                            thickness = 1.dp, 
+                            color = colors.outlineVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
                         
                         if (isEditMode) {
                             // Edit Mode: Show editable fields
@@ -498,7 +505,9 @@ fun ProfileScreen(navController: NavController) {
                         } else {
                             // Normal Mode: Show clickable sections
                             Column(
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp)
                             ) {
                                 // Edit Profile Section (dedicated section for editing profile details)
                                 NavigationSection(
@@ -508,7 +517,7 @@ fun ProfileScreen(navController: NavController) {
                                         isEditMode = true 
                                     }
                                 ) {
-                                    Column(modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 8.dp)) {
+                                    Column(modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 12.dp)) {
                                         // Preview of dietary preferences
                                         if (currentProfile.dietaryPreferences.isNotEmpty()) {
                                             InfoItem(
@@ -603,10 +612,15 @@ fun NavigationSection(
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
     
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
                 .clickable(onClick = onClick),
             color = Color.Transparent
         ) {
@@ -616,12 +630,23 @@ fun NavigationSection(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = colors.primary,
-                    modifier = Modifier.size(24.dp)
-                )
+                Surface(
+                    modifier = Modifier.size(40.dp),
+                    shape = CircleShape,
+                    color = colors.primary.copy(alpha = 0.1f)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
                 
                 Spacer(modifier = Modifier.width(16.dp))
                 
@@ -645,7 +670,7 @@ fun NavigationSection(
         content?.invoke()
         
         HorizontalDivider(
-            color = colors.outlineVariant,
+            color = colors.outlineVariant.copy(alpha = 0.5f),
             thickness = 0.5.dp,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
@@ -663,13 +688,15 @@ fun InfoItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 6.dp)
     ) {
         Text(
             text = label,
             style = typography.bodySmall,
             color = colors.onSurfaceVariant
         )
+        
+        Spacer(modifier = Modifier.height(2.dp))
         
         Text(
             text = value,
