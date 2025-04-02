@@ -35,11 +35,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.RestaurantMenu
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.CircularProgressIndicator
@@ -249,7 +251,7 @@ fun AppNavigation() {
         val currentRoute = currentRoute(navController)
         
         // Check if current route is a main route that should show the bottom nav
-        val mainRoutes = listOf("home", "mealplanner", "create", "shopping", "favorites")
+        val mainRoutes = listOf("home", "mealplanner", "create", "shopping", "profile")
         isMainRoute.value = mainRoutes.contains(currentRoute)
         
         // Selected nav item based on current route
@@ -258,7 +260,7 @@ fun AppNavigation() {
             "mealplanner" -> 1
             "create" -> 2
             "shopping" -> 3
-            "favorites" -> 4
+            "profile" -> 4
             else -> 0
         }
         
@@ -322,7 +324,7 @@ fun MainBottomNavigation(navController: NavController, selectedIndex: Int) {
         Triple(Icons.Filled.RestaurantMenu, Icons.Outlined.RestaurantMenu, "Meal Planner"),
         Triple(Icons.Filled.Add, Icons.Outlined.Add, "Create"),
         Triple(Icons.Filled.ShoppingCart, Icons.Outlined.ShoppingCart, "Shopping"),
-        Triple(Icons.Filled.Favorite, Icons.Outlined.Favorite, "Favorites")
+        Triple(Icons.Filled.Person, Icons.Outlined.Person, "Profile")
     )
     
     Box(
@@ -379,7 +381,7 @@ fun MainBottomNavigation(navController: NavController, selectedIndex: Int) {
                             3 -> navController.navigate("shopping") {
                                 popUpTo("home")
                             }
-                            4 -> navController.navigate("favorites") {
+                            4 -> navController.navigate("profile") {
                                 popUpTo("home")
                             }
                         }
