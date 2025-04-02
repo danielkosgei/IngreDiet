@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material.icons.filled.Camera
@@ -32,11 +33,22 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Cake
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Help
 import androidx.compose.material.icons.outlined.LocalDining
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.automirrored.outlined.Help
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.ManageAccounts
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Report
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -449,31 +461,79 @@ fun ProfileScreen(navController: NavController) {
                             )
                         }
                         
+                        // Settings Section
+                        ProfileSection(
+                            title = "Settings",
+                            icon = Icons.Outlined.Settings
+                        ) {
+                            ProfileActionItem(
+                                title = "Notifications",
+                                subtitle = "Manage your notification preferences",
+                                icon = Icons.Outlined.Notifications,
+                                onClick = { /* Navigate to notification settings */ }
+                            )
+                            
+                            ProfileActionItem(
+                                title = "Privacy & Security",
+                                subtitle = "Control your privacy settings",
+                                icon = Icons.Outlined.Security,
+                                onClick = { /* Navigate to privacy settings */ }
+                            )
+                            
+                            ProfileActionItem(
+                                title = "App Preferences",
+                                subtitle = "Customize app behavior",
+                                icon = Icons.Outlined.Tune,
+                                onClick = { /* Navigate to app preferences */ }
+                            )
+                        }
+                        
+                        // Support Section
+                        ProfileSection(
+                            title = "Support",
+                            icon = Icons.AutoMirrored.Outlined.Help
+                        ) {
+                            ProfileActionItem(
+                                title = "Help Center",
+                                subtitle = "Get help with using the app",
+                                icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                                onClick = { /* Navigate to help center */ }
+                            )
+                            
+                            ProfileActionItem(
+                                title = "Report a Problem",
+                                subtitle = "Let us know if something isn't working",
+                                icon = Icons.Outlined.Report,
+                                onClick = { /* Navigate to problem reporting */ }
+                            )
+                            
+                            ProfileActionItem(
+                                title = "About IngreDiet",
+                                subtitle = "Version 1.0.0",
+                                icon = Icons.Outlined.Info,
+                                onClick = { /* Navigate to about screen */ }
+                            )
+                        }
+                        
                         Spacer(modifier = Modifier.height(32.dp))
                         
-                        Button(
-                            onClick = { showSignOutConfirmation = true },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = colors.surfaceVariant,
-                                contentColor = colors.error
-                            ),
-                            modifier = Modifier.fillMaxWidth()
+                        // Account Actions Section
+                        ProfileSection(
+                            title = "Account",
+                            icon = Icons.Outlined.ManageAccounts
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Logout,
-                                    contentDescription = "Sign Out"
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Sign Out",
-                                    style = typography.titleMedium
-                                )
-                            }
+                            ProfileDangerItem(
+                                title = "Sign Out",
+                                icon = Icons.AutoMirrored.Filled.Logout,
+                                onClick = { showSignOutConfirmation = true }
+                            )
+                            
+                            ProfileDangerItem(
+                                title = "Delete Account",
+                                icon = Icons.Outlined.Delete,
+                                onClick = { /* Show delete account confirmation */ },
+                                isDangerous = true
+                            )
                         }
                         
                         Spacer(modifier = Modifier.height(24.dp))
@@ -630,5 +690,90 @@ fun ProfileTextField(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun ProfileActionItem(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = colors.onSurfaceVariant,
+            modifier = Modifier.size(24.dp)
+        )
+        
+        Spacer(modifier = Modifier.width(16.dp))
+        
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = typography.bodyLarge,
+                color = colors.onSurface
+            )
+            
+            Text(
+                text = subtitle,
+                style = typography.bodySmall,
+                color = colors.onSurfaceVariant
+            )
+        }
+        
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = colors.onSurfaceVariant,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+@Composable
+fun ProfileDangerItem(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    isDangerous: Boolean = false
+) {
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    
+    val textColor = if (isDangerous) colors.error else colors.error.copy(alpha = 0.8f)
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = textColor,
+            modifier = Modifier.size(24.dp)
+        )
+        
+        Spacer(modifier = Modifier.width(16.dp))
+        
+        Text(
+            text = title,
+            style = typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+            color = textColor
+        )
     }
 }
