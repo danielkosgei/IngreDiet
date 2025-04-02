@@ -32,11 +32,21 @@ class FavoritesViewModel(context: Context) : ViewModel() {
             try {
                 _isLoading.value = true
                 _error.value = null
-                _favorites.value = repository.getFavoriteRecipes()
+                repository.getFavoriteRecipes().collect { result ->
+                    result.fold(
+                        onSuccess = { recipes ->
+                            _favorites.value = recipes
+                        },
+                        onFailure = { e ->
+                            _error.value = e.message
+                            _favorites.value = emptyList()
+                        }
+                    )
+                    _isLoading.value = false
+                }
             } catch (e: Exception) {
                 _error.value = e.message
                 _favorites.value = emptyList()
-            } finally {
                 _isLoading.value = false
             }
         }

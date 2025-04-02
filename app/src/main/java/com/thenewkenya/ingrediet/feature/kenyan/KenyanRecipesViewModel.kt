@@ -5,13 +5,53 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thenewkenya.ingrediet.IngreDietApplication
-import com.thenewkenya.ingrediet.data.model.KenyanRecipe
+import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+
+/**
+ * KenyanRecipe model for the UI
+ */
+data class KenyanRecipe(
+    val id: String,
+    val name: String,
+    val description: String,
+    val imageUrl: String,
+    val preparationTime: Int,
+    val cookingTime: Int,
+    val servings: Int = 4,
+    val difficulty: String = "Medium",
+    val region: String,
+    val tags: List<String> = emptyList(),
+    val ingredients: List<String> = emptyList(),
+    val instructions: List<String> = emptyList()
+) {
+    companion object {
+        fun fromDetailedRecipe(recipe: DetailedRecipe): KenyanRecipe {
+            // Extract region from tags or default to "Central"
+            val region = recipe.tags.find { it != "Kenyan" && it != recipe.category } ?: "Central"
+            
+            return KenyanRecipe(
+                id = recipe.id,
+                name = recipe.name,
+                description = recipe.description,
+                imageUrl = recipe.imageUrl,
+                preparationTime = recipe.preparationTime,
+                cookingTime = recipe.cookingTime,
+                servings = recipe.servings,
+                difficulty = recipe.difficulty,
+                region = region,
+                tags = recipe.tags,
+                ingredients = recipe.ingredients.map { "${it.name} ${it.quantity} ${it.unit}".trim() },
+                instructions = recipe.instructions
+            )
+        }
+    }
+}
 
 /**
  * ViewModel for Kenyan recipes
@@ -78,7 +118,7 @@ class KenyanRecipesViewModel(
                 .collect { result ->
                     result.fold(
                         onSuccess = { recipes ->
-                            _kenyanRecipes.value = recipes
+                            _kenyanRecipes.value = recipes.map { KenyanRecipe.fromDetailedRecipe(it) }
                             _isLoading.value = false
                         },
                         onFailure = { e ->
@@ -115,7 +155,7 @@ class KenyanRecipesViewModel(
                 .collect { result ->
                     result.fold(
                         onSuccess = { recipes ->
-                            _kenyanRecipes.value = recipes
+                            _kenyanRecipes.value = recipes.map { KenyanRecipe.fromDetailedRecipe(it) }
                             _isLoading.value = false
                         },
                         onFailure = { e ->
@@ -157,7 +197,7 @@ class KenyanRecipesViewModel(
                 .collect { result ->
                     result.fold(
                         onSuccess = { recipes ->
-                            _kenyanRecipes.value = recipes
+                            _kenyanRecipes.value = recipes.map { KenyanRecipe.fromDetailedRecipe(it) }
                             _isLoading.value = false
                         },
                         onFailure = { e ->
@@ -187,7 +227,7 @@ class KenyanRecipesViewModel(
                 .collect { result ->
                     result.fold(
                         onSuccess = { recipe ->
-                            _selectedRecipe.value = recipe
+                            _selectedRecipe.value = KenyanRecipe.fromDetailedRecipe(recipe)
                             _isLoading.value = false
                         },
                         onFailure = { e ->

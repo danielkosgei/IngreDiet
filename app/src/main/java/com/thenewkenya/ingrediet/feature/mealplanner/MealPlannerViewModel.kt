@@ -309,10 +309,9 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                     try {
                         val days = DayOfWeek.values().toList()
                         val result = repository.generateMealPlan(
-                            calorieTarget = calorieTarget,
-                            dietType = dietType,
-                            days = days,
-                            allergies = allergies
+                            calories = calorieTarget,
+                            days = days.size,
+                            preferences = listOf(dietType) + allergies
                         ).first()
                         
                         if (result.isSuccess) {
@@ -333,16 +332,26 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                     // Convert to our UI state model
                     val mealItems = mutableListOf<MealPlanItem>()
                     
-                    mealPlan.forEach { (day, meals) ->
+                    mealPlan.forEach { (dayStr, meals) ->
+                        val day = try {
+                            // Parse day string like "Day 1" to a DayOfWeek
+                            val dayNum = dayStr.substringAfter("Day ").toIntOrNull() ?: 1
+                            // Map day numbers to DayOfWeek values (1 = Monday, etc.)
+                            DayOfWeek.of((dayNum - 1) % 7 + 1)
+                        } catch (e: Exception) {
+                            // Default to Monday if parsing fails
+                            DayOfWeek.MONDAY
+                        }
+                        
                         meals.forEach { meal ->
                             mealItems.add(
                                 MealPlanItem(
                                     id = meal.id,
-                                    name = meal.description,
+                                    name = meal.name,
                                     day = day,
-                                    time = getMealTimeFromString(meal.time),
-                                    calories = meal.calories,
-                                    recipeId = meal.recipeId,
+                                    time = getMealTimeFromString("Breakfast"), // Assign default meal time
+                                    calories = meal.nutritionFacts.calories,
+                                    recipeId = meal.id,
                                     imageUrl = meal.imageUrl
                                 )
                             )
@@ -1159,10 +1168,9 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                         val allDays = DayOfWeek.values().toList()
                         
                         repository.generateMealPlan(
-                            calorieTarget = calorieTarget,
-                            dietType = dietType,
-                            days = allDays,
-                            allergies = allergies
+                            calories = calorieTarget,
+                            days = allDays.size,
+                            preferences = listOf(dietType) + allergies
                         ).collect { repoResult ->
                             repoResult.onSuccess { mealPlanFromRepo ->
                                 _generationProgress.value = 0.6f
@@ -1173,18 +1181,28 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                                 
                                 // Transform repository meal plan data to our UI model
                                 result.clear()
-                                mealPlanFromRepo.forEach { (day, meals) ->
+                                mealPlanFromRepo.forEach { (dayStr, meals) ->
+                                    val day = try {
+                                        // Parse day string like "Day 1" to a DayOfWeek
+                                        val dayNum = dayStr.substringAfter("Day ").toIntOrNull() ?: 1
+                                        // Map day numbers to DayOfWeek values (1 = Monday, etc.)
+                                        DayOfWeek.of((dayNum - 1) % 7 + 1)
+                                    } catch (e: Exception) {
+                                        // Default to Monday if parsing fails
+                                        DayOfWeek.MONDAY
+                                    }
+                                    
                                     // Filter for unique meals that haven't been used yet
                                     val uniqueMeals = meals.filter { meal -> 
-                                        meal.recipeId == null || !usedRecipeIds.contains(meal.recipeId)
+                                        meal.id == null || !usedRecipeIds.contains(meal.id)
                                     }
                                     
                                     // If we have unique meals for this day, use them
                                     if (uniqueMeals.isNotEmpty()) {
                                         // Track recipe IDs so we don't reuse them
                                         uniqueMeals.forEach { meal ->
-                                            if (meal.recipeId != null) {
-                                                usedRecipeIds.add(meal.recipeId)
+                                            if (meal.id != null) {
+                                                usedRecipeIds.add(meal.id)
                                             }
                                         }
                                         
@@ -1192,11 +1210,11 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                                             MealPlanItem(
                                                 id = meal.id,
                                                 name = meal.name,
-                                                calories = meal.calories,
+                                                calories = meal.nutritionFacts.calories,
                                                 day = day,
-                                                time = getMealTimeFromString(meal.time),
+                                                time = getMealTimeFromString("Breakfast"), // Default meal time
                                                 description = meal.description,
-                                                recipeId = meal.recipeId,
+                                                recipeId = meal.id,
                                                 imageUrl = meal.imageUrl ?: getDefaultMealImage(meal.name)
                                             )
                                         }

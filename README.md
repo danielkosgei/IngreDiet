@@ -105,6 +105,49 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For questions or feedback about IngreDiet, please contact [danieltogey@proton.me](mailto:danieltogey@proton.me)
 
+## Database Setup
+
+IngreDiet uses Supabase as its backend database. To ensure the application works properly with the database, follow these steps:
+
+1. Make sure you have the correct Supabase credentials in your `apikeys.properties` file:
+   ```
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
+
+2. Run the database migrations to create all required tables:
+   - Navigate to the `supabase` directory
+   - Run `supabase db reset` or manually apply the migrations in `supabase/migrations/`
+   - The migrations will create all required tables and relationships
+
+3. If you encounter "relation does not exist" errors, manually apply the SQL from `supabase/migrations/fix_database_schema.sql`
+
+## Database Schema
+
+IngreDiet uses the following main tables:
+
+1. **recipes**: Main recipes table with UUIDs as primary keys
+2. **kenyan_recipes**: Specialized table for Kenyan recipes with more regional information
+3. **ingredients**: Ingredients table with nutrition data
+4. **recipe_ingredients**: Junction table linking recipes and ingredients
+5. **recipe_instructions**: Table storing recipe instructions in steps
+6. **recipe_nutrition**: Table for detailed nutrition information
+7. **shopping_items**: User shopping lists
+8. **user_favorites**: User favorite recipes
+9. **user_meal_plans**: User meal planning data
+10. **profiles**: User profile information
+
+## Error Handling
+
+The application includes built-in error handling for common database issues:
+
+- Missing tables (returns empty results or appropriate defaults)
+- Authentication failures (user-friendly error messages)
+- Network connectivity issues
+- Query errors
+
+These are handled through the `DatabaseErrorHandler` utility class.
+
 ---
 
 *IngreDiet: Your meal planning companion.*

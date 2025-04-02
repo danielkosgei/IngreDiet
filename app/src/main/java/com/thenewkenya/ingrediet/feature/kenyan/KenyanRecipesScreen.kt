@@ -57,7 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import com.thenewkenya.ingrediet.data.model.KenyanRecipe
+import com.thenewkenya.ingrediet.feature.kenyan.KenyanRecipe
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)

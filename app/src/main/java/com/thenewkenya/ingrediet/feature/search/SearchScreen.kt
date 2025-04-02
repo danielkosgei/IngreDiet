@@ -14,17 +14,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.thenewkenya.ingrediet.data.model.Recipe
+import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.feature.components.RecipeCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
-    navController: NavController,
-    viewModel: SearchViewModel = viewModel(
-        factory = SearchViewModelFactory(LocalContext.current)
-    )
+    navController: NavController
 ) {
+    val context = LocalContext.current
+    val viewModel = remember { SearchViewModel(context) }
+    
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -100,16 +100,29 @@ fun SearchScreen(
             }
             // Search results
             else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(searchResults) { recipe ->
-                        RecipeCard(
-                            recipe = recipe,
-                            onClick = { navController.navigate("recipe/${recipe.id}") }
+                if (searchResults.isEmpty() && searchQuery.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No recipes found for '$searchQuery'",
+                            style = typography.bodyLarge,
+                            color = colors.onSurface.copy(alpha = 0.7f)
                         )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        items(searchResults) { recipe ->
+                            RecipeCard(
+                                recipe = recipe.toRecipe(),
+                                onClick = { navController.navigate("recipe/${recipe.id}") }
+                            )
+                        }
                     }
                 }
             }

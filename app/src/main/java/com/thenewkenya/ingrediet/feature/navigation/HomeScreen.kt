@@ -348,7 +348,7 @@ fun HomeScreenContent(navController: NavController) {
                                 isLoading = false
                                 result.fold(
                                     onSuccess = { recipesList -> 
-                                        recipes = recipesList.sortedByDescending { it.rating }
+                                        recipes = recipesList
                                         // Update filtered suggestions based on loaded recipes
                                         filterSuggestions(searchQuery, recipes)
                                         Log.d("HomeScreen", "Loaded ${recipes.size} recipes")
@@ -1074,7 +1074,7 @@ fun RecipeCard(recipe: RecipeRepository.RecipeListItem, navController: NavContro
                     
                     // Quick info in a compact format
                     Text(
-                        text = recipe.time,
+                        text = recipe.time.toString(),
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.onSurfaceVariant.copy(alpha = 0.7f)
                     )

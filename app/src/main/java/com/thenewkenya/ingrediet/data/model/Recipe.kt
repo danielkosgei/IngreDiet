@@ -1,6 +1,7 @@
 package com.thenewkenya.ingrediet.data.model
 
 import kotlinx.serialization.Serializable
+import java.util.UUID
 
 @Serializable
 data class DetailedRecipe(
@@ -139,6 +140,67 @@ data class Recipe(
             dateAdded = this.dateAdded,
             cuisineType = this.cuisineType,
             dietaryInfo = this.dietaryInfo
+        )
+    }
+}
+
+@Serializable
+data class RecipeDto(
+    val id: String = "",
+    val name: String = "",
+    val description: String = "",
+    val image_url: String = "",
+    val category: String = "",
+    val ingredients: Map<String, String> = emptyMap(),
+    val instructions: String = "",
+    val preparation_time: Int? = null,
+    val cooking_time: Int? = null,
+    val servings: Int? = null,
+    val difficulty: String? = null,
+    val tags: List<String>? = null
+) {
+    fun toDetailedRecipe(): DetailedRecipe {
+        // Parse ingredients
+        val parsedIngredients = ingredients.map { (name, quantityStr) ->
+            val parts = quantityStr.split(" ", limit = 2)
+            val quantity = parts.firstOrNull()?.toFloatOrNull() ?: 1f
+            val unit = if (parts.size > 1) parts[1] else ""
+            
+            IngredientItem(
+                id = UUID.randomUUID().toString(),
+                name = name,
+                quantity = quantity,
+                unit = unit
+            )
+        }
+        
+        // Parse instructions
+        val parsedInstructions = instructions
+            .split(Regex("\\d+\\.\\s+"))
+            .filter { it.isNotBlank() }
+        
+        // Create a basic nutrition facts object
+        val nutritionFacts = NutritionFacts(
+            calories = 0, 
+            protein = 0f,
+            carbs = 0f,
+            fat = 0f
+        )
+        
+        return DetailedRecipe(
+            id = id,
+            name = name,
+            description = description,
+            imageUrl = image_url,
+            preparationTime = preparation_time ?: 15,
+            cookingTime = cooking_time ?: 30,
+            servings = servings ?: 4,
+            difficulty = difficulty ?: "Medium",
+            ingredients = parsedIngredients,
+            instructions = parsedInstructions,
+            nutritionFacts = nutritionFacts,
+            tags = tags ?: listOf(category),
+            category = category
         )
     }
 }

@@ -56,7 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import com.thenewkenya.ingrediet.data.model.KenyanRecipe
+import com.thenewkenya.ingrediet.feature.kenyan.KenyanRecipe
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -302,17 +302,16 @@ fun RecipeDetailContent(recipe: KenyanRecipe) {
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.onSecondaryContainer)
-                    )
+                    Surface(
+                        modifier = Modifier.size(8.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondary
+                    ){}
                     
                     Spacer(modifier = Modifier.size(16.dp))
                     
                     Text(
-                        text = "${ingredient.quantity} ${ingredient.unit} ${ingredient.name}",
+                        text = ingredient,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

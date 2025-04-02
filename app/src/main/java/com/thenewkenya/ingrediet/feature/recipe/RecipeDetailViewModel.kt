@@ -126,7 +126,7 @@ class RecipeDetailViewModel(
     fun toggleFavorite() {
         _recipe.value?.let { currentRecipe ->
             viewModelScope.launch {
-                recipeRepository.toggleFavorite(currentRecipe.id, !currentRecipe.isFavorite)
+                recipeRepository.toggleFavorite(currentRecipe.id)
                     .collect { result ->
                         result.fold(
                             onSuccess = { success ->
