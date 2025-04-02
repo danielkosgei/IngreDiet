@@ -44,7 +44,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
@@ -63,6 +62,7 @@ import io.github.jan.supabase.auth.exception.AuthErrorCode
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.onEach
+import androidx.compose.ui.graphics.ColorFilter
 
 enum class PasswordStrength {
     WEAK, MEDIUM, STRONG
@@ -156,7 +156,8 @@ fun RegisterScreen(navController: NavController) {
             Image(
                 painter = painterResource(id = R.drawable.ic_launcher_foreground),
                 contentDescription = "App Logo",
-                modifier = Modifier.size(80.dp)
+                modifier = Modifier.size(80.dp),
+                colorFilter = ColorFilter.tint(colors.onSurface.copy(alpha = 0.8f))
             )
 
             Text(
@@ -184,8 +185,8 @@ fun RegisterScreen(navController: NavController) {
                     )
                 },
                 colors = TextFieldDefaults.colors(
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = colors.background,
+                    focusedContainerColor = colors.background,
                     unfocusedIndicatorColor = colors.outline,
                     focusedIndicatorColor = colors.primary,
                     unfocusedLabelColor = colors.onSurfaceVariant,
@@ -222,8 +223,8 @@ fun RegisterScreen(navController: NavController) {
                     }
                 },
                 colors = TextFieldDefaults.colors(
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = colors.background,
+                    focusedContainerColor = colors.background,
                     unfocusedIndicatorColor = colors.outline,
                     focusedIndicatorColor = colors.primary,
                     unfocusedLabelColor = colors.onSurfaceVariant,
@@ -246,9 +247,9 @@ fun RegisterScreen(navController: NavController) {
                     )
                     
                     val strengthColor = when (passwordStrength) {
-                        PasswordStrength.WEAK -> Color.Red
-                        PasswordStrength.MEDIUM -> Color(0xFFFFA500) // Orange
-                        PasswordStrength.STRONG -> Color.Green
+                        PasswordStrength.WEAK -> colors.error
+                        PasswordStrength.MEDIUM -> colors.tertiary
+                        PasswordStrength.STRONG -> colors.primary
                         null -> colors.onSurface.copy(alpha = 0.7f)
                     }
                     
@@ -298,8 +299,8 @@ fun RegisterScreen(navController: NavController) {
                     }
                 },
                 colors = TextFieldDefaults.colors(
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = colors.background,
+                    focusedContainerColor = colors.background,
                     unfocusedIndicatorColor = colors.outline,
                     focusedIndicatorColor = colors.primary,
                     unfocusedLabelColor = colors.onSurfaceVariant,
@@ -316,8 +317,8 @@ fun RegisterScreen(navController: NavController) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val matchColor = when(passwordsMatch) {
-                        true -> Color.Green
-                        false -> Color.Red
+                        true -> colors.primary
+                        false -> colors.error
                         null -> colors.onSurface.copy(alpha = 0.7f)
                     }
                     
