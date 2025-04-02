@@ -376,8 +376,8 @@ fun ProfileScreen(navController: NavController) {
                         
                         HorizontalDivider(thickness = 1.dp, color = colors.outlineVariant)
                         
-                        // Personal Information Section (editable in place)
                         if (isEditMode) {
+                            // Edit Mode: Show editable fields
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -393,17 +393,17 @@ fun ProfileScreen(navController: NavController) {
                                 
                                 ProfileTextField(
                                     label = "First Name",
-                                    value = if (isEditMode) editableProfile?.firstName ?: "" else currentProfile.firstName,
+                                    value = editableProfile?.firstName ?: "",
                                     onValueChange = { editableProfile = editableProfile?.copy(firstName = it) },
-                                    isEditable = isEditMode,
+                                    isEditable = true,
                                     leadingIcon = null
                                 )
                                 
                                 ProfileTextField(
                                     label = "Last Name",
-                                    value = if (isEditMode) editableProfile?.lastName ?: "" else currentProfile.lastName,
+                                    value = editableProfile?.lastName ?: "",
                                     onValueChange = { editableProfile = editableProfile?.copy(lastName = it) },
-                                    isEditable = isEditMode,
+                                    isEditable = true,
                                     leadingIcon = null
                                 )
                                 
@@ -416,36 +416,28 @@ fun ProfileScreen(navController: NavController) {
                                     color = colors.onBackground
                                 )
                                 
-                                val preferencesValue = currentProfile.dietaryPreferences.joinToString(", ")
                                 ProfileTextField(
                                     label = "Dietary Preferences",
-                                    value = if (isEditMode) 
-                                        editableProfile?.dietaryPreferences?.joinToString(", ") ?: "" 
-                                    else 
-                                        preferencesValue,
+                                    value = editableProfile?.dietaryPreferences?.joinToString(", ") ?: "",
                                     onValueChange = { 
                                         val preferences = it.split(",").map { pref -> pref.trim() }.filter { pref -> pref.isNotEmpty() }
                                         editableProfile = editableProfile?.copy(dietaryPreferences = preferences)
                                     },
-                                    isEditable = isEditMode,
+                                    isEditable = true,
                                     leadingIcon = Icons.Outlined.LocalDining,
-                                    helperText = if (isEditMode) "Separate multiple preferences with commas" else null
+                                    helperText = "Separate multiple preferences with commas"
                                 )
                                 
-                                val allergiesValue = currentProfile.allergies.joinToString(", ")
                                 ProfileTextField(
                                     label = "Allergies",
-                                    value = if (isEditMode) 
-                                        editableProfile?.allergies?.joinToString(", ") ?: "" 
-                                    else 
-                                        allergiesValue,
+                                    value = editableProfile?.allergies?.joinToString(", ") ?: "",
                                     onValueChange = { 
                                         val allergies = it.split(",").map { allergy -> allergy.trim() }.filter { allergy -> allergy.isNotEmpty() }
                                         editableProfile = editableProfile?.copy(allergies = allergies)
                                     },
-                                    isEditable = isEditMode,
+                                    isEditable = true,
                                     leadingIcon = null,
-                                    helperText = if (isEditMode) "Separate multiple allergies with commas" else null
+                                    helperText = "Separate multiple allergies with commas"
                                 )
                                 
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -459,87 +451,109 @@ fun ProfileScreen(navController: NavController) {
                                 
                                 ProfileTextField(
                                     label = "Weight Goal",
-                                    value = if (isEditMode) editableProfile?.weightGoal ?: "" else currentProfile.weightGoal,
+                                    value = editableProfile?.weightGoal ?: "",
                                     onValueChange = { editableProfile = editableProfile?.copy(weightGoal = it) },
-                                    isEditable = isEditMode,
+                                    isEditable = true,
                                     leadingIcon = null
                                 )
                                 
                                 ProfileTextField(
                                     label = "Daily Calorie Target",
-                                    value = if (isEditMode) 
-                                        (editableProfile?.calorieTarget ?: 0).toString() 
-                                    else 
-                                        if (currentProfile.calorieTarget > 0) 
-                                            currentProfile.calorieTarget.toString() 
-                                        else 
-                                            "",
+                                    value = (editableProfile?.calorieTarget ?: 0).toString(),
                                     onValueChange = { 
                                         val calories = it.toIntOrNull() ?: 0
                                         editableProfile = editableProfile?.copy(calorieTarget = calories)
                                     },
-                                    isEditable = isEditMode,
+                                    isEditable = true,
                                     leadingIcon = null,
                                     keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
                                 )
+                                
+                                Spacer(modifier = Modifier.height(16.dp))
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    TextButton(
+                                        onClick = { isEditMode = false }
+                                    ) {
+                                        Text("Cancel")
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    
+                                    Button(
+                                        onClick = {
+                                            editableProfile?.let { viewModel.updateProfile(it) }
+                                            isEditMode = false
+                                        }
+                                    ) {
+                                        Text("Save")
+                                    }
+                                }
                             }
                         } else {
-                            // Clickable sections for navigation when not in edit mode
+                            // Normal Mode: Show clickable sections
                             Column(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                // Personal Information Section
+                                // Personal Information Section (visible but not directly editable)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = "Personal Information",
+                                        style = typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = colors.onBackground,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                    
+                                    InfoItem(label = "Name", value = "${currentProfile.firstName} ${currentProfile.lastName}")
+                                    InfoItem(label = "Email", value = currentProfile.email)
+                                    
+                                    HorizontalDivider(
+                                        color = colors.outlineVariant,
+                                        thickness = 0.5.dp,
+                                        modifier = Modifier.padding(top = 16.dp)
+                                    )
+                                }
+                                
+                                // Edit Profile Section (dedicated section for editing profile details)
                                 NavigationSection(
-                                    title = "Personal Information",
-                                    icon = Icons.Outlined.Person,
-                                    onClick = { navController.navigate("profile/personal") }
+                                    title = "Edit Profile",
+                                    icon = Icons.Default.Edit,
+                                    onClick = { 
+                                        isEditMode = true 
+                                    }
                                 ) {
                                     Column(modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 8.dp)) {
-                                        InfoItem(label = "Name", value = "${currentProfile.firstName} ${currentProfile.lastName}")
-                                        InfoItem(label = "Email", value = currentProfile.email)
-                                    }
-                                }
-                                
-                                // Dietary Preferences Section
-                                NavigationSection(
-                                    title = "Dietary Preferences",
-                                    icon = Icons.Outlined.Restaurant,
-                                    onClick = { navController.navigate("profile/dietary") }
-                                ) {
-                                    if (currentProfile.dietaryPreferences.isNotEmpty() || currentProfile.allergies.isNotEmpty()) {
-                                        Column(modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 8.dp)) {
-                                            if (currentProfile.dietaryPreferences.isNotEmpty()) {
-                                                InfoItem(
-                                                    label = "Preferences", 
-                                                    value = currentProfile.dietaryPreferences.joinToString(", ")
-                                                )
-                                            }
-                                            
-                                            if (currentProfile.allergies.isNotEmpty()) {
-                                                InfoItem(
-                                                    label = "Allergies", 
-                                                    value = currentProfile.allergies.joinToString(", ")
-                                                )
-                                            }
+                                        // Preview of dietary preferences
+                                        if (currentProfile.dietaryPreferences.isNotEmpty()) {
+                                            InfoItem(
+                                                label = "Dietary Preferences", 
+                                                value = currentProfile.dietaryPreferences.joinToString(", ")
+                                            )
                                         }
-                                    }
-                                }
-                                
-                                // Health Goals Section
-                                NavigationSection(
-                                    title = "Health Goals",
-                                    icon = Icons.Outlined.EmojiEvents,
-                                    onClick = { navController.navigate("profile/goals") }
-                                ) {
-                                    if (currentProfile.weightGoal.isNotEmpty() || currentProfile.calorieTarget > 0) {
-                                        Column(modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 8.dp)) {
-                                            if (currentProfile.weightGoal.isNotEmpty()) {
-                                                InfoItem(label = "Weight Goal", value = currentProfile.weightGoal)
-                                            }
-                                            
-                                            if (currentProfile.calorieTarget > 0) {
-                                                InfoItem(label = "Daily Calories", value = "${currentProfile.calorieTarget} kcal")
-                                            }
+                                        
+                                        // Preview of allergies
+                                        if (currentProfile.allergies.isNotEmpty()) {
+                                            InfoItem(
+                                                label = "Allergies", 
+                                                value = currentProfile.allergies.joinToString(", ")
+                                            )
+                                        }
+                                        
+                                        // Preview of health goals
+                                        if (currentProfile.weightGoal.isNotEmpty()) {
+                                            InfoItem(label = "Weight Goal", value = currentProfile.weightGoal)
+                                        }
+                                        
+                                        if (currentProfile.calorieTarget > 0) {
+                                            InfoItem(label = "Daily Calories", value = "${currentProfile.calorieTarget} kcal")
                                         }
                                     }
                                 }
@@ -572,6 +586,15 @@ fun ProfileScreen(navController: NavController) {
                                                 .padding(vertical = 12.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.Logout,
+                                                contentDescription = null,
+                                                tint = colors.error.copy(alpha = 0.8f),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            
                                             Text(
                                                 text = "Sign Out",
                                                 style = typography.bodyMedium,
