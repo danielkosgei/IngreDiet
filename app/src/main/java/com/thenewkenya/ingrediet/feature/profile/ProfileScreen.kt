@@ -169,16 +169,10 @@ fun ProfileScreen(navController: NavController) {
         topBar = {
             TopAppBar(
                 title = {
-                    AnimatedVisibility(
-                        visible = scrollState.value > 150,
-                        enter = fadeIn(),
-                        exit = fadeOut()
-                    ) {
-                        Text(
-                            text = "My Profile",
-                            style = typography.titleLarge
-                        )
-                    }
+                    Text(
+                        text = "My Profile",
+                        style = typography.titleLarge
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
@@ -204,7 +198,7 @@ fun ProfileScreen(navController: NavController) {
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colors.surface.copy(alpha = 0.95f),
+                    containerColor = colors.surface,
                     scrolledContainerColor = colors.surface
                 )
             )
@@ -296,140 +290,107 @@ fun ProfileScreen(navController: NavController) {
                             .fillMaxSize()
                             .verticalScroll(scrollState)
                     ) {
-                        // Modern profile header with gradient background
-                        Box(
+                        // Clean profile header
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(220.dp)
+                                .padding(24.dp)
                         ) {
-                            // Gradient background
-                            Box(
+                            // Profile Image
+                            Surface(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(
-                                                colors.primary,
-                                                colors.primaryContainer
-                                            )
-                                        )
-                                    )
-                            )
-                            
-                            // Curved bottom shape
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                                    .align(Alignment.BottomCenter)
-                                    .clip(
-                                        RoundedCornerShape(
-                                            topStart = 32.dp,
-                                            topEnd = 32.dp
-                                        )
-                                    )
-                                    .background(colors.background)
-                            )
-                            
-                            // Profile content
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 24.dp)
+                                    .size(100.dp)
+                                    .clip(CircleShape),
+                                tonalElevation = 1.dp
                             ) {
-                                Spacer(modifier = Modifier.height(16.dp))
-                            
-                                // Profile Image with elevation
-                                Surface(
+                                Box(
                                     modifier = Modifier
-                                        .size(110.dp)
+                                        .fillMaxSize()
+                                        .background(colors.surfaceVariant)
+                                        .border(2.dp, colors.outlineVariant, CircleShape)
                                         .clip(CircleShape),
-                                    tonalElevation = 8.dp,
-                                    shadowElevation = 8.dp
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(colors.surfaceVariant)
-                                            .border(3.dp, colors.surface, CircleShape)
-                                            .clip(CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (profileImageUrl != null) {
-                                            AsyncImage(
-                                                model = ImageRequest.Builder(LocalContext.current)
-                                                    .data(profileImageUrl)
-                                                    .crossfade(true)
-                                                    .build(),
-                                                contentDescription = "Profile picture",
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier.fillMaxSize()
-                                            )
-                                        } else {
+                                    if (profileImageUrl != null) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(profileImageUrl)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = "Profile picture",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.Person,
+                                            contentDescription = null,
+                                            tint = colors.onSurfaceVariant,
+                                            modifier = Modifier.size(50.dp)
+                                        )
+                                    }
+                                    
+                                    // Edit icon overlay
+                                    if (isEditMode) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(colors.surface.copy(alpha = 0.6f))
+                                                .clickable { 
+                                                    // Image picker would go here
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
                                             Icon(
-                                                imageVector = Icons.Default.Person,
-                                                contentDescription = null,
-                                                tint = colors.onSurfaceVariant,
-                                                modifier = Modifier.size(60.dp)
+                                                imageVector = Icons.Default.Camera,
+                                                contentDescription = "Change profile picture",
+                                                tint = colors.onSurface,
+                                                modifier = Modifier.size(32.dp)
                                             )
-                                        }
-                                        
-                                        // Edit icon overlay
-                                        if (isEditMode) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .background(colors.surface.copy(alpha = 0.6f))
-                                                    .clickable { 
-                                                        // Image picker would go here
-                                                    },
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Camera,
-                                                    contentDescription = "Change profile picture",
-                                                    tint = colors.onSurface,
-                                                    modifier = Modifier.size(32.dp)
-                                                )
-                                            }
                                         }
                                     }
                                 }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // User name display below image
+                            if (!isEditMode) {
+                                Text(
+                                    text = "${currentProfile.firstName} ${currentProfile.lastName}",
+                                    style = typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onBackground,
+                                    textAlign = TextAlign.Center
+                                )
                                 
-                                Spacer(modifier = Modifier.height(16.dp))
-                                
-                                // User name display below image
-                                if (!isEditMode) {
-                                    Text(
-                                        text = "${currentProfile.firstName} ${currentProfile.lastName}",
-                                        style = typography.headlineMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = colors.onPrimary,
-                                        textAlign = TextAlign.Center
-                                    )
-                                    
-                                    Text(
-                                        text = currentProfile.email,
-                                        style = typography.bodyMedium,
-                                        color = colors.onPrimary.copy(alpha = 0.8f),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
+                                Text(
+                                    text = currentProfile.email,
+                                    style = typography.bodyMedium,
+                                    color = colors.onBackground.copy(alpha = 0.7f),
+                                    textAlign = TextAlign.Center
+                                )
                             }
                         }
                         
-                        // Content sections with padding
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                        ) {
-                            // Personal Information Section
-                            ProfileSection(
-                                title = "Personal Information",
-                                icon = Icons.Outlined.Person
+                        HorizontalDivider(thickness = 1.dp, color = colors.outlineVariant)
+                        
+                        // Personal Information Section (editable in place)
+                        if (isEditMode) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
+                                Text(
+                                    text = "Personal Information",
+                                    style = typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.onBackground
+                                )
+                                
                                 ProfileTextField(
                                     label = "First Name",
                                     value = if (isEditMode) editableProfile?.firstName ?: "" else currentProfile.firstName,
@@ -445,13 +406,16 @@ fun ProfileScreen(navController: NavController) {
                                     isEditable = isEditMode,
                                     leadingIcon = null
                                 )
-                            }
-                            
-                            // Dietary Preferences Section
-                            ProfileSection(
-                                title = "Dietary Preferences",
-                                icon = Icons.Outlined.Restaurant
-                            ) {
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                Text(
+                                    text = "Dietary Preferences",
+                                    style = typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.onBackground
+                                )
+                                
                                 val preferencesValue = currentProfile.dietaryPreferences.joinToString(", ")
                                 ProfileTextField(
                                     label = "Dietary Preferences",
@@ -483,13 +447,16 @@ fun ProfileScreen(navController: NavController) {
                                     leadingIcon = null,
                                     helperText = if (isEditMode) "Separate multiple allergies with commas" else null
                                 )
-                            }
-                            
-                            // Goals Section
-                            ProfileSection(
-                                title = "Health Goals",
-                                icon = Icons.Outlined.EmojiEvents
-                            ) {
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                Text(
+                                    text = "Health Goals",
+                                    style = typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.onBackground
+                                )
+                                
                                 ProfileTextField(
                                     label = "Weight Goal",
                                     value = if (isEditMode) editableProfile?.weightGoal ?: "" else currentProfile.weightGoal,
@@ -516,83 +483,107 @@ fun ProfileScreen(navController: NavController) {
                                     keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
                                 )
                             }
-                            
-                            // Settings Section
-                            ProfileSection(
-                                title = "Settings",
-                                icon = Icons.Outlined.Settings
+                        } else {
+                            // Clickable sections for navigation when not in edit mode
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                ProfileActionItem(
-                                    title = "Notifications",
-                                    subtitle = "Manage your notification preferences",
-                                    icon = Icons.Outlined.Notifications,
-                                    onClick = { /* Navigate to notification settings */ }
+                                // Personal Information Section
+                                NavigationSection(
+                                    title = "Personal Information",
+                                    icon = Icons.Outlined.Person,
+                                    onClick = { navController.navigate("profile/personal") }
+                                ) {
+                                    Column(modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 8.dp)) {
+                                        InfoItem(label = "Name", value = "${currentProfile.firstName} ${currentProfile.lastName}")
+                                        InfoItem(label = "Email", value = currentProfile.email)
+                                    }
+                                }
+                                
+                                // Dietary Preferences Section
+                                NavigationSection(
+                                    title = "Dietary Preferences",
+                                    icon = Icons.Outlined.Restaurant,
+                                    onClick = { navController.navigate("profile/dietary") }
+                                ) {
+                                    if (currentProfile.dietaryPreferences.isNotEmpty() || currentProfile.allergies.isNotEmpty()) {
+                                        Column(modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 8.dp)) {
+                                            if (currentProfile.dietaryPreferences.isNotEmpty()) {
+                                                InfoItem(
+                                                    label = "Preferences", 
+                                                    value = currentProfile.dietaryPreferences.joinToString(", ")
+                                                )
+                                            }
+                                            
+                                            if (currentProfile.allergies.isNotEmpty()) {
+                                                InfoItem(
+                                                    label = "Allergies", 
+                                                    value = currentProfile.allergies.joinToString(", ")
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Health Goals Section
+                                NavigationSection(
+                                    title = "Health Goals",
+                                    icon = Icons.Outlined.EmojiEvents,
+                                    onClick = { navController.navigate("profile/goals") }
+                                ) {
+                                    if (currentProfile.weightGoal.isNotEmpty() || currentProfile.calorieTarget > 0) {
+                                        Column(modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 8.dp)) {
+                                            if (currentProfile.weightGoal.isNotEmpty()) {
+                                                InfoItem(label = "Weight Goal", value = currentProfile.weightGoal)
+                                            }
+                                            
+                                            if (currentProfile.calorieTarget > 0) {
+                                                InfoItem(label = "Daily Calories", value = "${currentProfile.calorieTarget} kcal")
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Settings Section
+                                NavigationSection(
+                                    title = "Settings",
+                                    icon = Icons.Outlined.Settings,
+                                    onClick = { navController.navigate("profile/settings") }
                                 )
                                 
-                                ProfileActionItem(
-                                    title = "Privacy & Security",
-                                    subtitle = "Control your privacy settings",
-                                    icon = Icons.Outlined.Security,
-                                    onClick = { /* Navigate to privacy settings */ }
+                                // Support Section
+                                NavigationSection(
+                                    title = "Support",
+                                    icon = Icons.AutoMirrored.Outlined.Help,
+                                    onClick = { navController.navigate("profile/support") }
                                 )
                                 
-                                ProfileActionItem(
-                                    title = "App Preferences",
-                                    subtitle = "Customize app behavior",
-                                    icon = Icons.Outlined.Tune,
-                                    onClick = { /* Navigate to app preferences */ }
-                                )
+                                // Account Actions Section
+                                NavigationSection(
+                                    title = "Account",
+                                    icon = Icons.Outlined.ManageAccounts,
+                                    onClick = { navController.navigate("profile/account") }
+                                ) {
+                                    Column(modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 8.dp)) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { showSignOutConfirmation = true }
+                                                .padding(vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Sign Out",
+                                                style = typography.bodyMedium,
+                                                color = colors.error.copy(alpha = 0.8f),
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
+                                }
+                                
+                                Spacer(modifier = Modifier.height(32.dp))
                             }
-                            
-                            // Support Section
-                            ProfileSection(
-                                title = "Support",
-                                icon = Icons.AutoMirrored.Outlined.Help
-                            ) {
-                                ProfileActionItem(
-                                    title = "Help Center",
-                                    subtitle = "Get help with using the app",
-                                    icon = Icons.AutoMirrored.Outlined.HelpOutline,
-                                    onClick = { /* Navigate to help center */ }
-                                )
-                                
-                                ProfileActionItem(
-                                    title = "Report a Problem",
-                                    subtitle = "Let us know if something isn't working",
-                                    icon = Icons.Outlined.Report,
-                                    onClick = { /* Navigate to problem reporting */ }
-                                )
-                                
-                                ProfileActionItem(
-                                    title = "About IngreDiet",
-                                    subtitle = "Version 1.0.0",
-                                    icon = Icons.Outlined.Info,
-                                    onClick = { /* Navigate to about screen */ }
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(24.dp))
-                            
-                            // Account Actions Section
-                            ProfileSection(
-                                title = "Account",
-                                icon = Icons.Outlined.ManageAccounts
-                            ) {
-                                ProfileDangerItem(
-                                    title = "Sign Out",
-                                    icon = Icons.AutoMirrored.Filled.Logout,
-                                    onClick = { showSignOutConfirmation = true }
-                                )
-                                
-                                ProfileDangerItem(
-                                    title = "Delete Account",
-                                    icon = Icons.Outlined.Delete,
-                                    onClick = { /* Show delete account confirmation */ },
-                                    isDangerous = true
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(32.dp))
                         }
                     }
                 }
@@ -602,75 +593,92 @@ fun ProfileScreen(navController: NavController) {
 }
 
 @Composable
-fun ProfileSection(
+fun NavigationSection(
     title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
-    content: @Composable () -> Unit
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    content: @Composable (() -> Unit)? = null
 ) {
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
     
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = colors.surface
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick),
+            color = Color.Transparent
         ) {
-            // Section header
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (icon != null) {
-                    Surface(
-                        modifier = Modifier.size(32.dp),
-                        shape = CircleShape,
-                        color = colors.primaryContainer
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = colors.onPrimaryContainer,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                
+                Spacer(modifier = Modifier.width(16.dp))
                 
                 Text(
                     text = title,
                     style = typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.onSurface
+                    fontWeight = FontWeight.Medium,
+                    color = colors.onBackground,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = colors.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
                 )
             }
-            
-            HorizontalDivider(
-                color = colors.outlineVariant,
-                thickness = 1.dp
-            )
-            
-            // Section content
-            content()
         }
+        
+        content?.invoke()
+        
+        HorizontalDivider(
+            color = colors.outlineVariant,
+            thickness = 0.5.dp,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
     }
 }
 
+@Composable
+fun InfoItem(
+    label: String,
+    value: String
+) {
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        Text(
+            text = label,
+            style = typography.bodySmall,
+            color = colors.onSurfaceVariant
+        )
+        
+        Text(
+            text = value,
+            style = typography.bodyMedium,
+            color = colors.onSurface
+        )
+    }
+}
+
+// Keep the ProfileTextField component for edit mode
 @Composable
 fun ProfileTextField(
     label: String,
@@ -684,212 +692,44 @@ fun ProfileTextField(
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
 
-    Column {
-        if (isEditable) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                label = { 
-                    Text(
-                        text = label,
-                        style = typography.bodyMedium
-                    ) 
-                },
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    keyboardType = keyboardType
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedBorderColor = colors.outline,
-                    focusedBorderColor = colors.primary
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                textStyle = typography.bodyLarge,
-                leadingIcon = leadingIcon?.let { icon ->
-                    { 
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = colors.onSurfaceVariant
-                        )
-                    }
-                },
-                supportingText = helperText?.let { text ->
-                    {
-                        Text(
-                            text = text,
-                            style = typography.bodySmall,
-                            color = colors.onSurfaceVariant
-                        )
-                    }
-                },
-                shape = RoundedCornerShape(12.dp)
-            )
-        } else {
-            Column(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = label,
-                    style = typography.bodyMedium,
-                    color = colors.onSurface.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(bottom = 4.dp)
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { 
+            Text(
+                text = label,
+                style = typography.bodyMedium
+            ) 
+        },
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = keyboardType
+        ),
+        colors = OutlinedTextFieldDefaults.colors(
+            unfocusedContainerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent,
+            unfocusedBorderColor = colors.outline,
+            focusedBorderColor = colors.primary
+        ),
+        modifier = Modifier.fillMaxWidth(),
+        textStyle = typography.bodyLarge,
+        leadingIcon = leadingIcon?.let { icon ->
+            { 
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = colors.onSurfaceVariant
                 )
-                
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = colors.surfaceVariant.copy(alpha = 0.3f)
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        if (leadingIcon != null) {
-                            Icon(
-                                imageVector = leadingIcon,
-                                contentDescription = null,
-                                tint = colors.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                        }
-                        
-                        Text(
-                            text = if (value.isNotEmpty()) value else "Not set",
-                            style = typography.bodyLarge,
-                            color = if (value.isNotEmpty()) colors.onSurface else colors.onSurface.copy(alpha = 0.5f)
-                        )
-                    }
-                }
             }
-        }
-    }
-}
-
-@Composable
-fun ProfileActionItem(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
-) {
-    val colors = MaterialTheme.colorScheme
-    val typography = MaterialTheme.typography
-    
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
-        color = Color.Transparent
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp, horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = colors.surfaceVariant,
-                modifier = Modifier.size(40.dp)
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = colors.onSurfaceVariant,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            Column(modifier = Modifier.weight(1f)) {
+        },
+        supportingText = helperText?.let { text ->
+            {
                 Text(
-                    text = title,
-                    style = typography.bodyLarge,
-                    color = colors.onSurface
-                )
-                
-                Text(
-                    text = subtitle,
+                    text = text,
                     style = typography.bodySmall,
                     color = colors.onSurfaceVariant
                 )
             }
-            
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = colors.onSurfaceVariant,
-                modifier = Modifier.size(24.dp)
-            )
-        }
-    }
-}
-
-@Composable
-fun ProfileDangerItem(
-    title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit,
-    isDangerous: Boolean = false
-) {
-    val colors = MaterialTheme.colorScheme
-    val typography = MaterialTheme.typography
-    
-    val textColor = if (isDangerous) colors.error else colors.error.copy(alpha = 0.8f)
-    val surfaceColor = if (isDangerous) colors.errorContainer.copy(alpha = 0.1f) else Color.Transparent
-    
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
-        color = surfaceColor
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp, horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = colors.errorContainer.copy(alpha = 0.2f),
-                modifier = Modifier.size(40.dp)
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = textColor,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            Text(
-                text = title,
-                style = typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                color = textColor
-            )
-        }
-    }
+        },
+        shape = RoundedCornerShape(12.dp)
+    )
 }
