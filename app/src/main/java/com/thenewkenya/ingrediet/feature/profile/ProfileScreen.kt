@@ -300,9 +300,10 @@ fun ProfileScreen(navController: NavController) {
                             // Profile Image
                             Surface(
                                 modifier = Modifier
-                                    .size(100.dp)
+                                    .size(120.dp)
                                     .clip(CircleShape),
-                                tonalElevation = 1.dp
+                                tonalElevation = 2.dp,
+                                shadowElevation = 1.dp
                             ) {
                                 Box(
                                     modifier = Modifier
@@ -317,6 +318,7 @@ fun ProfileScreen(navController: NavController) {
                                             model = ImageRequest.Builder(LocalContext.current)
                                                 .data(profileImageUrl)
                                                 .crossfade(true)
+                                                .size(coil3.size.Size.ORIGINAL)
                                                 .build(),
                                             contentDescription = "Profile picture",
                                             contentScale = ContentScale.Crop,
@@ -327,7 +329,7 @@ fun ProfileScreen(navController: NavController) {
                                             imageVector = Icons.Default.Person,
                                             contentDescription = null,
                                             tint = colors.onSurfaceVariant,
-                                            modifier = Modifier.size(50.dp)
+                                            modifier = Modifier.size(60.dp)
                                         )
                                     }
                                     
