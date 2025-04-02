@@ -2,11 +2,17 @@ package com.thenewkenya.ingrediet.feature.profile
 
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,29 +32,27 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.outlined.Help
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.outlined.Cake
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.EmojiEvents
-import androidx.compose.material.icons.outlined.Help
-import androidx.compose.material.icons.outlined.LocalDining
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Restaurant
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material.icons.automirrored.outlined.Help
-import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.LocalDining
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Report
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,7 +60,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -67,8 +70,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -81,14 +82,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -171,14 +172,20 @@ fun ProfileScreen(navController: NavController) {
                 title = {
                     Text(
                         text = "My Profile",
-                        style = typography.titleLarge
+                        style = typography.titleLarge.copy(fontWeight = FontWeight.SemiBold)
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.navigateUp() }) {
+                    IconButton(
+                        onClick = { navController.navigateUp() },
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .size(40.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.ArrowBackIosNew,
-                            contentDescription = "Back"
+                            contentDescription = "Back",
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 },
@@ -189,11 +196,15 @@ fun ProfileScreen(navController: NavController) {
                                 editableProfile?.let { viewModel.updateProfile(it) }
                             }
                             isEditMode = !isEditMode
-                        }
+                        },
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .size(40.dp)
                     ) {
                         Icon(
                             imageVector = if (isEditMode) Icons.Default.Check else Icons.Default.Edit,
-                            contentDescription = if (isEditMode) "Save" else "Edit"
+                            contentDescription = if (isEditMode) "Save" else "Edit",
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 },
@@ -290,309 +301,373 @@ fun ProfileScreen(navController: NavController) {
                             .fillMaxSize()
                             .verticalScroll(scrollState)
                     ) {
-                        // Clean profile header
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
+                        // Profile header with elegant styling
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 32.dp)
+                                .padding(top = 32.dp, bottom = 24.dp)
                         ) {
-                            // Profile Image
-                            Surface(
-                                modifier = Modifier
-                                    .size(120.dp)
-                                    .clip(CircleShape),
-                                tonalElevation = 2.dp,
-                                shadowElevation = 1.dp
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Box(
+                                // Animated profile image with shadow and border
+                                Surface(
+                                    shape = CircleShape,
+                                    shadowElevation = 4.dp,
                                     modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(colors.surfaceVariant)
-                                        .border(2.dp, colors.outlineVariant, CircleShape)
-                                        .clip(CircleShape),
-                                    contentAlignment = Alignment.Center
+                                        .size(120.dp)
+                                        .clip(CircleShape)
                                 ) {
-                                    if (profileImageUrl != null) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(LocalContext.current)
-                                                .data(profileImageUrl)
-                                                .crossfade(true)
-                                                .build(),
-                                            contentDescription = "Profile picture",
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Default.Person,
-                                            contentDescription = null,
-                                            tint = colors.onSurfaceVariant,
-                                            modifier = Modifier.size(60.dp)
-                                        )
-                                    }
-                                    
-                                    // Edit icon overlay
-                                    if (isEditMode) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(colors.surface.copy(alpha = 0.6f))
-                                                .clickable { 
-                                                    // Image picker would go here
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Camera,
-                                                contentDescription = "Change profile picture",
-                                                tint = colors.onSurface,
-                                                modifier = Modifier.size(32.dp)
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(colors.surfaceVariant)
+                                            .border(2.dp, colors.primary.copy(alpha = 0.2f), CircleShape)
+                                            .clip(CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (profileImageUrl != null) {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(LocalContext.current)
+                                                    .data(profileImageUrl)
+                                                    .crossfade(true)
+                                                    .build(),
+                                                contentDescription = "Profile picture",
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
                                             )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.Person,
+                                                contentDescription = null,
+                                                tint = colors.primary.copy(alpha = 0.6f),
+                                                modifier = Modifier.size(60.dp)
+                                            )
+                                        }
+                                        
+                                        // Edit icon overlay with ripple effect
+                                        if (isEditMode) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(colors.surface.copy(alpha = 0.7f))
+                                                    .clickable(
+                                                        interactionSource = remember { MutableInteractionSource() },
+                                                        indication = androidx.compose.material.ripple.rememberRipple(
+                                                            bounded = true,
+                                                            color = colors.primary
+                                                        )
+                                                    ) { 
+                                                        // Image picker would go here
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Camera,
+                                                    contentDescription = "Change profile picture",
+                                                    tint = colors.primary,
+                                                    modifier = Modifier.size(36.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            
-                            Spacer(modifier = Modifier.height(20.dp))
-                            
-                            // User name display below image
-                            if (!isEditMode) {
-                                Text(
-                                    text = "${currentProfile.firstName} ${currentProfile.lastName}",
-                                    style = typography.headlineMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.onBackground,
-                                    textAlign = TextAlign.Center
-                                )
                                 
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(20.dp))
                                 
-                                Text(
-                                    text = currentProfile.email,
-                                    style = typography.bodyMedium,
-                                    color = colors.onBackground.copy(alpha = 0.7f),
-                                    textAlign = TextAlign.Center
-                                )
+                                // User name display with refined typography
+                                if (!isEditMode) {
+                                    Text(
+                                        text = "${currentProfile.firstName} ${currentProfile.lastName}",
+                                        style = typography.headlineMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = (-0.5).sp
+                                        ),
+                                        color = colors.onBackground,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    
+                                    Text(
+                                        text = currentProfile.email,
+                                        style = typography.bodyMedium,
+                                        color = colors.onBackground.copy(alpha = 0.7f),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                             }
                         }
                         
+                        // Elegant divider with fade effect
                         HorizontalDivider(
                             thickness = 1.dp, 
-                            color = colors.outlineVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.padding(horizontal = 16.dp)
+                            color = colors.outlineVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.padding(horizontal = 24.dp)
                         )
                         
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                         
                         if (isEditMode) {
-                            // Edit Mode: Show editable fields
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            // Animated entry for edit mode fields
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(tween(300)) + slideInVertically(
+                                    initialOffsetY = { it / 2 },
+                                    animationSpec = spring(stiffness = 300f)
+                                )
                             ) {
-                                Text(
-                                    text = "Personal Information",
-                                    style = typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = colors.onBackground
-                                )
-                                
-                                ProfileTextField(
-                                    label = "First Name",
-                                    value = editableProfile?.firstName ?: "",
-                                    onValueChange = { editableProfile = editableProfile?.copy(firstName = it) },
-                                    isEditable = true,
-                                    leadingIcon = null
-                                )
-                                
-                                ProfileTextField(
-                                    label = "Last Name",
-                                    value = editableProfile?.lastName ?: "",
-                                    onValueChange = { editableProfile = editableProfile?.copy(lastName = it) },
-                                    isEditable = true,
-                                    leadingIcon = null
-                                )
-                                
-                                Spacer(modifier = Modifier.height(8.dp))
-                                
-                                Text(
-                                    text = "Dietary Preferences",
-                                    style = typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = colors.onBackground
-                                )
-                                
-                                ProfileTextField(
-                                    label = "Dietary Preferences",
-                                    value = editableProfile?.dietaryPreferences?.joinToString(", ") ?: "",
-                                    onValueChange = { 
-                                        val preferences = it.split(",").map { pref -> pref.trim() }.filter { pref -> pref.isNotEmpty() }
-                                        editableProfile = editableProfile?.copy(dietaryPreferences = preferences)
-                                    },
-                                    isEditable = true,
-                                    leadingIcon = Icons.Outlined.LocalDining,
-                                    helperText = "Separate multiple preferences with commas"
-                                )
-                                
-                                ProfileTextField(
-                                    label = "Allergies",
-                                    value = editableProfile?.allergies?.joinToString(", ") ?: "",
-                                    onValueChange = { 
-                                        val allergies = it.split(",").map { allergy -> allergy.trim() }.filter { allergy -> allergy.isNotEmpty() }
-                                        editableProfile = editableProfile?.copy(allergies = allergies)
-                                    },
-                                    isEditable = true,
-                                    leadingIcon = null,
-                                    helperText = "Separate multiple allergies with commas"
-                                )
-                                
-                                Spacer(modifier = Modifier.height(8.dp))
-                                
-                                Text(
-                                    text = "Health Goals",
-                                    style = typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = colors.onBackground
-                                )
-                                
-                                ProfileTextField(
-                                    label = "Weight Goal",
-                                    value = editableProfile?.weightGoal ?: "",
-                                    onValueChange = { editableProfile = editableProfile?.copy(weightGoal = it) },
-                                    isEditable = true,
-                                    leadingIcon = null
-                                )
-                                
-                                ProfileTextField(
-                                    label = "Daily Calorie Target",
-                                    value = (editableProfile?.calorieTarget ?: 0).toString(),
-                                    onValueChange = { 
-                                        val calories = it.toIntOrNull() ?: 0
-                                        editableProfile = editableProfile?.copy(calorieTarget = calories)
-                                    },
-                                    isEditable = true,
-                                    leadingIcon = null,
-                                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                                )
-                                
-                                Spacer(modifier = Modifier.height(16.dp))
-                                
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End
+                                // Edit Mode: Show editable fields
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    TextButton(
-                                        onClick = { isEditMode = false }
+                                    Text(
+                                        text = "Personal Information",
+                                        style = typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = colors.onBackground
+                                    )
+                                    
+                                    ProfileTextField(
+                                        label = "First Name",
+                                        value = editableProfile?.firstName ?: "",
+                                        onValueChange = { editableProfile = editableProfile?.copy(firstName = it) },
+                                        isEditable = true,
+                                        leadingIcon = null
+                                    )
+                                    
+                                    ProfileTextField(
+                                        label = "Last Name",
+                                        value = editableProfile?.lastName ?: "",
+                                        onValueChange = { editableProfile = editableProfile?.copy(lastName = it) },
+                                        isEditable = true,
+                                        leadingIcon = null
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    Text(
+                                        text = "Dietary Preferences",
+                                        style = typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = colors.onBackground
+                                    )
+                                    
+                                    ProfileTextField(
+                                        label = "Dietary Preferences",
+                                        value = editableProfile?.dietaryPreferences?.joinToString(", ") ?: "",
+                                        onValueChange = { 
+                                            val preferences = it.split(",").map { pref -> pref.trim() }.filter { pref -> pref.isNotEmpty() }
+                                            editableProfile = editableProfile?.copy(dietaryPreferences = preferences)
+                                        },
+                                        isEditable = true,
+                                        leadingIcon = Icons.Outlined.LocalDining,
+                                        helperText = "Separate multiple preferences with commas"
+                                    )
+                                    
+                                    ProfileTextField(
+                                        label = "Allergies",
+                                        value = editableProfile?.allergies?.joinToString(", ") ?: "",
+                                        onValueChange = { 
+                                            val allergies = it.split(",").map { allergy -> allergy.trim() }.filter { allergy -> allergy.isNotEmpty() }
+                                            editableProfile = editableProfile?.copy(allergies = allergies)
+                                        },
+                                        isEditable = true,
+                                        leadingIcon = null,
+                                        helperText = "Separate multiple allergies with commas"
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    Text(
+                                        text = "Health Goals",
+                                        style = typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = colors.onBackground
+                                    )
+                                    
+                                    ProfileTextField(
+                                        label = "Weight Goal",
+                                        value = editableProfile?.weightGoal ?: "",
+                                        onValueChange = { editableProfile = editableProfile?.copy(weightGoal = it) },
+                                        isEditable = true,
+                                        leadingIcon = null
+                                    )
+                                    
+                                    ProfileTextField(
+                                        label = "Daily Calorie Target",
+                                        value = (editableProfile?.calorieTarget ?: 0).toString(),
+                                        onValueChange = { 
+                                            val calories = it.toIntOrNull() ?: 0
+                                            editableProfile = editableProfile?.copy(calorieTarget = calories)
+                                        },
+                                        isEditable = true,
+                                        leadingIcon = null,
+                                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End
                                     ) {
-                                        Text("Cancel")
-                                    }
-                                    
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    
-                                    Button(
-                                        onClick = {
-                                            editableProfile?.let { viewModel.updateProfile(it) }
-                                            isEditMode = false
+                                        TextButton(
+                                            onClick = { isEditMode = false }
+                                        ) {
+                                            Text("Cancel")
                                         }
-                                    ) {
-                                        Text("Save")
+                                        
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        
+                                        Button(
+                                            onClick = {
+                                                editableProfile?.let { viewModel.updateProfile(it) }
+                                                isEditMode = false
+                                            }
+                                        ) {
+                                            Text("Save")
+                                        }
                                     }
                                 }
                             }
                         } else {
-                            // Normal Mode: Show clickable sections
+                            // Enhanced navigation sections with smooth animations
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 8.dp)
+                                    .padding(horizontal = 16.dp)
                             ) {
-                                // Edit Profile Section (dedicated section for editing profile details)
-                                NavigationSection(
+                                // Edit Profile Section with improved visuals
+                                ProfileNavigationItem(
                                     title = "Edit Profile",
                                     icon = Icons.Default.Edit,
-                                    onClick = { 
-                                        isEditMode = true 
+                                    iconTint = colors.primary,
+                                    onClick = { isEditMode = true },
+                                    content = {
+                                        // Only show preview if there's actual content
+                                        if (currentProfile.dietaryPreferences.isNotEmpty() || 
+                                            currentProfile.allergies.isNotEmpty() ||
+                                            currentProfile.weightGoal.isNotEmpty() ||
+                                            currentProfile.calorieTarget > 0) {
+                                            
+                                            Column(modifier = Modifier.padding(start = 64.dp, end = 16.dp, bottom = 16.dp, top = 4.dp)) {
+                                                // Preview of dietary preferences with enhanced styling
+                                                if (currentProfile.dietaryPreferences.isNotEmpty()) {
+                                                    EnhancedInfoItem(
+                                                        label = "Dietary Preferences", 
+                                                        value = currentProfile.dietaryPreferences.joinToString(", "),
+                                                        icon = Icons.Outlined.LocalDining,
+                                                        iconColor = colors.primary.copy(alpha = 0.6f)
+                                                    )
+                                                }
+                                                
+                                                // Preview of allergies
+                                                if (currentProfile.allergies.isNotEmpty()) {
+                                                    EnhancedInfoItem(
+                                                        label = "Allergies", 
+                                                        value = currentProfile.allergies.joinToString(", "),
+                                                        icon = null
+                                                    )
+                                                }
+                                                
+                                                // Preview of health goals with better organization
+                                                if (currentProfile.weightGoal.isNotEmpty() || currentProfile.calorieTarget > 0) {
+                                                    if (currentProfile.weightGoal.isNotEmpty()) {
+                                                        EnhancedInfoItem(
+                                                            label = "Weight Goal", 
+                                                            value = currentProfile.weightGoal,
+                                                            icon = Icons.Outlined.EmojiEvents,
+                                                            iconColor = colors.tertiary.copy(alpha = 0.6f)
+                                                        )
+                                                    }
+                                                    
+                                                    if (currentProfile.calorieTarget > 0) {
+                                                        EnhancedInfoItem(
+                                                            label = "Daily Calories", 
+                                                            value = "${currentProfile.calorieTarget} kcal",
+                                                            icon = null
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
-                                ) {
-                                    Column(modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 12.dp)) {
-                                        // Preview of dietary preferences
-                                        if (currentProfile.dietaryPreferences.isNotEmpty()) {
-                                            InfoItem(
-                                                label = "Dietary Preferences", 
-                                                value = currentProfile.dietaryPreferences.joinToString(", ")
-                                            )
-                                        }
-                                        
-                                        // Preview of allergies
-                                        if (currentProfile.allergies.isNotEmpty()) {
-                                            InfoItem(
-                                                label = "Allergies", 
-                                                value = currentProfile.allergies.joinToString(", ")
-                                            )
-                                        }
-                                        
-                                        // Preview of health goals
-                                        if (currentProfile.weightGoal.isNotEmpty()) {
-                                            InfoItem(label = "Weight Goal", value = currentProfile.weightGoal)
-                                        }
-                                        
-                                        if (currentProfile.calorieTarget > 0) {
-                                            InfoItem(label = "Daily Calories", value = "${currentProfile.calorieTarget} kcal")
-                                        }
-                                    }
-                                }
+                                )
                                 
-                                // Settings Section
-                                NavigationSection(
+                                // Enhanced settings section
+                                ProfileNavigationItem(
                                     title = "Settings",
                                     icon = Icons.Outlined.Settings,
+                                    subtitle = "App preferences, notifications & privacy",
+                                    iconTint = colors.secondary,
                                     onClick = { navController.navigate("profile/settings") }
                                 )
                                 
-                                // Support Section
-                                NavigationSection(
+                                // Enhanced support section
+                                ProfileNavigationItem(
                                     title = "Support",
                                     icon = Icons.AutoMirrored.Outlined.Help,
+                                    subtitle = "Help center & feedback",
+                                    iconTint = colors.tertiary,
                                     onClick = { navController.navigate("profile/support") }
                                 )
                                 
-                                // Account Actions Section
-                                NavigationSection(
+                                // Enhanced account actions section
+                                ProfileNavigationItem(
                                     title = "Account",
                                     icon = Icons.Outlined.ManageAccounts,
-                                    onClick = { navController.navigate("profile/account") }
-                                ) {
-                                    Column(modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 8.dp)) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { showSignOutConfirmation = true }
-                                                .padding(vertical = 12.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Filled.Logout,
-                                                contentDescription = null,
-                                                tint = colors.error.copy(alpha = 0.8f),
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            
-                                            Text(
-                                                text = "Sign Out",
-                                                style = typography.bodyMedium,
-                                                color = colors.error.copy(alpha = 0.8f),
-                                                fontWeight = FontWeight.Medium
-                                            )
+                                    subtitle = "Manage your account & privacy",
+                                    iconTint = colors.primary,
+                                    onClick = { navController.navigate("profile/account") },
+                                    content = {
+                                        Column(modifier = Modifier.padding(start = 64.dp, end = 16.dp, bottom = 16.dp, top = 4.dp)) {
+                                            // Enhanced sign out option
+                                            Surface(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .clickable(
+                                                        interactionSource = remember { MutableInteractionSource() },
+                                                        indication = androidx.compose.material.ripple.rememberRipple(
+                                                            bounded = true,
+                                                            color = colors.error
+                                                        )
+                                                    ) { showSignOutConfirmation = true },
+                                                color = colors.errorContainer.copy(alpha = 0.1f)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(12.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                                                        contentDescription = null,
+                                                        tint = colors.error,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    
+                                                    Spacer(modifier = Modifier.width(12.dp))
+                                                    
+                                                    Text(
+                                                        text = "Sign Out",
+                                                        style = typography.labelLarge,
+                                                        color = colors.error,
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
-                                }
+                                )
                                 
-                                Spacer(modifier = Modifier.height(32.dp))
+                                Spacer(modifier = Modifier.height(40.dp))
                             }
                         }
                     }
@@ -603,37 +678,46 @@ fun ProfileScreen(navController: NavController) {
 }
 
 @Composable
-fun NavigationSection(
+fun ProfileNavigationItem(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: Color,
     onClick: () -> Unit,
+    subtitle: String? = null,
     content: @Composable (() -> Unit)? = null
 ) {
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
+    val interactionSource = remember { MutableInteractionSource() }
     
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 8.dp)
     ) {
+        // Surface with subtle hover effect and rounded corners
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = onClick),
-            color = Color.Transparent
+                .clip(RoundedCornerShape(16.dp))
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = androidx.compose.material.ripple.rememberRipple(bounded = true)
+                ) { onClick() },
+            color = colors.surfaceVariant.copy(alpha = 0.1f),
+            shadowElevation = 0.dp
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(vertical = 16.dp, horizontal = 20.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Icon with colorful background
                 Surface(
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier.size(44.dp),
                     shape = CircleShape,
-                    color = colors.primary.copy(alpha = 0.1f)
+                    color = iconTint.copy(alpha = 0.1f)
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -642,67 +726,110 @@ fun NavigationSection(
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = colors.primary,
-                            modifier = Modifier.size(20.dp)
+                            tint = iconTint,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
                 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(20.dp))
                 
-                Text(
-                    text = title,
-                    style = typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.onBackground,
-                    modifier = Modifier.weight(1f)
-                )
+                // Title and optional subtitle
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.onBackground
+                    )
+                    
+                    if (subtitle != null) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = subtitle,
+                            style = typography.bodySmall,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
                 
+                // Arrow indicator
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = colors.onSurfaceVariant,
+                    tint = colors.onSurfaceVariant.copy(alpha = 0.7f),
                     modifier = Modifier.size(24.dp)
                 )
             }
         }
         
-        content?.invoke()
+        // Animated content expansion
+        AnimatedVisibility(
+            visible = content != null,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut()
+        ) {
+            Column {
+                content?.invoke()
+            }
+        }
         
-        HorizontalDivider(
-            color = colors.outlineVariant.copy(alpha = 0.5f),
-            thickness = 0.5.dp,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
+        // Subtle divider
+        if (content == null) {
+            HorizontalDivider(
+                color = colors.outlineVariant.copy(alpha = 0.2f),
+                thickness = 0.5.dp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
     }
 }
 
 @Composable
-fun InfoItem(
+fun EnhancedInfoItem(
     label: String,
-    value: String
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    iconColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
 ) {
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
     
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = label,
-            style = typography.bodySmall,
-            color = colors.onSurfaceVariant
-        )
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+        }
         
-        Spacer(modifier = Modifier.height(2.dp))
-        
-        Text(
-            text = value,
-            style = typography.bodyMedium,
-            color = colors.onSurface
-        )
+        Column {
+            Text(
+                text = label,
+                style = typography.labelSmall,
+                color = colors.onSurfaceVariant,
+                letterSpacing = 0.4.sp
+            )
+            
+            Spacer(modifier = Modifier.height(2.dp))
+            
+            Text(
+                text = value,
+                style = typography.bodyMedium,
+                color = colors.onSurface,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
 }
 
