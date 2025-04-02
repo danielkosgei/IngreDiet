@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.thenewkenya.ingrediet.SupabaseApplication
+import com.thenewkenya.ingrediet.IngreDietApplication
 import com.thenewkenya.ingrediet.data.model.KenyanRecipe
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
  * ViewModel for Kenyan recipes
  */
 class KenyanRecipesViewModel(
-    private val context: Context = SupabaseApplication.instance
+    private val context: Context = IngreDietApplication.instance
 ) : ViewModel() {
     private val TAG = "KenyanRecipesVM"
     private val recipeRepository = RecipeRepository(context)

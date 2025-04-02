@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.thenewkenya.ingrediet.SupabaseApplication
+import com.thenewkenya.ingrediet.IngreDietApplication
 import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.network.api.IngreDietService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class CreateRecipeViewModel(
-    private val context: Context = SupabaseApplication.instance
+    private val context: Context = IngreDietApplication.instance
 ) : ViewModel() {
     private val TAG = "CreateRecipeVM"
     private val edgeFunctionService = IngreDietService(context)

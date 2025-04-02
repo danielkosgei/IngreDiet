@@ -13,7 +13,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-class SupabaseApplication: Application() {
+class IngreDietApplication: Application() {
     lateinit var sessionManager: SessionManager
         private set
 
@@ -29,7 +29,7 @@ class SupabaseApplication: Application() {
         appScope.launch {
             try {
                 supabase.auth.sessionStatus.collect { status ->
-                    Log.d("SupabaseApplication", "Session status changed: $status")
+                    Log.d("IngreDietApplication", "Session status changed: $status")
                     when (status) {
                         is SessionStatus.Authenticated -> {
                             val refreshToken = status.session.refreshToken ?: ""
@@ -38,13 +38,13 @@ class SupabaseApplication: Application() {
                             if (refreshToken.isNotEmpty()) {
                                 // Use the updated method signature with both tokens
                                 sessionManager.saveTokens(refreshToken, accessToken)
-                                Log.d("SupabaseApplication", "Session tokens saved from status update")
+                                Log.d("IngreDietApplication", "Session tokens saved from status update")
                             }
                         }
                         is SessionStatus.NotAuthenticated -> {
                             // Clear the session when logged out
                             sessionManager.clearSession()
-                            Log.d("SupabaseApplication", "Session cleared due to logout")
+                            Log.d("IngreDietApplication", "Session cleared due to logout")
                         }
                         else -> {
                             // Handle loading state if needed
@@ -52,7 +52,7 @@ class SupabaseApplication: Application() {
                     }
                 }
             } catch (e: Exception) {
-                Log.e("SupabaseApplication", "Error collecting session status", e)
+                Log.e("IngreDietApplication", "Error collecting session status", e)
             }
         }
     }
@@ -64,7 +64,7 @@ class SupabaseApplication: Application() {
     }
 
     companion object {
-        lateinit var instance: SupabaseApplication
+        lateinit var instance: IngreDietApplication
             private set
     }
-}
+} 

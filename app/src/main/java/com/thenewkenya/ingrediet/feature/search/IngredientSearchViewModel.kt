@@ -6,7 +6,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.thenewkenya.ingrediet.SupabaseApplication
+import com.thenewkenya.ingrediet.IngreDietApplication
 import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.network.api.IngreDietService
 import com.thenewkenya.ingrediet.data.network.RecipeCacheService
@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class IngredientSearchViewModel(
-    private val context: Context = SupabaseApplication.instance
+    private val context: Context = IngreDietApplication.instance
 ) : ViewModel() {
     
     private val TAG = "IngredientSearchVM"
