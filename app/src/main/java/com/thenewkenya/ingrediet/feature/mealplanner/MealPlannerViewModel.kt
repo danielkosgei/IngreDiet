@@ -28,6 +28,7 @@ import android.util.Log
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CancellationException
+import com.thenewkenya.ingrediet.data.mealplan.MealPlanGenerator
 
 // Add the MealTime enum
 enum class MealTime {
@@ -54,6 +55,9 @@ data class NutritionSummary(
     val carbs: Int,   // grams
     val fat: Int      // grams
 )
+
+// Add a custom exception class
+class MealPlanTimeoutException(message: String) : Exception(message)
 
 class MealPlannerViewModel(context: Context) : ViewModel() {
     private val repository = RecipeRepository(context)
@@ -93,7 +97,7 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
 
     init {
         checkAuthentication()
-        loadMealPlans()
+        loadExistingMealPlansOnly()
     }
     
     private fun checkAuthentication() {
@@ -111,7 +115,7 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
 
     fun updateWeek(week: String) {
         _currentWeek.value = week
-        loadMealPlans()
+        loadExistingMealPlansOnly()
     }
 
     fun loadMealPlans() {
@@ -207,8 +211,8 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
     }
 
     /**
-     * Generates a meal plan with real recipes from APIs or cached sources.
-     * This method handles API limits and timeouts gracefully.
+     * Generate a meal plan with real recipes
+     * Uses MealPlanGenerator directly to avoid flow issues
      */
     private fun generateMealPlanWithRealRecipes() {
         viewModelScope.launch {
@@ -259,25 +263,17 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                             
                             // Launch parallel requests for different meal types
                             coroutineScope {
-                                launch { repository.searchRecipes("breakfast $dietType", 15).catch { e ->
+                                launch { repository.searchRecipes("breakfast $dietType", 10).catch { e ->
                                     Log.e("MealPlannerViewModel", "Error pre-caching breakfast recipes: ${e.message}")
-                                }.collect {}
-                                }
+                                }.collect {}}
                                 
-                                launch { repository.searchRecipes("lunch $dietType", 15).catch { e ->
+                                launch { repository.searchRecipes("lunch $dietType", 10).catch { e ->
                                     Log.e("MealPlannerViewModel", "Error pre-caching lunch recipes: ${e.message}")
-                                }.collect {}
-                                }
+                                }.collect {}}
                                 
-                                launch { repository.searchRecipes("dinner $dietType", 15).catch { e ->
+                                launch { repository.searchRecipes("dinner $dietType", 10).catch { e ->
                                     Log.e("MealPlannerViewModel", "Error pre-caching dinner recipes: ${e.message}")
-                                }.collect {}
-                                }
-                                
-                                launch { repository.getRandomRecipes(20).catch { e ->
-                                    Log.e("MealPlannerViewModel", "Error pre-caching random recipes: ${e.message}")
-                                }.collect {}
-                                }
+                                }.collect {}}
                             }
                             
                             cacheJobCompleted = true
@@ -304,96 +300,100 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                     Log.d("MealPlannerViewModel", "Proceeding with meal plan generation while pre-caching continues in background")
                 }
                 
-                // Now generate the actual meal plan with a reasonable timeout
-                val mealPlan = withTimeoutOrNull(30000) { // 30 seconds max for the main operation
+                // Now generate the meal plan directly using MealPlanGenerator
+                val mealPlanResult = withTimeoutOrNull(30000) { // 30 seconds max for the main operation
                     try {
                         val days = DayOfWeek.values().toList()
-                        val result = repository.generateMealPlan(
-                            calories = calorieTarget,
+                        MealPlanGenerator.generateMealPlan(
+                            calorieTarget = calorieTarget,
                             days = days.size,
-                            preferences = listOf(dietType) + allergies
-                        ).first()
-                        
-                        if (result.isSuccess) {
-                            result.getOrNull()
-                        } else {
-                            Log.e("MealPlannerViewModel", "Error generating meal plan: ${result.exceptionOrNull()?.message}")
-                            null
-                        }
+                            dietaryPreferences = listOf(dietType) + allergies
+                        )
                     } catch (e: Exception) {
                         Log.e("MealPlannerViewModel", "Exception during meal plan generation: ${e.message}", e)
                         null
                     }
-                }
+                } ?: Result.failure(MealPlanTimeoutException("Meal plan generation timed out"))
                 
-                if (mealPlan != null) {
-                    Log.d("MealPlannerViewModel", "Successfully generated meal plan")
-                    
-                    // Convert to our UI state model
-                    val mealItems = mutableListOf<MealPlanItem>()
-                    
-                    mealPlan.forEach { (dayStr, meals) ->
-                        val day = try {
-                            // Parse day string like "Day 1" to a DayOfWeek
-                            val dayNum = dayStr.substringAfter("Day ").toIntOrNull() ?: 1
-                            // Map day numbers to DayOfWeek values (1 = Monday, etc.)
-                            DayOfWeek.of((dayNum - 1) % 7 + 1)
-                        } catch (e: Exception) {
-                            // Default to Monday if parsing fails
-                            DayOfWeek.MONDAY
+                mealPlanResult.fold(
+                    onSuccess = { mealPlanMap -> 
+                        Log.d("MealPlannerViewModel", "Successfully generated meal plan")
+                        
+                        // Convert to our UI state model
+                        val mealItems = mutableListOf<MealPlanItem>()
+                        
+                        mealPlanMap.forEach { (dayStr, meals) ->
+                            val day = try {
+                                // Parse day string like "Day 1" to a DayOfWeek
+                                val dayNum = dayStr.substringAfter("Day ").toIntOrNull() ?: 1
+                                // Map day numbers to DayOfWeek values (1 = Monday, etc.)
+                                DayOfWeek.of((dayNum - 1) % 7 + 1)
+                            } catch (e: Exception) {
+                                // Default to Monday if parsing fails
+                                DayOfWeek.MONDAY
+                            }
+                            
+                            meals.forEachIndexed { index, meal ->
+                                // Assign different meal times based on the index
+                                val mealTime = when (index % 4) {
+                                    0 -> MealTime.Breakfast
+                                    1 -> MealTime.Lunch
+                                    2 -> MealTime.Dinner
+                                    else -> MealTime.Snacks
+                                }
+                                
+                                mealItems.add(
+                                    MealPlanItem(
+                                        id = meal.id,
+                                        name = when (mealTime) {
+                                            MealTime.Breakfast -> "Breakfast"
+                                            MealTime.Lunch -> "Lunch"
+                                            MealTime.Dinner -> "Dinner" 
+                                            MealTime.Snacks -> "Snacks"
+                                        },
+                                        day = day,
+                                        time = mealTime,
+                                        calories = meal.nutritionFacts.calories,
+                                        recipeId = meal.id,
+                                        imageUrl = meal.imageUrl
+                                    )
+                                )
+                            }
                         }
                         
-                        meals.forEach { meal ->
-                            mealItems.add(
-                                MealPlanItem(
-                                    id = meal.id,
-                                    name = meal.name,
-                                    day = day,
-                                    time = getMealTimeFromString("Breakfast"), // Assign default meal time
-                                    calories = meal.nutritionFacts.calories,
-                                    recipeId = meal.id,
-                                    imageUrl = meal.imageUrl
-                                )
-                            )
-                        }
-                    }
-                    
-                    // Calculate nutrition summary
-                    val summaries = calculateNutritionSummaries(mealItems)
-                    
-                    _generationStage.value = "Finalizing your meal plan..."
-                    _generationProgress.value = 0.8f
-                    
-                    _mealPlans.value = mealItems.groupBy { it.day }
-                    _dailyNutrition.value = summaries
-                    
-                    // Save the meal plan if user is authenticated
-                    if (_isUserAuthenticated.value) {
-                        try {
-                            mealPlanRepository.saveUserMealPlans(mealItems.groupBy { it.day }).collect { saveResult ->
-                                saveResult.onSuccess {
-                                    Log.d("MealPlannerViewModel", "Successfully saved auto-generated meal plans")
+                        // Calculate nutrition summary
+                        val summaries = calculateNutritionSummaries(mealItems)
+                        
+                        _generationStage.value = "Finalizing your meal plan..."
+                        _generationProgress.value = 0.8f
+                        
+                        _mealPlans.value = mealItems.groupBy { it.day }
+                        _dailyNutrition.value = summaries
+                        
+                        // Save the meal plan if user is authenticated
+                        if (_isUserAuthenticated.value) {
+                            try {
+                                mealPlanRepository.saveUserMealPlans(mealItems.groupBy { it.day }).collect { saveResult ->
+                                    saveResult.onSuccess {
+                                        Log.d("MealPlannerViewModel", "Successfully saved auto-generated meal plans")
+                                    }
+                                    saveResult.onFailure { error ->
+                                        Log.e("MealPlannerViewModel", "Failed to save auto-generated meal plans", error)
+                                    }
                                 }
-                                saveResult.onFailure { error ->
-                                    Log.e("MealPlannerViewModel", "Failed to save auto-generated meal plans", error)
-                                }
+                            } catch (e: Exception) {
+                                Log.e("MealPlannerViewModel", "Error saving auto-generated meal plans", e)
                             }
-                        } catch (e: Exception) {
-                            Log.e("MealPlannerViewModel", "Error saving auto-generated meal plans", e)
                         }
+                    },
+                    onFailure = { error ->
+                        Log.w("MealPlannerViewModel", "Failed to generate meal plan, using fallback")
+                        Log.e("MealPlannerViewModel", "Error: ${error.message}")
+                        
+                        // Use a hardcoded fallback plan
+                        createFallbackMealPlan(calorieTarget = 2000, dietType = "Balanced")
                     }
-                    
-                    // Refresh recipes in background for future use
-                    viewModelScope.launch {
-                        refreshRecipeCacheInBackground(30)
-                    }
-                    
-                } else {
-                    Log.w("MealPlannerViewModel", "Failed to generate meal plan, using fallback")
-                    
-                    // Use a hardcoded fallback plan
-                    createFallbackMealPlan(calorieTarget = 2000, dietType = "Balanced")
-                }
+                )
             } catch (e: Exception) {
                 Log.e("MealPlannerViewModel", "Error generating meal plan: ${e.message}", e)
                 _error.value = e.message ?: "An unexpected error occurred"
@@ -1116,6 +1116,10 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
         return Pair(text, fileName)
     }
 
+    /**
+     * Generate a meal plan with specific parameters
+     * Uses MealPlanGenerator directly to avoid flow issues
+     */
     fun generateMealPlan(calorieTarget: Int, dietType: String, allergies: List<String> = emptyList()) {
         viewModelScope.launch {
             try {
@@ -1132,19 +1136,18 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                 _generationProgress.value = 0.2f
                 
                 // Launch concurrent API calls for faster recipe fetching
-                val cachingJob = viewModelScope.launch {
+                viewModelScope.launch {
                     try {
                         withTimeoutOrNull(10000) { // 10-second timeout for pre-caching
                             // Create query strings with diet type and allergy exclusions
                             var baseQuery = dietType
                             allergies.forEach { baseQuery += " -$it" }
                             
-                            // Launch parallel requests for different meal types
+                            // Pre-cache some recipes in parallel for UI responsiveness
                             kotlinx.coroutines.coroutineScope {
-                                launch { repository.searchRecipes("breakfast $baseQuery", limit = 20).first() }
-                                launch { repository.searchRecipes("lunch $baseQuery", limit = 20).first() }
-                                launch { repository.searchRecipes("dinner $baseQuery", limit = 20).first() }
-                                launch { repository.getRandomRecipes(30).first() }
+                                launch { repository.searchRecipes("breakfast $baseQuery", limit = 10).first() }
+                                launch { repository.searchRecipes("lunch $baseQuery", limit = 10).first() }
+                                launch { repository.searchRecipes("dinner $baseQuery", limit = 10).first() }
                             }
                         }
                     } catch (e: Exception) {
@@ -1155,103 +1158,79 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                 _generationStage.value = "Creating your personalized meal plan..."
                 _generationProgress.value = 0.4f
                 
-                // Use shorter timeout for the main meal plan generation
-                var usedRealData = false
-                val mealPlanData = withTimeoutOrNull(35000) { // Reduced from 60s to 35s
-                    try {
-                        // Wait for the caching job to complete (with a timeout)
-                        withTimeoutOrNull(5000) {
-                            cachingJob.join()
-                        }
-                        
-                        val result = mutableMapOf<DayOfWeek, List<MealPlanItem>>()
-                        val allDays = DayOfWeek.values().toList()
-                        
-                        repository.generateMealPlan(
-                            calories = calorieTarget,
-                            days = allDays.size,
-                            preferences = listOf(dietType) + allergies
-                        ).collect { repoResult ->
-                            repoResult.onSuccess { mealPlanFromRepo ->
-                                _generationProgress.value = 0.6f
-                                _generationStage.value = "Optimizing meal variety..."
-                                
-                                // Track recipes we've used to avoid duplicates
-                                val usedRecipeIds = mutableSetOf<String?>()
-                                
-                                // Transform repository meal plan data to our UI model
-                                result.clear()
-                                mealPlanFromRepo.forEach { (dayStr, meals) ->
-                                    val day = try {
-                                        // Parse day string like "Day 1" to a DayOfWeek
-                                        val dayNum = dayStr.substringAfter("Day ").toIntOrNull() ?: 1
-                                        // Map day numbers to DayOfWeek values (1 = Monday, etc.)
-                                        DayOfWeek.of((dayNum - 1) % 7 + 1)
-                                    } catch (e: Exception) {
-                                        // Default to Monday if parsing fails
-                                        DayOfWeek.MONDAY
-                                    }
-                                    
-                                    // Filter for unique meals that haven't been used yet
-                                    val uniqueMeals = meals.filter { meal -> 
-                                        meal.id == null || !usedRecipeIds.contains(meal.id)
-                                    }
-                                    
-                                    // If we have unique meals for this day, use them
-                                    if (uniqueMeals.isNotEmpty()) {
-                                        // Track recipe IDs so we don't reuse them
-                                        uniqueMeals.forEach { meal ->
-                                            if (meal.id != null) {
-                                                usedRecipeIds.add(meal.id)
-                                            }
-                                        }
-                                        
-                                        result[day] = uniqueMeals.map { meal ->
-                                            MealPlanItem(
-                                                id = meal.id,
-                                                name = meal.name,
-                                                calories = meal.nutritionFacts.calories,
-                                                day = day,
-                                                time = getMealTimeFromString("Breakfast"), // Default meal time
-                                                description = meal.description,
-                                                recipeId = meal.id,
-                                                imageUrl = meal.imageUrl ?: getDefaultMealImage(meal.name)
-                                            )
-                                        }
-                                    }
-                                }
-                                
-                                // Accept any real data as long as we have at least one day
-                                if (result.isNotEmpty()) {
-                                    usedRealData = true
-                                    Log.d("MealPlannerViewModel", "Successfully fetched meal plan with ${result.size} days and ${usedRecipeIds.size} unique recipes")
-                                } else {
-                                    Log.w("MealPlannerViewModel", "No days with meals found")
-                                }
-                            }
-                            repoResult.onFailure { error ->
-                                Log.w("MealPlannerViewModel", "Error from repository: ${error.message}", error)
-                                usedRealData = false
-                                throw error
-                            }
-                        }
-                        result
-                    } catch (e: Exception) {
-                        Log.w("MealPlannerViewModel", "Exception during meal plan generation: ${e.message}", e)
-                        usedRealData = false
-                        null
-                    }
+                // Direct call to MealPlanGenerator - no flow involved
+                val mealPlanResult = withTimeoutOrNull(25000) { // 25 second timeout
+                    MealPlanGenerator.generateMealPlan(
+                        calorieTarget = calorieTarget,
+                        days = 7,
+                        dietaryPreferences = listOf(dietType) + allergies
+                    )
                 }
                 
-                // If the caching job is still running, cancel it
-                if (cachingJob.isActive) {
-                    cachingJob.cancel()
+                if (mealPlanResult == null) {
+                    Log.w("MealPlannerViewModel", "Meal plan generation timed out")
+                    throw MealPlanTimeoutException("Meal plan generation timed out")
                 }
+
+                // Process the result
+                _generationProgress.value = 0.6f
+                _generationStage.value = "Optimizing meal variety..."
+                
+                val mealPlanData = mealPlanResult.fold(
+                    onSuccess = { mealPlanMap ->
+                        // Transform repository meal plan data to our UI model
+                        val result = mutableMapOf<DayOfWeek, List<MealPlanItem>>()
+                        
+                        mealPlanMap.forEach { (dayStr, meals) ->
+                            val day = try {
+                                // Parse day string like "Day 1" to a DayOfWeek
+                                val dayNum = dayStr.substringAfter("Day ").toIntOrNull() ?: 1
+                                // Map day numbers to DayOfWeek values (1 = Monday, etc.)
+                                DayOfWeek.of((dayNum - 1) % 7 + 1)
+                            } catch (e: Exception) {
+                                // Default to Monday if parsing fails
+                                DayOfWeek.MONDAY
+                            }
+                            
+                            // Convert to MealPlanItem
+                            result[day] = meals.mapIndexed { index, meal ->
+                                // Assign different meal times based on the index
+                                val mealTime = when (index % 4) {
+                                    0 -> MealTime.Breakfast
+                                    1 -> MealTime.Lunch
+                                    2 -> MealTime.Dinner
+                                    else -> MealTime.Snacks
+                                }
+                                
+                                MealPlanItem(
+                                    id = meal.id,
+                                    name = when (mealTime) {
+                                        MealTime.Breakfast -> "Breakfast"
+                                        MealTime.Lunch -> "Lunch"
+                                        MealTime.Dinner -> "Dinner" 
+                                        MealTime.Snacks -> "Snacks"
+                                    },
+                                    calories = meal.nutritionFacts.calories,
+                                    day = day,
+                                    time = mealTime,
+                                    description = meal.description,
+                                    recipeId = meal.id,
+                                    imageUrl = meal.imageUrl ?: getDefaultMealImage(mealTime.toString())
+                                )
+                            }
+                        }
+                        
+                        Log.d("MealPlannerViewModel", "Successfully generated meal plan with ${result.size} days")
+                        result
+                    },
+                    onFailure = { error ->
+                        Log.e("MealPlannerViewModel", "Error generating meal plan: ${error.message}", error)
+                        throw error
+                    }
+                )
                 
                 // Prepare the final plan - either use the real data or fallback to offline
-                val finalPlan = if (mealPlanData != null && usedRealData && mealPlanData.isNotEmpty()) {
-                    Log.d("MealPlannerViewModel", "Using real recipe data for meal plan with ${mealPlanData.size} days")
-                    // Create a diverse meal plan with our improved helper function
+                val finalPlan = if (mealPlanData.isNotEmpty()) {
                     _generationStage.value = "Finalizing your meal plan..."
                     _generationProgress.value = 0.8f
                     createDiverseMealPlan(mealPlanData)
@@ -1288,11 +1267,6 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                     } catch (e: Exception) {
                         Log.e("MealPlannerViewModel", "Error saving user meal plans", e)
                     }
-                }
-                
-                // Async background refresh for next time
-                viewModelScope.launch {
-                    refreshRecipeCacheInBackground(40)
                 }
                 
             } catch (e: Exception) {
@@ -1349,6 +1323,78 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                 carbs = (meals.sumOf { it.calories } * 0.5f / 4).toInt(),   // 50% carbs
                 fat = (meals.sumOf { it.calories } * 0.3f / 9).toInt()      // 30% fat
             )
+        }
+    }
+
+    /**
+     * Loads only existing meal plans without auto-generating new ones.
+     * Used by the home screen to avoid showing meal plans that weren't explicitly generated.
+     */
+    fun loadExistingMealPlansOnly() {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _error.value = null
+                
+                // Check if the user is authenticated
+                val currentUser = supabase.auth.currentUserOrNull()
+                _isUserAuthenticated.value = currentUser != null
+                
+                if (currentUser != null) {
+                    try {
+                        // Check if the user has saved meal plans
+                        mealPlanRepository.hasMealPlans()
+                            .catch { e -> 
+                                Log.e("MealPlannerViewModel", "Error checking for meal plans", e)
+                                _isLoading.value = false
+                            }
+                            .collect { result ->
+                                val hasMealPlans = result.getOrNull() ?: false
+                                
+                                if (hasMealPlans) {
+                                    Log.d("MealPlannerViewModel", "User has saved meal plans")
+                                    // Load the meal plans with proper error handling
+                                    mealPlanRepository.getUserMealPlans()
+                                        .catch { e ->
+                                            Log.e("MealPlannerViewModel", "Error loading meal plans", e)
+                                            _isLoading.value = false
+                                        }
+                                        .collect { userMealPlansResult ->
+                                            userMealPlansResult.onSuccess { mealPlanData ->
+                                                _mealPlans.value = mealPlanData
+                                                
+                                                // Calculate nutrition summaries
+                                                val nutritionSummaries = calculateNutritionSummaries(mealPlanData)
+                                                _dailyNutrition.value = nutritionSummaries
+                                            }
+                                            _isLoading.value = false
+                                        }
+                                } else {
+                                    // No meal plans - just set empty state instead of generating
+                                    _mealPlans.value = emptyMap()
+                                    _dailyNutrition.value = emptyMap()
+                                    _isLoading.value = false
+                                }
+                            }
+                    } catch (e: Exception) {
+                        Log.e("MealPlannerViewModel", "Error in meal plan flow handling", e)
+                        _mealPlans.value = emptyMap()
+                        _dailyNutrition.value = emptyMap()
+                        _isLoading.value = false
+                    }
+                } else {
+                    // Not authenticated, set empty state
+                    _mealPlans.value = emptyMap()
+                    _dailyNutrition.value = emptyMap()
+                    _isLoading.value = false
+                }
+            } catch (e: Exception) {
+                Log.e("MealPlannerViewModel", "Error in loadExistingMealPlansOnly", e)
+                _error.value = e.message
+                _mealPlans.value = emptyMap()
+                _dailyNutrition.value = emptyMap()
+                _isLoading.value = false
+            }
         }
     }
 }

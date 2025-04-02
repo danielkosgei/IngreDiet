@@ -10,10 +10,16 @@ import com.thenewkenya.ingrediet.data.network.supabase
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.take
 import kotlin.random.Random
 import java.util.UUID
 import java.util.NoSuchElementException
 import com.thenewkenya.ingrediet.data.model.RecipeDto
+import com.thenewkenya.ingrediet.data.mealplan.MealPlanGenerator
 
 class RecipeRepository(context: Context) {
 
@@ -388,51 +394,32 @@ class RecipeRepository(context: Context) {
     }
     
     /**
-     * Generate a meal plan based on preferences
+     * Generate a meal plan using the standalone MealPlanGenerator
+     * @param calorieIntake Target daily calorie intake
+     * @param days Number of days to generate plan for
+     * @param dietaryPreferences Optional list of dietary preferences
+     * @return Flow with meal plan (map of days to recipes)
      */
     suspend fun generateMealPlan(
-        calories: Int = 2000,
+        calorieIntake: Int = 2000,
         days: Int = 7,
-        preferences: List<String> = emptyList()
+        dietaryPreferences: List<String>? = null
     ): Flow<Result<Map<String, List<DetailedRecipe>>>> = flow {
         try {
-            Log.d("RecipeRepository", "Generating meal plan for $days days with $calories calories")
+            Log.d("RecipeRepository", "Delegating meal plan generation to MealPlanGenerator")
             
-            val mealPlan = mutableMapOf<String, List<DetailedRecipe>>()
-            val allRecipes = mutableListOf<DetailedRecipe>()
+            // Use the standalone generator instead of doing it ourselves
+            val mealPlanResult = MealPlanGenerator.generateMealPlan(
+                calorieTarget = calorieIntake,
+                days = days,
+                dietaryPreferences = dietaryPreferences ?: emptyList()
+            )
             
-            // Get random recipes first
-            getRandomRecipes(days * 3).collect { result ->
-                result.fold(
-                    onSuccess = { recipes ->
-                        allRecipes.addAll(recipes)
-                    },
-                    onFailure = { error ->
-                        emit(Result.failure(error))
-                        return@collect
-                    }
-                )
-            }
+            // Simply emit the result
+            emit(mealPlanResult)
             
-            if (allRecipes.isEmpty()) {
-                emit(Result.failure(IllegalStateException("No recipes available for meal plan")))
-                return@flow
-            }
-            
-            // Group recipes by day
-            for (day in 1..days) {
-                // Get 3 random recipes for breakfast, lunch, dinner or as many as we have
-                val dayRecipes = if (allRecipes.size >= 3) {
-                    allRecipes.shuffled().take(3)
-                } else {
-                    allRecipes.shuffled()
-                }
-                mealPlan["Day $day"] = dayRecipes
-            }
-            
-            emit(Result.success(mealPlan))
         } catch (e: Exception) {
-            Log.e("RecipeRepository", "Error generating meal plan: ${e.message}", e)
+            Log.e("RecipeRepository", "Error delegating meal plan generation: ${e.message}", e)
             emit(Result.failure(e))
         }
     }

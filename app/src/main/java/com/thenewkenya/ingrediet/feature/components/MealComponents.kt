@@ -54,6 +54,7 @@ import com.thenewkenya.ingrediet.feature.mealplanner.MealPlannerViewModel
 import com.thenewkenya.ingrediet.feature.mealplanner.MealTime
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 @Composable
 fun EnhancedMealPreviewCard(
@@ -75,9 +76,12 @@ fun EnhancedMealPreviewCard(
     val today = LocalDate.now().dayOfWeek
     val todaysMeals = mealPlans[today] ?: emptyList()
     
-    // Load meal plans when composable enters composition
-    LaunchedEffect(Unit) {
-        mealPlannerViewModel.loadMealPlans()
+    // Force refresh every time this component is displayed
+    val currentTime = LocalDateTime.now().toString()
+    
+    // Load meal plans when composable enters composition or when returning to this screen
+    LaunchedEffect(currentTime) {
+        mealPlannerViewModel.loadExistingMealPlansOnly()
     }
     
     Card(
