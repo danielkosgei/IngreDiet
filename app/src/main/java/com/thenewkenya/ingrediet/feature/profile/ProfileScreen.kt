@@ -498,30 +498,6 @@ fun ProfileScreen(navController: NavController) {
                             Column(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                // Personal Information Section (visible but not directly editable)
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                                ) {
-                                    Text(
-                                        text = "Personal Information",
-                                        style = typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = colors.onBackground,
-                                        modifier = Modifier.padding(bottom = 8.dp)
-                                    )
-                                    
-                                    InfoItem(label = "Name", value = "${currentProfile.firstName} ${currentProfile.lastName}")
-                                    InfoItem(label = "Email", value = currentProfile.email)
-                                    
-                                    HorizontalDivider(
-                                        color = colors.outlineVariant,
-                                        thickness = 0.5.dp,
-                                        modifier = Modifier.padding(top = 16.dp)
-                                    )
-                                }
-                                
                                 // Edit Profile Section (dedicated section for editing profile details)
                                 NavigationSection(
                                     title = "Edit Profile",
