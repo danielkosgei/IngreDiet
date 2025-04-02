@@ -127,7 +127,7 @@ fun ProfileScreen(navController: NavController) {
         when (uiState) {
             is ProfileUiState.Success -> {
                 profile = (uiState as ProfileUiState.Success).profile
-                if (!isEditMode) { // Only reset editable if not in edit mode
+                if (!isEditMode) {
                     editableProfile = profile
                 }
             }
@@ -169,10 +169,16 @@ fun ProfileScreen(navController: NavController) {
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "My Profile",
-                        style = typography.titleLarge
-                    )
+                    AnimatedVisibility(
+                        visible = scrollState.value > 150,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        Text(
+                            text = "My Profile",
+                            style = typography.titleLarge
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
@@ -198,7 +204,8 @@ fun ProfileScreen(navController: NavController) {
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colors.surface
+                    containerColor = colors.surface.copy(alpha = 0.95f),
+                    scrolledContainerColor = colors.surface
                 )
             )
         }
@@ -288,255 +295,305 @@ fun ProfileScreen(navController: NavController) {
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(scrollState)
-                            .padding(horizontal = 16.dp)
                     ) {
-                        // Profile header with image
+                        // Modern profile header with gradient background
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 24.dp),
-                            contentAlignment = Alignment.Center
+                                .height(220.dp)
                         ) {
-                            // Profile Image
+                            // Gradient background
                             Box(
                                 modifier = Modifier
-                                    .size(120.dp)
-                                    .clip(CircleShape)
-                                    .background(colors.surfaceVariant)
-                                    .border(3.dp, colors.primary.copy(alpha = 0.1f), CircleShape),
-                                contentAlignment = Alignment.Center
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                colors.primary,
+                                                colors.primaryContainer
+                                            )
+                                        )
+                                    )
+                            )
+                            
+                            // Curved bottom shape
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(40.dp)
+                                    .align(Alignment.BottomCenter)
+                                    .clip(
+                                        RoundedCornerShape(
+                                            topStart = 32.dp,
+                                            topEnd = 32.dp
+                                        )
+                                    )
+                                    .background(colors.background)
+                            )
+                            
+                            // Profile content
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 24.dp)
                             ) {
-                                if (profileImageUrl != null) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current)
-                                            .data(profileImageUrl)
-                                            .crossfade(true)
-                                            .build(),
-                                        contentDescription = "Profile picture",
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.Person,
-                                        contentDescription = null,
-                                        tint = colors.onSurfaceVariant,
-                                        modifier = Modifier.size(60.dp)
-                                    )
-                                }
-                                
-                                // Edit icon overlay
-                                if (isEditMode) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                            
+                                // Profile Image with elevation
+                                Surface(
+                                    modifier = Modifier
+                                        .size(110.dp)
+                                        .clip(CircleShape),
+                                    tonalElevation = 8.dp,
+                                    shadowElevation = 8.dp
+                                ) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .background(colors.surface.copy(alpha = 0.5f))
-                                            .clickable { 
-                                                // Image picker would go here
-                                                // For now just a placeholder
-                                            },
+                                            .background(colors.surfaceVariant)
+                                            .border(3.dp, colors.surface, CircleShape)
+                                            .clip(CircleShape),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Camera,
-                                            contentDescription = "Change profile picture",
-                                            tint = colors.onSurface,
-                                            modifier = Modifier.size(32.dp)
-                                        )
+                                        if (profileImageUrl != null) {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(LocalContext.current)
+                                                    .data(profileImageUrl)
+                                                    .crossfade(true)
+                                                    .build(),
+                                                contentDescription = "Profile picture",
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.Person,
+                                                contentDescription = null,
+                                                tint = colors.onSurfaceVariant,
+                                                modifier = Modifier.size(60.dp)
+                                            )
+                                        }
+                                        
+                                        // Edit icon overlay
+                                        if (isEditMode) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(colors.surface.copy(alpha = 0.6f))
+                                                    .clickable { 
+                                                        // Image picker would go here
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Camera,
+                                                    contentDescription = "Change profile picture",
+                                                    tint = colors.onSurface,
+                                                    modifier = Modifier.size(32.dp)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
+                                
+                                Spacer(modifier = Modifier.height(16.dp))
+                                
+                                // User name display below image
+                                if (!isEditMode) {
+                                    Text(
+                                        text = "${currentProfile.firstName} ${currentProfile.lastName}",
+                                        style = typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onPrimary,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    
+                                    Text(
+                                        text = currentProfile.email,
+                                        style = typography.bodyMedium,
+                                        color = colors.onPrimary.copy(alpha = 0.8f),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                             }
-                            
-                            // User name display below image
-                            if (!isEditMode) {
-                                Text(
-                                    text = "${currentProfile.firstName} ${currentProfile.lastName}",
-                                    style = typography.headlineMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 140.dp)
+                        }
+                        
+                        // Content sections with padding
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                        ) {
+                            // Personal Information Section
+                            ProfileSection(
+                                title = "Personal Information",
+                                icon = Icons.Outlined.Person
+                            ) {
+                                ProfileTextField(
+                                    label = "First Name",
+                                    value = if (isEditMode) editableProfile?.firstName ?: "" else currentProfile.firstName,
+                                    onValueChange = { editableProfile = editableProfile?.copy(firstName = it) },
+                                    isEditable = isEditMode,
+                                    leadingIcon = null
+                                )
+                                
+                                ProfileTextField(
+                                    label = "Last Name",
+                                    value = if (isEditMode) editableProfile?.lastName ?: "" else currentProfile.lastName,
+                                    onValueChange = { editableProfile = editableProfile?.copy(lastName = it) },
+                                    isEditable = isEditMode,
+                                    leadingIcon = null
                                 )
                             }
-                        }
-                        
-                        // Personal Information Section
-                        ProfileSection(
-                            title = "Personal Information",
-                            icon = Icons.Outlined.Person
-                        ) {
-                            ProfileTextField(
-                                label = "First Name",
-                                value = if (isEditMode) editableProfile?.firstName ?: "" else currentProfile.firstName,
-                                onValueChange = { editableProfile = editableProfile?.copy(firstName = it) },
-                                isEditable = isEditMode,
-                                leadingIcon = null
-                            )
                             
-                            ProfileTextField(
-                                label = "Last Name",
-                                value = if (isEditMode) editableProfile?.lastName ?: "" else currentProfile.lastName,
-                                onValueChange = { editableProfile = editableProfile?.copy(lastName = it) },
-                                isEditable = isEditMode,
-                                leadingIcon = null
-                            )
-                            
-                            ProfileTextField(
-                                label = "Email",
-                                value = currentProfile.email,
-                                onValueChange = { /* Email is typically not editable */ },
-                                isEditable = false,
-                                leadingIcon = Icons.Outlined.Email
-                            )
-                        }
-                        
-                        // Dietary Preferences Section
-                        ProfileSection(
-                            title = "Dietary Preferences",
-                            icon = Icons.Outlined.Restaurant
-                        ) {
-                            val preferencesValue = currentProfile.dietaryPreferences.joinToString(", ")
-                            ProfileTextField(
-                                label = "Dietary Preferences",
-                                value = if (isEditMode) 
-                                    editableProfile?.dietaryPreferences?.joinToString(", ") ?: "" 
-                                else 
-                                    preferencesValue,
-                                onValueChange = { 
-                                    val preferences = it.split(",").map { pref -> pref.trim() }.filter { pref -> pref.isNotEmpty() }
-                                    editableProfile = editableProfile?.copy(dietaryPreferences = preferences)
-                                },
-                                isEditable = isEditMode,
-                                leadingIcon = Icons.Outlined.LocalDining,
-                                helperText = if (isEditMode) "Separate multiple preferences with commas" else null
-                            )
-                            
-                            val allergiesValue = currentProfile.allergies.joinToString(", ")
-                            ProfileTextField(
-                                label = "Allergies",
-                                value = if (isEditMode) 
-                                    editableProfile?.allergies?.joinToString(", ") ?: "" 
-                                else 
-                                    allergiesValue,
-                                onValueChange = { 
-                                    val allergies = it.split(",").map { allergy -> allergy.trim() }.filter { allergy -> allergy.isNotEmpty() }
-                                    editableProfile = editableProfile?.copy(allergies = allergies)
-                                },
-                                isEditable = isEditMode,
-                                leadingIcon = null,
-                                helperText = if (isEditMode) "Separate multiple allergies with commas" else null
-                            )
-                        }
-                        
-                        // Goals Section
-                        ProfileSection(
-                            title = "Health Goals",
-                            icon = Icons.Outlined.EmojiEvents
-                        ) {
-                            ProfileTextField(
-                                label = "Weight Goal",
-                                value = if (isEditMode) editableProfile?.weightGoal ?: "" else currentProfile.weightGoal,
-                                onValueChange = { editableProfile = editableProfile?.copy(weightGoal = it) },
-                                isEditable = isEditMode,
-                                leadingIcon = null
-                            )
-                            
-                            ProfileTextField(
-                                label = "Daily Calorie Target",
-                                value = if (isEditMode) 
-                                    (editableProfile?.calorieTarget ?: 0).toString() 
-                                else 
-                                    if (currentProfile.calorieTarget > 0) 
-                                        currentProfile.calorieTarget.toString() 
+                            // Dietary Preferences Section
+                            ProfileSection(
+                                title = "Dietary Preferences",
+                                icon = Icons.Outlined.Restaurant
+                            ) {
+                                val preferencesValue = currentProfile.dietaryPreferences.joinToString(", ")
+                                ProfileTextField(
+                                    label = "Dietary Preferences",
+                                    value = if (isEditMode) 
+                                        editableProfile?.dietaryPreferences?.joinToString(", ") ?: "" 
                                     else 
-                                        "",
-                                onValueChange = { 
-                                    val calories = it.toIntOrNull() ?: 0
-                                    editableProfile = editableProfile?.copy(calorieTarget = calories)
-                                },
-                                isEditable = isEditMode,
-                                leadingIcon = null,
-                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                            )
+                                        preferencesValue,
+                                    onValueChange = { 
+                                        val preferences = it.split(",").map { pref -> pref.trim() }.filter { pref -> pref.isNotEmpty() }
+                                        editableProfile = editableProfile?.copy(dietaryPreferences = preferences)
+                                    },
+                                    isEditable = isEditMode,
+                                    leadingIcon = Icons.Outlined.LocalDining,
+                                    helperText = if (isEditMode) "Separate multiple preferences with commas" else null
+                                )
+                                
+                                val allergiesValue = currentProfile.allergies.joinToString(", ")
+                                ProfileTextField(
+                                    label = "Allergies",
+                                    value = if (isEditMode) 
+                                        editableProfile?.allergies?.joinToString(", ") ?: "" 
+                                    else 
+                                        allergiesValue,
+                                    onValueChange = { 
+                                        val allergies = it.split(",").map { allergy -> allergy.trim() }.filter { allergy -> allergy.isNotEmpty() }
+                                        editableProfile = editableProfile?.copy(allergies = allergies)
+                                    },
+                                    isEditable = isEditMode,
+                                    leadingIcon = null,
+                                    helperText = if (isEditMode) "Separate multiple allergies with commas" else null
+                                )
+                            }
+                            
+                            // Goals Section
+                            ProfileSection(
+                                title = "Health Goals",
+                                icon = Icons.Outlined.EmojiEvents
+                            ) {
+                                ProfileTextField(
+                                    label = "Weight Goal",
+                                    value = if (isEditMode) editableProfile?.weightGoal ?: "" else currentProfile.weightGoal,
+                                    onValueChange = { editableProfile = editableProfile?.copy(weightGoal = it) },
+                                    isEditable = isEditMode,
+                                    leadingIcon = null
+                                )
+                                
+                                ProfileTextField(
+                                    label = "Daily Calorie Target",
+                                    value = if (isEditMode) 
+                                        (editableProfile?.calorieTarget ?: 0).toString() 
+                                    else 
+                                        if (currentProfile.calorieTarget > 0) 
+                                            currentProfile.calorieTarget.toString() 
+                                        else 
+                                            "",
+                                    onValueChange = { 
+                                        val calories = it.toIntOrNull() ?: 0
+                                        editableProfile = editableProfile?.copy(calorieTarget = calories)
+                                    },
+                                    isEditable = isEditMode,
+                                    leadingIcon = null,
+                                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                                )
+                            }
+                            
+                            // Settings Section
+                            ProfileSection(
+                                title = "Settings",
+                                icon = Icons.Outlined.Settings
+                            ) {
+                                ProfileActionItem(
+                                    title = "Notifications",
+                                    subtitle = "Manage your notification preferences",
+                                    icon = Icons.Outlined.Notifications,
+                                    onClick = { /* Navigate to notification settings */ }
+                                )
+                                
+                                ProfileActionItem(
+                                    title = "Privacy & Security",
+                                    subtitle = "Control your privacy settings",
+                                    icon = Icons.Outlined.Security,
+                                    onClick = { /* Navigate to privacy settings */ }
+                                )
+                                
+                                ProfileActionItem(
+                                    title = "App Preferences",
+                                    subtitle = "Customize app behavior",
+                                    icon = Icons.Outlined.Tune,
+                                    onClick = { /* Navigate to app preferences */ }
+                                )
+                            }
+                            
+                            // Support Section
+                            ProfileSection(
+                                title = "Support",
+                                icon = Icons.AutoMirrored.Outlined.Help
+                            ) {
+                                ProfileActionItem(
+                                    title = "Help Center",
+                                    subtitle = "Get help with using the app",
+                                    icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                                    onClick = { /* Navigate to help center */ }
+                                )
+                                
+                                ProfileActionItem(
+                                    title = "Report a Problem",
+                                    subtitle = "Let us know if something isn't working",
+                                    icon = Icons.Outlined.Report,
+                                    onClick = { /* Navigate to problem reporting */ }
+                                )
+                                
+                                ProfileActionItem(
+                                    title = "About IngreDiet",
+                                    subtitle = "Version 1.0.0",
+                                    icon = Icons.Outlined.Info,
+                                    onClick = { /* Navigate to about screen */ }
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(24.dp))
+                            
+                            // Account Actions Section
+                            ProfileSection(
+                                title = "Account",
+                                icon = Icons.Outlined.ManageAccounts
+                            ) {
+                                ProfileDangerItem(
+                                    title = "Sign Out",
+                                    icon = Icons.AutoMirrored.Filled.Logout,
+                                    onClick = { showSignOutConfirmation = true }
+                                )
+                                
+                                ProfileDangerItem(
+                                    title = "Delete Account",
+                                    icon = Icons.Outlined.Delete,
+                                    onClick = { /* Show delete account confirmation */ },
+                                    isDangerous = true
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(32.dp))
                         }
-                        
-                        // Settings Section
-                        ProfileSection(
-                            title = "Settings",
-                            icon = Icons.Outlined.Settings
-                        ) {
-                            ProfileActionItem(
-                                title = "Notifications",
-                                subtitle = "Manage your notification preferences",
-                                icon = Icons.Outlined.Notifications,
-                                onClick = { /* Navigate to notification settings */ }
-                            )
-                            
-                            ProfileActionItem(
-                                title = "Privacy & Security",
-                                subtitle = "Control your privacy settings",
-                                icon = Icons.Outlined.Security,
-                                onClick = { /* Navigate to privacy settings */ }
-                            )
-                            
-                            ProfileActionItem(
-                                title = "App Preferences",
-                                subtitle = "Customize app behavior",
-                                icon = Icons.Outlined.Tune,
-                                onClick = { /* Navigate to app preferences */ }
-                            )
-                        }
-                        
-                        // Support Section
-                        ProfileSection(
-                            title = "Support",
-                            icon = Icons.AutoMirrored.Outlined.Help
-                        ) {
-                            ProfileActionItem(
-                                title = "Help Center",
-                                subtitle = "Get help with using the app",
-                                icon = Icons.AutoMirrored.Outlined.HelpOutline,
-                                onClick = { /* Navigate to help center */ }
-                            )
-                            
-                            ProfileActionItem(
-                                title = "Report a Problem",
-                                subtitle = "Let us know if something isn't working",
-                                icon = Icons.Outlined.Report,
-                                onClick = { /* Navigate to problem reporting */ }
-                            )
-                            
-                            ProfileActionItem(
-                                title = "About IngreDiet",
-                                subtitle = "Version 1.0.0",
-                                icon = Icons.Outlined.Info,
-                                onClick = { /* Navigate to about screen */ }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(32.dp))
-                        
-                        // Account Actions Section
-                        ProfileSection(
-                            title = "Account",
-                            icon = Icons.Outlined.ManageAccounts
-                        ) {
-                            ProfileDangerItem(
-                                title = "Sign Out",
-                                icon = Icons.AutoMirrored.Filled.Logout,
-                                onClick = { showSignOutConfirmation = true }
-                            )
-                            
-                            ProfileDangerItem(
-                                title = "Delete Account",
-                                icon = Icons.Outlined.Delete,
-                                onClick = { /* Show delete account confirmation */ },
-                                isDangerous = true
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(24.dp))
                     }
                 }
             }
@@ -560,7 +617,10 @@ fun ProfileSection(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        )
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -572,24 +632,35 @@ fun ProfileSection(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (icon != null) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = colors.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        modifier = Modifier.size(32.dp),
+                        shape = CircleShape,
+                        color = colors.primaryContainer
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = colors.onPrimaryContainer,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
                 }
                 
                 Text(
                     text = title,
                     style = typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = colors.primary
+                    color = colors.onSurface
                 )
             }
             
-            androidx.compose.material3.HorizontalDivider(
+            HorizontalDivider(
                 color = colors.outlineVariant,
                 thickness = 1.dp
             )
@@ -652,7 +723,8 @@ fun ProfileTextField(
                             color = colors.onSurfaceVariant
                         )
                     }
-                }
+                },
+                shape = RoundedCornerShape(12.dp)
             )
         } else {
             Column(
@@ -665,28 +737,35 @@ fun ProfileTextField(
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
                 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(colors.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                        .padding(16.dp)
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = colors.surfaceVariant.copy(alpha = 0.3f)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    if (leadingIcon != null) {
-                        Icon(
-                            imageVector = leadingIcon,
-                            contentDescription = null,
-                            tint = colors.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        if (leadingIcon != null) {
+                            Icon(
+                                imageVector = leadingIcon,
+                                contentDescription = null,
+                                tint = colors.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                        }
+                        
+                        Text(
+                            text = if (value.isNotEmpty()) value else "Not set",
+                            style = typography.bodyLarge,
+                            color = if (value.isNotEmpty()) colors.onSurface else colors.onSurface.copy(alpha = 0.5f)
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
                     }
-                    
-                    Text(
-                        text = if (value.isNotEmpty()) value else "Not set",
-                        style = typography.bodyLarge,
-                        color = if (value.isNotEmpty()) colors.onSurface else colors.onSurface.copy(alpha = 0.5f)
-                    )
                 }
             }
         }
@@ -703,42 +782,60 @@ fun ProfileActionItem(
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
     
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        color = Color.Transparent
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = colors.onSurfaceVariant,
-            modifier = Modifier.size(24.dp)
-        )
-        
-        Spacer(modifier = Modifier.width(16.dp))
-        
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = typography.bodyLarge,
-                color = colors.onSurface
-            )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp, horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = colors.surfaceVariant,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = colors.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
             
-            Text(
-                text = subtitle,
-                style = typography.bodySmall,
-                color = colors.onSurfaceVariant
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = typography.bodyLarge,
+                    color = colors.onSurface
+                )
+                
+                Text(
+                    text = subtitle,
+                    style = typography.bodySmall,
+                    color = colors.onSurfaceVariant
+                )
+            }
+            
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier.size(24.dp)
             )
         }
-        
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = colors.onSurfaceVariant,
-            modifier = Modifier.size(24.dp)
-        )
     }
 }
 
@@ -753,27 +850,46 @@ fun ProfileDangerItem(
     val typography = MaterialTheme.typography
     
     val textColor = if (isDangerous) colors.error else colors.error.copy(alpha = 0.8f)
+    val surfaceColor = if (isDangerous) colors.errorContainer.copy(alpha = 0.1f) else Color.Transparent
     
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        color = surfaceColor
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = textColor,
-            modifier = Modifier.size(24.dp)
-        )
-        
-        Spacer(modifier = Modifier.width(16.dp))
-        
-        Text(
-            text = title,
-            style = typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-            color = textColor
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp, horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = colors.errorContainer.copy(alpha = 0.2f),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = textColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Text(
+                text = title,
+                style = typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = textColor
+            )
+        }
     }
 }
