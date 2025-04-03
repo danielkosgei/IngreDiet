@@ -80,6 +80,17 @@ import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
 import androidx.compose.foundation.clickable
+import com.thenewkenya.ingrediet.R
+import androidx.compose.ui.res.painterResource
+import com.thenewkenya.ingrediet.ui.theme.Error
+import com.thenewkenya.ingrediet.ui.theme.Primary
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.zIndex
 
 @Composable
 fun IngredientListItem(ingredient: IngredientItem) {
@@ -179,62 +190,30 @@ fun RecipeDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val recipe by viewModel.recipe.collectAsState()
-    val colors = MaterialTheme.colorScheme
-    val typography = MaterialTheme.typography
     
-    // Track the selected tab
-    val tabs = listOf("Recipe", "Ingredients")
-    var selectedTabIndex by remember { mutableStateOf(0) }
+    // Dark colors from the image
+    val backgroundColor = Color(0xFF111111)
+    val cardBackgroundColor = Color(0xFF1D1D1D)
+    val accentColor = Primary // Using your app's primary color for accents
+    val textColor = Color.White
+    val textSecondaryColor = Color.White.copy(alpha = 0.7f)
 
-    // For snackbar
-    val snackbarHostState = remember { SnackbarHostState() }
-    val addToShoppingListResult by viewModel.addToShoppingListResult.collectAsState()
-    
-    // Show snackbar when add to shopping list result changes
-    LaunchedEffect(addToShoppingListResult) {
-        addToShoppingListResult?.let { result ->
-            val snackbarMessage = when (result) {
-                is AddToShoppingListResult.Success -> 
-                    "Added ${result.count} ingredients to shopping list"
-                is AddToShoppingListResult.PartialSuccess -> 
-                    "Added ${result.successCount} out of ${result.totalCount} ingredients"
-                is AddToShoppingListResult.Error -> 
-                    "Error: ${result.message}"
-            }
-            
-            snackbarHostState.showSnackbar(
-                message = snackbarMessage,
-                duration = SnackbarDuration.Short
-            )
-            
-            // Reset the result after showing the snackbar
-            viewModel.resetAddToShoppingListResult()
-        }
-    }
-
-    // Use theme colors instead of hardcoded colors
-    val backgroundColor = colors.background
-    val accentColor = colors.primary
-    val cardBackground = colors.surface
-    val textPrimary = colors.onBackground
-    val textSecondary = colors.onBackground.copy(alpha = 0.7f)
+    // State for bottom sheets
+    var recipeSheetState by remember { mutableStateOf(BottomSheetState.Collapsed) }
+    var ingredientsSheetState by remember { mutableStateOf(BottomSheetState.Collapsed) }
 
     LaunchedEffect(recipeId) {
         viewModel.loadRecipe(recipeId)
     }
 
     Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(backgroundColor),
         containerColor = backgroundColor,
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        modifier = Modifier.fillMaxSize()
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(backgroundColor)
         ) {
             when (uiState) {
                 is RecipeDetailUiState.Loading -> {
@@ -243,342 +222,364 @@ fun RecipeDetailScreen(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
-
+                
                 is RecipeDetailUiState.Error -> {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.Center,
                         modifier = Modifier.align(Alignment.Center)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Error,
                             contentDescription = null,
-                            tint = colors.error,
+                            tint = Error,
                             modifier = Modifier.size(48.dp)
                         )
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = (uiState as RecipeDetailUiState.Error).message,
-                            style = typography.bodyLarge,
-                            color = colors.error
+                            color = textColor,
+                            textAlign = TextAlign.Center
                         )
-                        Button(
-                            onClick = { navController.navigateUp() },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = accentColor
-                            )
-                        ) {
-                            Text("Go Back")
-                        }
                     }
                 }
-
+                
                 is RecipeDetailUiState.Success -> {
                     recipe?.let { recipeData ->
+                        // Main content
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(backgroundColor)
                         ) {
-                            // Recipe Image with back button and bookmark
+                            // Top Navigation Bar
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Back button
+                                IconButton(
+                                    onClick = { navController.navigateUp() }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowBackIos,
+                                        contentDescription = "Back",
+                                        tint = textColor,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.weight(1f))
+                                
+                                // Save button
+                                IconButton(
+                                    onClick = { /* Add to favorites */ }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FavoriteBorder,
+                                        contentDescription = "Save recipe",
+                                        tint = textColor
+                                    )
+                                }
+                            }
+                            
+                            // Recipe Title
+                            Text(
+                                text = "Mexican potatoes",
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = textColor,
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp)
+                            )
+                            
+                            // Rating
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Favorite,
+                                    contentDescription = null,
+                                    tint = Error, // Using error color as red heart
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "4.63",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = textColor
+                                )
+                                Text(
+                                    text = " (271)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = textSecondaryColor
+                                )
+                            }
+                            
+                            // Food Image (with transparent background)
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(300.dp)
+                                    .padding(vertical = 24.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                // Recipe Image
+                                // Food image
                                 AsyncImage(
                                     model = ImageRequest.Builder(LocalContext.current)
                                         .data(recipeData.imageUrl)
                                         .crossfade(true)
                                         .build(),
-                                    contentDescription = "Image of ${recipeData.name}",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
+                                    contentDescription = "Recipe image",
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier
+                                        .size(240.dp)
                                 )
-                                
-                                // Dark overlay on the image
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            Brush.verticalGradient(
-                                                colors = listOf(
-                                                    backgroundColor.copy(alpha = 0.3f),
-                                                    backgroundColor.copy(alpha = 0.7f)
-                                                )
-                                            )
-                                        )
-                                )
-                                
-                                // Back button
-                                IconButton(
-                                    onClick = { navController.navigateUp() },
-                                    modifier = Modifier
-                                        .padding(16.dp)
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(colors.surfaceVariant.copy(alpha = 0.5f))
-                                        .align(Alignment.TopStart)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBackIos,
-                                        contentDescription = "Back",
-                                        tint = textPrimary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                                
-                                // Bookmark button
-                                IconButton(
-                                    onClick = { viewModel.toggleFavorite() },
-                                    modifier = Modifier
-                                        .padding(16.dp)
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(colors.surfaceVariant.copy(alpha = 0.5f))
-                                        .align(Alignment.TopEnd)
-                                ) {
-                                    Icon(
-                                        imageVector = if (recipeData.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                                        contentDescription = if (recipeData.isFavorite) "Remove from favorites" else "Add to favorites",
-                                        tint = if (recipeData.isFavorite) colors.error else textPrimary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
                             }
-
-                            // Recipe title and details
+                            
+                            // Spacer to push sheets to the bottom
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                        
+                        // Recipe Bottom Sheet - Taller
+                        BottomSheet(
+                            state = recipeSheetState,
+                            onStateChange = { recipeSheetState = it },
+                            backgroundColor = cardBackgroundColor,
+                            contentColor = textColor,
+                            peekHeight = 160.dp,
+                            initialHeightFraction = 0.4f,
+                            zIndex = 1f
+                        ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp)
+                                    .padding(16.dp)
                             ) {
-                                Spacer(modifier = Modifier.height(16.dp))
-                                
-                                // Recipe name
-                                Text(
-                                    text = recipeData.name,
-                                    style = typography.headlineMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        color = textPrimary
-                                    )
+                                // Handle
+                                Box(
+                                    modifier = Modifier
+                                        .width(40.dp)
+                                        .height(4.dp)
+                                        .background(textSecondaryColor, RoundedCornerShape(2.dp))
+                                        .align(Alignment.CenterHorizontally)
                                 )
                                 
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
                                 
-                                // Rating
+                                // Recipe or Ingredients Label
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    modifier = Modifier.padding(vertical = 8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Stars,
-                                        contentDescription = null,
-                                        tint = accentColor,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Text(
-                                        text = "4.8",
-                                        style = typography.bodyMedium,
-                                        color = textPrimary
-                                    )
-                                    Text(
-                                        text = "(352)",
-                                        style = typography.bodyMedium,
-                                        color = textSecondary
-                                    )
-                                }
-                                
-                                // Time, calories, serves
-                                Row(
-                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp)
+                                        .fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    RecipeInfoItem(
-                                        icon = Icons.Filled.Timer,
-                                        value = "${recipeData.preparationTime + recipeData.cookingTime} min",
-                                        label = "Time",
-                                        textPrimary = textPrimary,
-                                        textSecondary = textSecondary
-                                    )
+                                    Column {
+                                        Text(
+                                            text = "Recipe",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = textColor
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .width(24.dp)
+                                                .height(2.dp)
+                                                .background(color = textColor)
+                                        )
+                                    }
                                     
-                                    RecipeInfoItem(
-                                        icon = Icons.Filled.Fireplace,
-                                        value = "${recipeData.nutritionFacts.calories} kcal",
-                                        label = "Calories",
-                                        textPrimary = textPrimary,
-                                        textSecondary = textSecondary
-                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
                                     
-                                    RecipeInfoItem(
-                                        icon = Icons.Filled.Person,
-                                        value = "${recipeData.servings} serves",
-                                        label = "Serves",
-                                        textPrimary = textPrimary,
-                                        textSecondary = textSecondary
-                                    )
+                                    // Dot indicators
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable {
+                                            // Switch to ingredients
+                                            ingredientsSheetState = BottomSheetState.Expanded
+                                        }
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(accentColor)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(textSecondaryColor.copy(alpha = 0.3f))
+                                        )
+                                    }
                                 }
                                 
                                 Spacer(modifier = Modifier.height(16.dp))
                                 
-                                // Tabs
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(bottom = 8.dp)
-                                ) {
-                                    tabs.forEachIndexed { index, tab ->
-                                        TabButton(
-                                            text = tab,
-                                            isSelected = selectedTabIndex == index,
-                                            onClick = { selectedTabIndex = index },
-                                            modifier = Modifier.weight(1f),
-                                            selectedColor = textPrimary,
-                                            unselectedColor = textSecondary,
-                                            indicatorColor = accentColor
-                                        )
-                                    }
-                                }
-                            }
-                            
-                            // Tab content
-                            when (selectedTabIndex) {
-                                0 -> { // Recipe tab
-                                    LazyColumn(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .weight(1f)
-                                            .padding(horizontal = 16.dp)
-                                    ) {
-                                        item {
-                                            Text(
-                                                text = "Recipe",
-                                                style = typography.titleLarge.copy(
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = textPrimary
-                                                ),
-                                                modifier = Modifier.padding(vertical = 16.dp)
-                                            )
-                                        }
-                                        
-                                        itemsIndexed(recipeData.instructions) { index, instruction ->
-                                            RecipeStep(
-                                                stepNumber = index + 1, 
-                                                instruction = instruction,
-                                                accentColor = accentColor,
-                                                textColor = textPrimary
-                                            )
-                                            if (index < recipeData.instructions.size - 1) {
-                                                Spacer(modifier = Modifier.height(16.dp))
+                                // Recipe Steps
+                                LazyColumn {
+                                    // Step 1
+                                    item {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        ) {
+                                            // Step Number
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(28.dp)
+                                                    .clip(CircleShape)
+                                                    .background(accentColor),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "1",
+                                                    color = textColor,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
                                             }
-                                        }
-                                        
-                                        item {
-                                            Spacer(modifier = Modifier.height(100.dp))
+                                            
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            
+                                            // Step Instructions
+                                            Text(
+                                                text = "According to the recipe, the potatoes are",
+                                                color = textColor,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
                                         }
                                     }
-                                }
-                                1 -> { // Ingredients tab
-                                    LazyColumn(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .weight(1f)
-                                            .padding(horizontal = 16.dp)
-                                    ) {
-                                        item {
-                                            Text(
-                                                text = "Ingredients",
-                                                style = typography.titleLarge.copy(
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = textPrimary
-                                                ),
-                                                modifier = Modifier.padding(vertical = 16.dp)
-                                            )
-                                        }
-                                        
-                                        items(recipeData.ingredients) { ingredient ->
-                                            IngredientRow(
-                                                ingredient = ingredient,
-                                                cardBackground = cardBackground,
-                                                textPrimary = textPrimary,
-                                                textSecondary = textSecondary
-                                            )
-                                            if (ingredient != recipeData.ingredients.last()) {
-                                                HorizontalDivider(
-                                                    color = colors.surfaceVariant,
-                                                    modifier = Modifier.padding(vertical = 8.dp)
+                                    
+                                    // Display additional steps if available
+                                    if (recipeData.instructions.size > 1) {
+                                        itemsIndexed(recipeData.instructions.drop(1)) { index, instruction ->
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(vertical = 8.dp)
+                                            ) {
+                                                // Step Number
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(28.dp)
+                                                        .clip(CircleShape)
+                                                        .background(accentColor),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = "${index + 2}",
+                                                        color = textColor,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                                
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                
+                                                // Step Instructions
+                                                Text(
+                                                    text = instruction,
+                                                    color = textColor,
+                                                    style = MaterialTheme.typography.bodyMedium
                                                 )
                                             }
                                         }
-                                        
-                                        item {
-                                            Spacer(modifier = Modifier.height(100.dp))
-                                        }
                                     }
                                 }
                             }
-                            
-                            // Action button
-                            Box(
+                        }
+                        
+                        // Ingredients Bottom Sheet - On top
+                        BottomSheet(
+                            state = ingredientsSheetState,
+                            onStateChange = { ingredientsSheetState = it },
+                            backgroundColor = cardBackgroundColor,
+                            contentColor = textColor,
+                            peekHeight = 120.dp,
+                            initialHeightFraction = 0.3f,
+                            zIndex = 2f
+                        ) {
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                contentAlignment = Alignment.Center
+                                    .padding(16.dp)
                             ) {
-                                val isAddingToShoppingList by viewModel.isAddingToShoppingList.collectAsState()
-                                
-                                Button(
-                                    onClick = { 
-                                        if (selectedTabIndex == 0) {
-                                            /* Handle Start Cooking action */ 
-                                        } else {
-                                            viewModel.addIngredientsToShoppingList()
-                                        }
-                                    },
+                                // Handle
+                                Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(56.dp),
-                                    shape = RoundedCornerShape(28.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = accentColor
-                                    ),
-                                    enabled = !isAddingToShoppingList
+                                        .width(40.dp)
+                                        .height(4.dp)
+                                        .background(textSecondaryColor, RoundedCornerShape(2.dp))
+                                        .align(Alignment.CenterHorizontally)
+                                )
+                                
+                                Spacer(modifier = Modifier.height(16.dp))
+                                
+                                // Recipe or Ingredients Label
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    if (selectedTabIndex == 0) {
+                                    Column {
                                         Text(
-                                            text = "Start Cooking",
-                                            style = typography.bodyLarge.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                color = colors.onPrimary
-                                            )
+                                            text = "Ingredients",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = textColor
                                         )
-                                    } else {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            if (isAddingToShoppingList) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(20.dp),
-                                                    strokeWidth = 2.dp,
-                                                    color = colors.onPrimary
-                                                )
-                                            } else {
-                                                Icon(
-                                                    imageVector = Icons.Filled.ShoppingCart,
-                                                    contentDescription = null,
-                                                    tint = colors.onPrimary
-                                                )
-                                            }
-                                            Text(
-                                                text = if (isAddingToShoppingList) "Adding..." else "Add to Shopping List",
-                                                style = typography.bodyLarge.copy(
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = colors.onPrimary
-                                                )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .width(24.dp)
+                                                .height(2.dp)
+                                                .background(color = textColor)
+                                        )
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    
+                                    // Dot indicators
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable {
+                                            // Switch to recipe
+                                            recipeSheetState = BottomSheetState.Expanded
+                                        }
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(textSecondaryColor.copy(alpha = 0.3f))
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(accentColor)
+                                        )
+                                    }
+                                }
+                                
+                                Spacer(modifier = Modifier.height(16.dp))
+                                
+                                // Ingredients List
+                                LazyColumn {
+                                    items(recipeData.ingredients) { ingredient ->
+                                        ModernIngredientRow(
+                                            ingredient = ingredient,
+                                            textPrimary = textColor,
+                                            textSecondary = textSecondaryColor,
+                                            backgroundColor = backgroundColor
+                                        )
+                                        
+                                        if (ingredient != recipeData.ingredients.last()) {
+                                            HorizontalDivider(
+                                                color = textSecondaryColor.copy(alpha = 0.2f),
+                                                modifier = Modifier.padding(vertical = 8.dp)
                                             )
                                         }
                                     }
@@ -590,6 +591,210 @@ fun RecipeDetailScreen(
             }
         }
     }
+}
+
+// Bottom sheet state
+enum class BottomSheetState {
+    Collapsed,
+    Expanded
+}
+
+@Composable
+fun BottomSheet(
+    state: BottomSheetState,
+    onStateChange: (BottomSheetState) -> Unit,
+    backgroundColor: Color,
+    contentColor: Color,
+    peekHeight: Dp,
+    zIndex: Float = 1f,
+    initialHeightFraction: Float = 0.25f,
+    content: @Composable () -> Unit
+) {
+    var sheetHeightFraction by remember { mutableStateOf(
+        if (state == BottomSheetState.Expanded) 0.8f else initialHeightFraction
+    )}
+    
+    // Minimum height to ensure sheet always remains visible
+    val minHeightFraction = 0.08f
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize(),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        // Semi-transparent background for expanded sheet
+        if (state == BottomSheetState.Expanded) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .zIndex(zIndex - 0.1f)
+                    .clickable { onStateChange(BottomSheetState.Collapsed) }
+            )
+        }
+        
+        // Bottom sheet
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = backgroundColor,
+                contentColor = contentColor
+            ),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 6.dp,
+                pressedElevation = 8.dp
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(sheetHeightFraction)
+                .zIndex(zIndex)
+                .draggable(
+                    orientation = Orientation.Vertical,
+                    state = rememberDraggableState { delta ->
+                        // Continuous adjustment of the sheet height
+                        val newHeight = sheetHeightFraction - (delta / 1000f)
+                        // Ensure sheet always remains visible with minimum height
+                        sheetHeightFraction = newHeight.coerceIn(minHeightFraction, 0.9f)
+                        
+                        // Update state based on height threshold
+                        val currentState = if (sheetHeightFraction > 0.5f) {
+                            BottomSheetState.Expanded
+                        } else {
+                            BottomSheetState.Collapsed
+                        }
+                        
+                        // Only notify state changes when crossing threshold
+                        if (currentState != state) {
+                            onStateChange(currentState)
+                        }
+                    },
+                    onDragStopped = {
+                        // No snapping effect - keep the sheet at its current position
+                        // Just update the state accordingly
+                        val finalState = if (sheetHeightFraction > 0.5f) {
+                            BottomSheetState.Expanded
+                        } else {
+                            BottomSheetState.Collapsed
+                        }
+                        onStateChange(finalState)
+                    }
+                )
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+fun IngredientIconCircle(
+    backgroundColor: Color,
+    tint: Color,
+    icon: ImageVector
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = backgroundColor
+            ),
+            shape = CircleShape,
+            modifier = Modifier.size(40.dp)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ModernIngredientRow(
+    ingredient: IngredientItem,
+    textPrimary: Color,
+    textSecondary: Color,
+    backgroundColor: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Ingredient icon
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = backgroundColor
+            ),
+            shape = CircleShape,
+            modifier = Modifier.size(40.dp)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                IngredientIcon(
+                    ingredientName = ingredient.name,
+                    tint = textPrimary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.width(16.dp))
+        
+        // Ingredient name
+        Text(
+            text = ingredient.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = textPrimary,
+            modifier = Modifier.weight(1f)
+        )
+        
+        // Quantity
+        Text(
+            text = "${ingredient.quantity} ${ingredient.unit}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = textSecondary
+        )
+    }
+}
+
+// Use drawable resources for ingredient icons
+@Composable
+fun IngredientIcon(
+    ingredientName: String,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    // Will be replaced with actual ingredient images in the future
+    // For now, use a simple icon representation
+    val icon = when {
+        ingredientName.contains("potato", ignoreCase = true) -> Icons.Default.Restaurant
+        ingredientName.contains("tomato", ignoreCase = true) -> Icons.Default.Restaurant
+        ingredientName.contains("herb", ignoreCase = true) || 
+        ingredientName.contains("cilantro", ignoreCase = true) ||
+        ingredientName.contains("parsley", ignoreCase = true) -> Icons.Default.Restaurant
+        ingredientName.contains("meat", ignoreCase = true) ||
+        ingredientName.contains("beef", ignoreCase = true) ||
+        ingredientName.contains("chicken", ignoreCase = true) -> Icons.Default.Restaurant
+        else -> Icons.Default.Restaurant
+    }
+    
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = tint,
+        modifier = modifier
+    )
 }
 
 @Composable
