@@ -99,6 +99,15 @@ import com.thenewkenya.ingrediet.feature.mealplanner.MealPlannerScreen
 import com.thenewkenya.ingrediet.feature.create.CreateRecipeScreen
 import com.thenewkenya.ingrediet.feature.shopping.ShoppingListScreen
 import com.thenewkenya.ingrediet.feature.search.IngredientSearchScreen
+import com.thenewkenya.ingrediet.feature.profile.AccountScreen
+import com.thenewkenya.ingrediet.feature.profile.SettingsScreen
+import com.thenewkenya.ingrediet.feature.profile.SupportScreen
+import com.thenewkenya.ingrediet.feature.profile.DietaryPreferencesScreen
+import com.thenewkenya.ingrediet.feature.profile.AllergiesScreen
+import com.thenewkenya.ingrediet.feature.profile.NutritionGoalsScreen
+import com.thenewkenya.ingrediet.feature.profile.AppearanceScreen
+import com.thenewkenya.ingrediet.feature.profile.NotificationsScreen
+import com.thenewkenya.ingrediet.feature.profile.PrivacySecurityScreen
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
@@ -290,6 +299,23 @@ fun AppNavigation() {
                 composable("create") { CreateRecipeScreen(navController) }
                 composable("shopping") { ShoppingListScreen(navController) }
                 composable("ingredient-search") { IngredientSearchScreen(navController) }
+                
+                // Profile section routes
+                composable("profile/settings") { SettingsScreen(navController) }
+                composable("profile/support") { SupportScreen(navController) }
+                composable("profile/account") { AccountScreen(navController) }
+                composable("profile/edit") { ProfileScreen(navController, true) }
+                composable("profile/appearance") { AppearanceScreen(navController) }
+                composable("profile/notifications") { NotificationsScreen(navController) }
+                composable("profile/privacy") { PrivacySecurityScreen(navController) }
+                
+                // Diet & Nutrition routes
+                composable("profile/diet-preferences") { DietaryPreferencesScreen(navController) }
+                composable("profile/allergies") { AllergiesScreen(navController) }
+                composable("profile/nutrition-goals?isOnboarding={isOnboarding}") { backStackEntry ->
+                    val isOnboarding = backStackEntry.arguments?.getString("isOnboarding")?.toBoolean() ?: false
+                    NutritionGoalsScreen(navController, isOnboarding)
+                }
 
                 // Recipe details route with parameter
                 composable(

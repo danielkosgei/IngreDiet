@@ -1,0 +1,270 @@
+package com.thenewkenya.ingrediet.feature.profile
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import com.thenewkenya.ingrediet.data.network.AuthManager
+import com.thenewkenya.ingrediet.data.repository.ProfileRepository
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DietaryPreferencesScreen(navController: NavController) {
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val scrollState = rememberScrollState()
+    val context = LocalContext.current
+    
+    // Initialize ViewModel
+    val viewModel = remember { 
+        ProfileViewModel(
+            ProfileRepository(),
+            AuthManager(context)
+        ) 
+    }
+    val profile by viewModel.profile.collectAsState()
+    
+    // Load user's preferences from profile
+    var selectedPreferences by remember { mutableStateOf(profile?.dietaryPreferences ?: emptyList()) }
+    
+    LaunchedEffect(profile) {
+        profile?.let {
+            selectedPreferences = it.dietaryPreferences
+        }
+    }
+    
+    // Common dietary preferences
+    val commonDiets = listOf(
+        "Vegetarian", 
+        "Vegan", 
+        "Pescatarian", 
+        "Gluten-Free", 
+        "Dairy-Free",
+        "Keto", 
+        "Paleo", 
+        "Low-Carb", 
+        "Mediterranean", 
+        "Whole30"
+    )
+    
+    // Religious preferences
+    val religiousDiets = listOf(
+        "Halal",
+        "Kosher"
+    )
+
+    // Health conditions
+    val healthDiets = listOf(
+        "Diabetic-Friendly",
+        "Low-Sodium",
+        "Low-Fat",
+        "FODMAP"
+    )
+    
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Dietary Preferences",
+                        style = typography.titleLarge.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                },
+                navigationIcon = {
+                    IconButton(
+                        onClick = { navController.navigateUp() },
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = colors.background,
+                    titleContentColor = colors.onBackground
+                )
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(scrollState)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Select your dietary preferences to help us suggest recipes that match your eating habits.",
+                style = typography.bodyMedium,
+                color = colors.onSurfaceVariant
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Common Diets Section
+            Text(
+                text = "Common Diets",
+                style = typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.onBackground
+            )
+            
+            DietChipGroup(
+                options = commonDiets,
+                selectedOptions = selectedPreferences,
+                onSelectionChanged = { selectedPreferences = it }
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Religious Diets
+            Text(
+                text = "Religious & Cultural",
+                style = typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.onBackground
+            )
+            
+            DietChipGroup(
+                options = religiousDiets,
+                selectedOptions = selectedPreferences,
+                onSelectionChanged = { selectedPreferences = it }
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Health-related Diets
+            Text(
+                text = "Health Conditions",
+                style = typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.onBackground
+            )
+            
+            DietChipGroup(
+                options = healthDiets,
+                selectedOptions = selectedPreferences,
+                onSelectionChanged = { selectedPreferences = it }
+            )
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Custom preferences
+            Text(
+                text = "Have specific preferences not listed above?",
+                style = typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = colors.onBackground
+            )
+            
+            // TODO: Add TextField for custom preferences
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Save button
+            Button(
+                onClick = {
+                    profile?.let {
+                        val updatedProfile = it.copy(dietaryPreferences = selectedPreferences)
+                        viewModel.updateProfile(updatedProfile)
+                        navController.navigateUp()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Save Preferences")
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DietChipGroup(
+    options: List<String>,
+    selectedOptions: List<String>,
+    onSelectionChanged: (List<String>) -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Create a flow of filter chips
+        options.forEach { option ->
+            val isSelected = selectedOptions.contains(option)
+            
+            FilterChip(
+                selected = isSelected,
+                onClick = {
+                    if (isSelected) {
+                        onSelectionChanged(selectedOptions - option)
+                    } else {
+                        onSelectionChanged(selectedOptions + option)
+                    }
+                },
+                label = { Text(option) },
+                leadingIcon = if (isSelected) {
+                    {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(FilterChipDefaults.IconSize)
+                        )
+                    }
+                } else null
+            )
+        }
+    }
+} 

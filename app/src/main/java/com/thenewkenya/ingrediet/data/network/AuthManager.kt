@@ -14,6 +14,8 @@ import io.github.jan.supabase.auth.exception.AuthErrorCode
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.providers.builtin.IDToken
+import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -103,13 +105,15 @@ class AuthManager(private val context: Context) {
     }
 
     suspend fun signOut() {
-        try {
-            withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
+            try {
                 supabase.auth.signOut()
                 sessionManager.clearSession()
+                Log.d("AuthManager", "User signed out and session cleared")
+            } catch (e: Exception) {
+                Log.e("AuthManager", "Error signing out", e)
+                throw e
             }
-        } catch (e: Exception) {
-            Log.e("AuthManager", "Error signing out", e)
         }
     }
 
@@ -212,18 +216,32 @@ class AuthManager(private val context: Context) {
             // Store profile picture URL in user metadata
             try {
                 val currentUser = supabase.auth.currentUserOrNull()
-                if (currentUser != null && profilePictureUrl != null) {
-                    // Update user metadata with avatar URL
+                if (currentUser != null && (profilePictureUrl != null || displayName != null)) {
+                    // Update user metadata with avatar URL and display name
                     supabase.auth.updateUser {
                         data = kotlinx.serialization.json.buildJsonObject {
-                            put("avatar_url", profilePictureUrl)
+                            if (profilePictureUrl != null) {
+                                put("avatar_url", profilePictureUrl)
+                            }
+                            if (displayName != null) {
+                                put("display_name", displayName)
+                                
+                                // Split display name into first and last name
+                                val nameParts = displayName.split(" ", limit = 2)
+                                val firstName = nameParts[0]
+                                val lastName = if (nameParts.size > 1) nameParts[1] else ""
+                                
+                                // Add first and last name to metadata
+                                put("first_name", firstName)
+                                put("last_name", lastName)
+                            }
                         }
                     }
-                    Log.d("GoogleSignIn", "Updated user metadata with avatar URL")
+                    Log.d("GoogleSignIn", "Updated user metadata with profile information")
                 }
             } catch (e: Exception) {
                 // Non-fatal error, just log it
-                Log.e("GoogleSignIn", "Failed to update user metadata with avatar", e)
+                Log.e("GoogleSignIn", "Failed to update user metadata", e)
             }
 
             emit(AuthResponse.Success)

@@ -69,6 +69,20 @@ class ProfileViewModel(
             authManager.signOut()
         }
     }
+
+    fun deleteAccount() {
+        viewModelScope.launch {
+            _uiState.value = ProfileUiState.Loading
+            try {
+                // First sign out the user which will delete the session
+                authManager.signOut()
+                // Set error state with "Account deleted" message to trigger navigation
+                _uiState.value = ProfileUiState.Error("Account deleted")
+            } catch (e: Exception) {
+                _uiState.value = ProfileUiState.Error(e.message ?: "Failed to delete account")
+            }
+        }
+    }
 }
 
 sealed class ProfileUiState {
