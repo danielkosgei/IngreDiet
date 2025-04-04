@@ -42,6 +42,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -63,6 +64,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.onEach
 import androidx.compose.ui.graphics.ColorFilter
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 
 enum class PasswordStrength {
     WEAK, MEDIUM, STRONG
@@ -350,44 +353,74 @@ fun RegisterScreen(navController: NavController) {
 
             Button(
                 onClick = {
-                    if (!isOnline) {
-                        errorMessage = "No internet connection"
-                        errorType = LoginError.NETWORK_ERROR
-                        return@Button
-                    }
-
-                    if (emailValue.isEmpty() || passwordValue.isEmpty() || confirmPasswordValue.isEmpty()) {
-                        errorMessage = "Please fill in all fields"
-                        errorType = LoginError.EMPTY_FIELDS
-                        return@Button
-                    }
-
-                    if (passwordValue != confirmPasswordValue) {
-                        errorMessage = "Passwords do not match"
-                        errorType = LoginError.WRONG_PASSWORD
-                        return@Button
-                    }
-
+                    Log.d("RegisterDebug", "Signup button clicked")
                     coroutineScope.launch {
-                        authState = AuthState.Loading
                         try {
-                            val response = authManager.signUpWithEmail(emailValue, passwordValue)
-                            when (response) {
-                                is AuthResponse.Success -> {
-                                    navController.navigate("home") {
-                                        popUpTo("login") { inclusive = true }
+                            withTimeout(10_000) {
+                                if (!isOnline) {
+                                    Log.d("RegisterDebug", "No internet connection")
+                                    errorMessage = "No internet connection"
+                                    errorType = LoginError.NETWORK_ERROR
+                                    return@withTimeout
+                                }
+
+                                if (emailValue.isEmpty() || passwordValue.isEmpty() || confirmPasswordValue.isEmpty()) {
+                                    Log.d("RegisterDebug", "Empty fields detected")
+                                    errorMessage = "Please fill in all fields"
+                                    errorType = LoginError.EMPTY_FIELDS
+                                    return@withTimeout
+                                }
+
+                                if (passwordValue != confirmPasswordValue) {
+                                    Log.d("RegisterDebug", "Passwords do not match")
+                                    errorMessage = "Passwords do not match"
+                                    errorType = LoginError.WRONG_PASSWORD
+                                    return@withTimeout
+                                }
+
+                                Log.d("RegisterDebug", "Attempting signup")
+                                authState = AuthState.Loading
+                                authManager.signUpWithEmail(emailValue, passwordValue).collect { response ->
+                                    when (response) {
+                                        is AuthResponse.Success -> {
+                                            Log.d("RegisterDebug", "Signup successful")
+                                            authState = AuthState.Success
+                                            Log.d("RegisterDebug", "Navigating to home")
+                                            navController.navigate("home") {
+                                                popUpTo("login") { inclusive = true }
+                                            }
+                                        }
+                                        is AuthResponse.Error -> {
+                                            Log.d("RegisterDebug", "Signup failed: ${response.message}")
+                                            authState = AuthState.Error(response.message)
+                                            errorMessage = response.message
+                                            errorType = when {
+                                                response.message?.contains("User already registered") == true ->
+                                                    LoginError.INVALID_EMAIL
+                                                response.message?.contains("Invalid email") == true ->
+                                                    LoginError.INVALID_EMAIL
+                                                response.message?.contains("rate") == true ->
+                                                    LoginError.TOO_MANY_REQUESTS
+                                                else -> LoginError.UNKNOWN_ERROR
+                                            }
+                                        }
+                                        is AuthResponse.Loading -> {
+                                            Log.d("RegisterDebug", "Signup in progress")
+                                        }
                                     }
                                 }
-                                is AuthResponse.Error -> {
-                                    errorMessage = response.message
-                                    errorType = LoginError.UNKNOWN_ERROR
-                                }
                             }
+                        } catch (e: TimeoutCancellationException) {
+                            Log.d("RegisterDebug", "Signup timed out")
+                            errorMessage = "Signup timed out. Please try again."
+                            errorType = LoginError.NETWORK_ERROR
                         } catch (e: Exception) {
-                            errorMessage = e.message ?: "An error occurred"
+                            Log.d("RegisterDebug", "Unexpected error: ${e.message}")
+                            errorMessage = "An unexpected error occurred"
                             errorType = LoginError.UNKNOWN_ERROR
+                        } finally {
+                            authState = AuthState.Success
                         }
-                        authState = AuthState.Success
                     }
                 },
                 modifier = Modifier

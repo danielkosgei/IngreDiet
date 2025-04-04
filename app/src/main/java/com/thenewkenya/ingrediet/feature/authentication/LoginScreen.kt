@@ -65,6 +65,9 @@ import io.github.jan.supabase.auth.exception.AuthErrorCode
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+
 import androidx.compose.ui.graphics.ColorFilter
 
 enum class LoginError {
@@ -267,38 +270,63 @@ fun LoginScreen(navController: NavController) {
             // Sign In Button
             Button(
                 onClick = {
+                    Log.d("LoginDebug", "Login button clicked")
                     coroutineScope.launch {
-                        if (!isOnline) {
-                            errorMessage = "No internet connection"
+                        try {
+                            withTimeout(10_000) {
+                                if (!isOnline) {
+                                    Log.d("LoginDebug", "No internet connection")
+                                    errorMessage = "No internet connection"
+                                    errorType = LoginError.NETWORK_ERROR
+                                    return@withTimeout
+                                }
+
+                                if (emailValue.isEmpty() || passwordValue.isEmpty()) {
+                                    Log.d("LoginDebug", "Empty fields detected")
+                                    errorMessage = "Please fill in all fields"
+                                    errorType = LoginError.EMPTY_FIELDS
+                                    return@withTimeout
+                                }
+
+                                Log.d("LoginDebug", "Attempting authentication")
+                                authState = AuthState.Loading
+                                val response = authManager.signInWithEmail(emailValue, passwordValue)
+                                response.collect { authResponse ->
+                                    when (authResponse) {
+                                        is AuthResponse.Success -> {
+                                            Log.d("LoginDebug", "Authentication successful")
+                                            authState = AuthState.Success
+                                            Log.d("LoginDebug", "Navigating to home")
+                                            navController.navigate("home") {
+                                                popUpTo("login") { inclusive = true }
+                                            }
+                                        }
+                                        is AuthResponse.Error -> {
+                                            Log.d("LoginDebug", "Authentication failed: ${authResponse.message}")
+                                            authState = AuthState.Error(authResponse.message)
+                                            errorMessage = authResponse.message
+                                            errorType = when {
+                                                authResponse.message?.contains("Invalid login credentials") == true -> 
+                                                    LoginError.WRONG_PASSWORD
+                                                authResponse.message?.contains("Invalid email") == true -> 
+                                                    LoginError.INVALID_EMAIL
+                                                authResponse.message?.contains("Too many requests") == true -> 
+                                                    LoginError.TOO_MANY_REQUESTS
+                                                else -> LoginError.UNKNOWN_ERROR
+                                            }
+                                        }
+                                        else -> {}
+                                    }
+                                }
+                            }
+                        } catch (e: TimeoutCancellationException) {
+                            Log.d("LoginDebug", "Authentication timed out")
+                            errorMessage = "Login timed out. Please try again."
                             errorType = LoginError.NETWORK_ERROR
-                            return@launch
-                        }
-
-                        if (emailValue.isEmpty() || passwordValue.isEmpty()) {
-                            errorMessage = "Please fill in all fields"
-                            errorType = LoginError.EMPTY_FIELDS
-                            return@launch
-                        }
-
-                        authState = AuthState.Loading
-                        val response = authManager.signInWithEmail(emailValue, passwordValue)
-                        when (response) {
-                            is AuthResponse.Success -> {
-                                authState = AuthState.Success
-                                navController.navigate("home") {
-                                    popUpTo("login") { inclusive = true }
-                                }
-                            }
-                            is AuthResponse.Error -> {
-                                authState = AuthState.Error(response.message)
-                                errorMessage = response.message
-                                errorType = when {
-                                    response.message?.contains("Invalid login credentials") == true -> LoginError.WRONG_PASSWORD
-                                    response.message?.contains("Invalid email") == true -> LoginError.INVALID_EMAIL
-                                    response.message?.contains("Too many requests") == true -> LoginError.TOO_MANY_REQUESTS
-                                    else -> LoginError.UNKNOWN_ERROR
-                                }
-                            }
+                        } catch (e: Exception) {
+                            Log.d("LoginDebug", "Unexpected error: ${e.message}")
+                            errorMessage = "An unexpected error occurred"
+                            errorType = LoginError.UNKNOWN_ERROR
                         }
                     }
                 },

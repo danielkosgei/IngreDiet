@@ -88,6 +88,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -99,6 +100,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -109,6 +111,8 @@ import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.data.repository.ProfileRepository
 import io.github.jan.supabase.auth.auth
 import androidx.compose.foundation.BorderStroke
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,6 +128,7 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
     var showSignOutConfirmation by remember { mutableStateOf(false) }
     var showDeleteAccountConfirmation by remember { mutableStateOf(false) }
     var isDeleting by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -143,31 +148,108 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
 
     // Sign Out Confirmation Dialog
     if (showSignOutConfirmation) {
+        var isSigningOut by remember { mutableStateOf(false) }
+
         AlertDialog(
-            onDismissRequest = { showSignOutConfirmation = false },
-            title = { Text("Sign Out") },
-            text = { Text("Are you sure you want to sign out?") },
+            onDismissRequest = { 
+                if (!isSigningOut) showSignOutConfirmation = false 
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                    contentDescription = null,
+                    tint = colors.error,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = { 
+                Text(
+                    text = if (isSigningOut) "Signing Out..." else "Sign Out",
+                    style = typography.headlineSmall,
+                    textAlign = TextAlign.Center
+                ) 
+            },
+            text = { 
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (isSigningOut) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(36.dp),
+                                color = colors.primary,
+                                strokeWidth = 3.dp
+                            )
+                            Text(
+                                text = "Logging you out...",
+                                style = typography.bodyLarge,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "You will be logged out of your account and returned to the login screen.",
+                            style = typography.bodyLarge,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = {
-                        showSignOutConfirmation = false
-                        viewModel.signOut()
-                        navController.navigate("login") {
-                            popUpTo("home") { inclusive = true }
+                        isSigningOut = true
+                        // Add a slight delay to show loading state
+                        coroutineScope.launch {
+                            try {
+                                viewModel.signOut()
+                                delay(500) // Small delay for UI feedback
+                                showSignOutConfirmation = false
+                                navController.navigate("login") {
+                                    popUpTo("home") { inclusive = true }
+                                }
+                            } catch (e: Exception) {
+                                Log.e("ProfileScreen", "Error signing out", e)
+                                isSigningOut = false
+                                Toast.makeText(context, "Failed to sign out. Please try again.", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.error
-                    )
+                        containerColor = colors.error,
+                        contentColor = colors.onError
+                    ),
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    enabled = !isSigningOut,
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Sign Out")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showSignOutConfirmation = false }) {
+                OutlinedButton(
+                    onClick = { showSignOutConfirmation = false },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = colors.onSurface
+                    ),
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    enabled = !isSigningOut,
+                    border = BorderStroke(1.dp, colors.outline.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
                     Text("Cancel")
                 }
-            }
+            },
+            containerColor = colors.surface,
+            shape = RoundedCornerShape(16.dp),
+            tonalElevation = 8.dp,
+            properties = DialogProperties(
+                dismissOnBackPress = !isSigningOut,
+                dismissOnClickOutside = !isSigningOut
+            )
         )
     }
 
@@ -177,22 +259,47 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
             onDismissRequest = { 
                 if (!isDeleting) showDeleteAccountConfirmation = false 
             },
-            title = { Text(if (isDeleting) "Deleting Account" else "Delete Account") },
+            icon = {
+                Icon(
+                    imageVector = Icons.Outlined.DeleteOutline,
+                    contentDescription = null,
+                    tint = colors.error,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = { 
+                Text(
+                    text = if (isDeleting) "Deleting Account" else "Delete Account",
+                    style = typography.headlineSmall,
+                    textAlign = TextAlign.Center
+                ) 
+            },
             text = { 
-                Column {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     if (isDeleting) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp
+                                modifier = Modifier.size(36.dp),
+                                color = colors.primary,
+                                strokeWidth = 3.dp
                             )
-                            Text("Deleting your account...")
+                            Text(
+                                text = "Deleting your account...",
+                                style = typography.bodyLarge,
+                                textAlign = TextAlign.Center
+                            )
                         }
                     } else {
-                        Text("Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently lost.")
+                        Text(
+                            text = "Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently lost.",
+                            style = typography.bodyLarge,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             },
@@ -200,24 +307,48 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
                 Button(
                     onClick = {
                         isDeleting = true
-                        viewModel.deleteAccount()
+                        coroutineScope.launch {
+                            try {
+                                viewModel.deleteAccount()
+                            } catch (e: Exception) {
+                                Log.e("ProfileScreen", "Error deleting account", e)
+                                isDeleting = false
+                                Toast.makeText(context, "Failed to delete account. Please try again.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.error
+                        containerColor = colors.error,
+                        contentColor = colors.onError
                     ),
-                    enabled = !isDeleting
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    enabled = !isDeleting,
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Delete Account")
                 }
             },
             dismissButton = {
-                TextButton(
+                OutlinedButton(
                     onClick = { showDeleteAccountConfirmation = false },
-                    enabled = !isDeleting
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = colors.onSurface
+                    ),
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    enabled = !isDeleting,
+                    border = BorderStroke(1.dp, colors.outline.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Cancel")
                 }
-            }
+            },
+            containerColor = colors.surface,
+            shape = RoundedCornerShape(16.dp),
+            tonalElevation = 8.dp,
+            properties = DialogProperties(
+                dismissOnBackPress = !isDeleting,
+                dismissOnClickOutside = !isDeleting
+            )
         )
     }
     

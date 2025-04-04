@@ -351,23 +351,17 @@ fun RecipeDetailScreen(
                             contentColor = textColor,
                             peekHeight = 160.dp,
                             initialHeightFraction = 0.4f,
-                            zIndex = 1f
+                            zIndex = 1f,
+                            sheetTitle = "Recipe Steps",
+                            sheetIcon = Icons.Default.Stars,
+                            indicatorColor = accentColor
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(16.dp)
                             ) {
-                                // Handle
-                                Box(
-                                    modifier = Modifier
-                                        .width(40.dp)
-                                        .height(4.dp)
-                                        .background(textSecondaryColor, RoundedCornerShape(2.dp))
-                                        .align(Alignment.CenterHorizontally)
-                                )
-                                
-                                Spacer(modifier = Modifier.height(16.dp))
+                                // Handle and header are now in the BottomSheet composable
                                 
                                 // Recipe or Ingredients Label
                                 Row(
@@ -386,7 +380,7 @@ fun RecipeDetailScreen(
                                             modifier = Modifier
                                                 .width(24.dp)
                                                 .height(2.dp)
-                                                .background(color = textColor)
+                                                .background(color = accentColor)
                                         )
                                     }
                                     
@@ -424,30 +418,28 @@ fun RecipeDetailScreen(
                                     item {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(vertical = 8.dp)
+                                            modifier = Modifier.padding(bottom = 16.dp)
                                         ) {
-                                            // Step Number
+                                            // Step number circle
                                             Box(
                                                 modifier = Modifier
-                                                    .size(28.dp)
+                                                    .size(32.dp)
                                                     .clip(CircleShape)
                                                     .background(accentColor),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(
                                                     text = "1",
-                                                    color = textColor,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.Bold
+                                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                                    color = textColor
                                                 )
                                             }
                                             
                                             Spacer(modifier = Modifier.width(12.dp))
                                             
-                                            // Step Instructions
+                                            // Step description
                                             Text(
-                                                text = "According to the recipe, the potatoes are",
-                                                color = textColor,
+                                                text = recipeData.instructions.firstOrNull() ?: "",
                                                 style = MaterialTheme.typography.bodyMedium
                                             )
                                         }
@@ -458,30 +450,28 @@ fun RecipeDetailScreen(
                                         itemsIndexed(recipeData.instructions.drop(1)) { index, instruction ->
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.padding(vertical = 8.dp)
+                                                modifier = Modifier.padding(bottom = 16.dp)
                                             ) {
-                                                // Step Number
+                                                // Step number circle
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(28.dp)
+                                                        .size(32.dp)
                                                         .clip(CircleShape)
                                                         .background(accentColor),
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     Text(
                                                         text = "${index + 2}",
-                                                        color = textColor,
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        fontWeight = FontWeight.Bold
+                                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                                        color = textColor
                                                     )
                                                 }
                                                 
                                                 Spacer(modifier = Modifier.width(12.dp))
                                                 
-                                                // Step Instructions
+                                                // Step description
                                                 Text(
                                                     text = instruction,
-                                                    color = textColor,
                                                     style = MaterialTheme.typography.bodyMedium
                                                 )
                                             }
@@ -495,27 +485,21 @@ fun RecipeDetailScreen(
                         BottomSheet(
                             state = ingredientsSheetState,
                             onStateChange = { ingredientsSheetState = it },
-                            backgroundColor = cardBackgroundColor,
+                            backgroundColor = Color(0xFF2A3439), // Slightly different color for ingredients
                             contentColor = textColor,
                             peekHeight = 120.dp,
                             initialHeightFraction = 0.3f,
-                            zIndex = 2f
+                            zIndex = 2f,
+                            sheetTitle = "Ingredients",
+                            sheetIcon = Icons.Default.Restaurant,
+                            indicatorColor = Primary // Use Primary color for ingredients
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(16.dp)
                             ) {
-                                // Handle
-                                Box(
-                                    modifier = Modifier
-                                        .width(40.dp)
-                                        .height(4.dp)
-                                        .background(textSecondaryColor, RoundedCornerShape(2.dp))
-                                        .align(Alignment.CenterHorizontally)
-                                )
-                                
-                                Spacer(modifier = Modifier.height(16.dp))
+                                // Handle and header are now in the BottomSheet composable
                                 
                                 // Recipe or Ingredients Label
                                 Row(
@@ -534,7 +518,7 @@ fun RecipeDetailScreen(
                                             modifier = Modifier
                                                 .width(24.dp)
                                                 .height(2.dp)
-                                                .background(color = textColor)
+                                                .background(color = Primary)
                                         )
                                     }
                                     
@@ -559,7 +543,7 @@ fun RecipeDetailScreen(
                                             modifier = Modifier
                                                 .size(8.dp)
                                                 .clip(CircleShape)
-                                                .background(accentColor)
+                                                .background(Primary)
                                         )
                                     }
                                 }
@@ -573,7 +557,8 @@ fun RecipeDetailScreen(
                                             ingredient = ingredient,
                                             textPrimary = textColor,
                                             textSecondary = textSecondaryColor,
-                                            backgroundColor = backgroundColor
+                                            backgroundColor = backgroundColor,
+                                            accentColor = Primary
                                         )
                                         
                                         if (ingredient != recipeData.ingredients.last()) {
@@ -608,6 +593,9 @@ fun BottomSheet(
     peekHeight: Dp,
     zIndex: Float = 1f,
     initialHeightFraction: Float = 0.25f,
+    sheetTitle: String,
+    sheetIcon: ImageVector,
+    indicatorColor: Color,
     content: @Composable () -> Unit
 ) {
     var sheetHeightFraction by remember { mutableStateOf(
@@ -655,14 +643,14 @@ fun BottomSheet(
                         val newHeight = sheetHeightFraction - (delta / 1000f)
                         // Ensure sheet always remains visible with minimum height
                         sheetHeightFraction = newHeight.coerceIn(minHeightFraction, 0.9f)
-                        
+
                         // Update state based on height threshold
                         val currentState = if (sheetHeightFraction > 0.5f) {
                             BottomSheetState.Expanded
                         } else {
                             BottomSheetState.Collapsed
                         }
-                        
+
                         // Only notify state changes when crossing threshold
                         if (currentState != state) {
                             onStateChange(currentState)
@@ -680,7 +668,77 @@ fun BottomSheet(
                     }
                 )
         ) {
-            content()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+            ) {
+                // Sheet handle and title
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(backgroundColor.copy(alpha = 0.9f))
+                        .padding(top = 12.dp, bottom = 8.dp)
+                ) {
+                    // Pill-shaped handle
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(4.dp)
+                            .background(indicatorColor.copy(alpha = 0.5f), RoundedCornerShape(2.dp))
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Sheet title with icon
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        Icon(
+                            imageVector = sheetIcon,
+                            contentDescription = null,
+                            tint = indicatorColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        
+                        Spacer(modifier = Modifier.width(8.dp))
+                        
+                        Text(
+                            text = sheetTitle,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = indicatorColor
+                        )
+                        
+                        Spacer(modifier = Modifier.weight(1f))
+                        
+                        // Drag indicator
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(indicatorColor.copy(alpha = 0.2f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Drag",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = indicatorColor
+                            )
+                        }
+                    }
+                }
+                
+                // Divider
+                HorizontalDivider(
+                    color = indicatorColor.copy(alpha = 0.2f),
+                    thickness = 1.dp
+                )
+                
+                // Content
+                content()
+            }
         }
     }
 }
@@ -721,7 +779,8 @@ fun ModernIngredientRow(
     ingredient: IngredientItem,
     textPrimary: Color,
     textSecondary: Color,
-    backgroundColor: Color
+    backgroundColor: Color,
+    accentColor: Color = textPrimary
 ) {
     Row(
         modifier = Modifier
@@ -729,42 +788,59 @@ fun ModernIngredientRow(
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Ingredient icon
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = backgroundColor
-            ),
-            shape = CircleShape,
-            modifier = Modifier.size(40.dp)
+        // Ingredient icon circle
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(accentColor.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+            Icon(
+                imageVector = Icons.Default.Restaurant,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        
+        Spacer(modifier = Modifier.width(12.dp))
+        
+        // Ingredient name and amount
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = ingredient.name,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.Medium
+                ),
+                color = textPrimary
+            )
+            
+            Text(
+                text = "${ingredient.quantity} ${ingredient.unit}",
+                style = MaterialTheme.typography.bodySmall,
+                color = textSecondary
+            )
+        }
+        
+        // Optional amount pill
+        if (ingredient.quantity.isNaN()) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = accentColor.copy(alpha = 0.1f)
+                ),
+                shape = RoundedCornerShape(50),
             ) {
-                IngredientIcon(
-                    ingredientName = ingredient.name,
-                    tint = textPrimary,
-                    modifier = Modifier.size(24.dp)
+                Text(
+                    text = ingredient.unit,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = accentColor,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
         }
-        
-        Spacer(modifier = Modifier.width(16.dp))
-        
-        // Ingredient name
-        Text(
-            text = ingredient.name,
-            style = MaterialTheme.typography.bodyLarge,
-            color = textPrimary,
-            modifier = Modifier.weight(1f)
-        )
-        
-        // Quantity
-        Text(
-            text = "${ingredient.quantity} ${ingredient.unit}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = textSecondary
-        )
     }
 }
 
