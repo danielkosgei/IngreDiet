@@ -212,8 +212,7 @@ private fun RecipeContent(
         TopBarOverlay(
             recipe = recipe,
             scrollOffset = scrollOffset,
-            onBackPress = onBackPress,
-            modifier = Modifier.statusBarsPadding()
+            onBackPress = onBackPress
         )
     }
 }
@@ -306,74 +305,85 @@ private fun Header(
 private fun TopBarOverlay(
     recipe: DetailedRecipe,
     scrollOffset: Float,
-    onBackPress: () -> Unit,
-    modifier: Modifier = Modifier
+    onBackPress: () -> Unit
 ) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(56.dp),
-        color = MaterialTheme.colorScheme.surface.copy(
-            alpha = scrollOffset
-        )
-    ) {
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val surfaceColor = MaterialTheme.colorScheme.surface.copy(alpha = scrollOffset)
+    
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Solid status bar background
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 4.dp)
+                .fillMaxWidth()
+                .height(statusBarHeight)
+                .background(surfaceColor)
+        )
+        
+        // Top bar content
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            color = surfaceColor
         ) {
-            // Back button
-            IconButton(
-                onClick = onBackPress,
-                modifier = Modifier.align(Alignment.CenterStart)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = if (scrollOffset > 0.5f) MaterialTheme.colorScheme.onSurface else Color.White
-                )
-            }
-            
-            // Title - only show when scrolled
-            Text(
-                text = recipe.name,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            Box(
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(horizontal = 56.dp)
-                    .graphicsLayer {
-                        alpha = scrollOffset
-                    }
-            )
-            
-            // Action buttons
-            Row(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    .fillMaxSize()
+                    .padding(horizontal = 4.dp)
             ) {
-                // Like button
-                IconButton(onClick = { /* TODO: Toggle favorite */ }) {
+                // Back button
+                IconButton(
+                    onClick = onBackPress,
+                    modifier = Modifier.align(Alignment.CenterStart)
+                ) {
                     Icon(
-                        imageVector = if (recipe.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                        contentDescription = if (recipe.isFavorite) "Remove from favorites" else "Add to favorites",
-                        tint = if (recipe.isFavorite) MaterialTheme.colorScheme.error 
-                              else if (scrollOffset > 0.5f) MaterialTheme.colorScheme.onSurface 
-                              else Color.White
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = if (scrollOffset > 0.5f) MaterialTheme.colorScheme.onSurface else Color.White
                     )
                 }
                 
-                // Share button
-                IconButton(onClick = { /* TODO: Share recipe */ }) {
-                    Icon(
-                        imageVector = Icons.Default.Share,
-                        contentDescription = "Share recipe",
-                        tint = if (scrollOffset > 0.5f) MaterialTheme.colorScheme.onSurface else Color.White
-                    )
+                // Title - only show when scrolled
+                Text(
+                    text = recipe.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 56.dp)
+                        .graphicsLayer {
+                            alpha = scrollOffset
+                        }
+                )
+                
+                // Action buttons
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Like button
+                    IconButton(onClick = { /* TODO: Toggle favorite */ }) {
+                        Icon(
+                            imageVector = if (recipe.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                            contentDescription = if (recipe.isFavorite) "Remove from favorites" else "Add to favorites",
+                            tint = if (recipe.isFavorite) MaterialTheme.colorScheme.error 
+                                  else if (scrollOffset > 0.5f) MaterialTheme.colorScheme.onSurface 
+                                  else Color.White
+                        )
+                    }
+                    
+                    // Share button
+                    IconButton(onClick = { /* TODO: Share recipe */ }) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share recipe",
+                            tint = if (scrollOffset > 0.5f) MaterialTheme.colorScheme.onSurface else Color.White
+                        )
+                    }
                 }
             }
         }
