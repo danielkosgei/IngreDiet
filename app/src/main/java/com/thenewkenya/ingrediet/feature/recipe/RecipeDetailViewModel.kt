@@ -261,6 +261,48 @@ class RecipeDetailViewModel(
             else -> "General"
         }
     }
+
+    fun shareRecipe() {
+        _recipe.value?.let { recipe ->
+            val shareText = buildString {
+                appendLine("Check out this recipe from IngreDiet!")
+                appendLine()
+                appendLine(recipe.name)
+                appendLine()
+                appendLine(recipe.description)
+                appendLine()
+                appendLine("Preparation Time: ${recipe.preparationTime} minutes")
+                appendLine("Cooking Time: ${recipe.cookingTime} minutes")
+                appendLine("Servings: ${recipe.servings}")
+                appendLine("Difficulty: ${recipe.difficulty}")
+                appendLine()
+                appendLine("Ingredients:")
+                recipe.ingredients.forEach { ingredient ->
+                    appendLine("- ${formatQuantity(ingredient.quantity, ingredient.unit)} ${ingredient.name}")
+                }
+                appendLine()
+                appendLine("Instructions:")
+                recipe.instructions.forEachIndexed { index, instruction ->
+                    appendLine("${index + 1}. $instruction")
+                }
+                appendLine()
+                appendLine("Nutrition Facts:")
+                appendLine("Calories: ${recipe.nutritionFacts.calories}")
+                appendLine("Protein: ${recipe.nutritionFacts.protein}g")
+                appendLine("Carbs: ${recipe.nutritionFacts.carbs}g")
+                appendLine("Fat: ${recipe.nutritionFacts.fat}g")
+            }
+            
+            val intent = android.content.Intent().apply {
+                action = android.content.Intent.ACTION_SEND
+                putExtra(android.content.Intent.EXTRA_TEXT, shareText)
+                type = "text/plain"
+            }
+            
+            val shareIntent = android.content.Intent.createChooser(intent, null)
+            context.startActivity(shareIntent)
+        }
+    }
 }
 
 sealed class RecipeDetailUiState {

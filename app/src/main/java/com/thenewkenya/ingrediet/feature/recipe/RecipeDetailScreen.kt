@@ -57,6 +57,8 @@ fun RecipeDetailScreen(
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             if (uiState is RecipeDetailUiState.Success && recipe != null) {
@@ -129,14 +131,19 @@ private fun RecipeContent(
     onBackPress: () -> Unit
 ) {
     val scrollState = rememberLazyListState()
-    val headerHeight = 300.dp
+    val headerHeight = 400.dp
     val headerHeightPx = with(LocalDensity.current) { headerHeight.toPx() }
     val scrollOffset = min(1f, max(0f, scrollState.firstVisibleItemScrollOffset / headerHeightPx))
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = scrollState,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                bottom = 80.dp,
+                top = statusBarHeight + 56.dp
+            )
         ) {
             // Header
             item {
@@ -147,14 +154,48 @@ private fun RecipeContent(
                 )
             }
             
+            // Recipe Title and Rating
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 24.dp)
+                ) {
+                    Text(
+                        text = recipe.name,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Star,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = recipe.rating.toString(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+            
             // Quick Info
             item {
                 QuickInfoSection(recipe)
+                Spacer(modifier = Modifier.height(16.dp))
             }
             
             // Description
             item {
                 DescriptionSection(recipe)
+                Spacer(modifier = Modifier.height(24.dp))
             }
             
             // Ingredients
@@ -163,12 +204,16 @@ private fun RecipeContent(
                     text = "Ingredients",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(16.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
             
             items(recipe.ingredients) { ingredient ->
                 IngredientItem(ingredient)
+            }
+            
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
             }
             
             // Instructions
@@ -177,17 +222,12 @@ private fun RecipeContent(
                     text = "Instructions",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(16.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
             
             items(recipe.instructions.withIndex().toList()) { (index, instruction) ->
                 InstructionItem(index + 1, instruction)
-            }
-            
-            // Bottom spacing
-            item {
-                Spacer(modifier = Modifier.height(80.dp))
             }
         }
         
@@ -234,12 +274,45 @@ private fun Header(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color.Black.copy(alpha = 0.4f),
-                            Color.Black.copy(alpha = 0.7f)
+                            Color.Black.copy(alpha = 0.7f),
+                            Color.Black.copy(alpha = 0.15f),
+                            Color.Black.copy(alpha = 0.45f),
+                            Color.Black.copy(alpha = 0.8f)
                         )
                     )
                 )
         )
+        
+        // Recipe title overlay at the bottom of the header
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp)
+        ) {
+            Text(
+                text = recipe.name,
+                style = MaterialTheme.typography.headlineLarge,
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Star,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = recipe.rating.toString(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White
+                )
+            }
+        }
     }
 }
 
@@ -249,9 +322,12 @@ private fun TopBarOverlay(
     scrollOffset: Float,
     onBackPress: () -> Unit
 ) {
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .height(56.dp),
         color = MaterialTheme.colorScheme.surface.copy(
             alpha = scrollOffset
@@ -270,7 +346,7 @@ private fun TopBarOverlay(
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
                     contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.onSurface
+                    tint = if (scrollOffset > 0.5f) MaterialTheme.colorScheme.onSurface else Color.White
                 )
             }
             
@@ -278,7 +354,7 @@ private fun TopBarOverlay(
             Text(
                 text = recipe.name,
                 style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (scrollOffset > 0.5f) MaterialTheme.colorScheme.onSurface else Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -286,6 +362,34 @@ private fun TopBarOverlay(
                     .padding(horizontal = 56.dp)
                     .alpha(scrollOffset)
             )
+            
+            // Action buttons
+            Row(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Like button
+                IconButton(onClick = { /* TODO: Toggle favorite */ }) {
+                    Icon(
+                        imageVector = if (recipe.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = if (recipe.isFavorite) "Remove from favorites" else "Add to favorites",
+                        tint = if (recipe.isFavorite) MaterialTheme.colorScheme.error 
+                              else if (scrollOffset > 0.5f) MaterialTheme.colorScheme.onSurface 
+                              else Color.White
+                    )
+                }
+                
+                // Share button
+                IconButton(onClick = { /* TODO: Share recipe */ }) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Share recipe",
+                        tint = if (scrollOffset > 0.5f) MaterialTheme.colorScheme.onSurface else Color.White
+                    )
+                }
+            }
         }
     }
 }
@@ -506,4 +610,17 @@ private fun FloatingActionButtons(recipe: DetailedRecipe) {
             )
         }
     }
+}
+
+@Composable
+private fun TopAppBar(
+    title: @Composable () -> Unit,
+    navigationIcon: @Composable () -> Unit,
+    actions: @Composable () -> Unit
+) {
+    TopAppBar(
+        title = title,
+        navigationIcon = navigationIcon,
+        actions = actions
+    )
 }
