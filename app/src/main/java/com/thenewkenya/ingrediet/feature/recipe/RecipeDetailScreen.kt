@@ -133,7 +133,6 @@ private fun RecipeContent(
     val scrollState = rememberLazyListState()
     val headerHeight = 400.dp
     val headerHeightPx = with(LocalDensity.current) { headerHeight.toPx() }
-    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     
     // Calculate scroll offset based on first visible item and its offset
     val scrollOffset by remember {
@@ -156,22 +155,11 @@ private fun RecipeContent(
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
             item {
-                Box {
-                    // Header with image
-                    Header(
-                        recipe = recipe,
-                        headerHeight = headerHeight,
-                        scrollOffset = scrollOffset
-                    )
-                    
-                    // Top bar overlay - now part of the scrolling content
-                    TopBarOverlay(
-                        recipe = recipe,
-                        scrollOffset = scrollOffset,
-                        onBackPress = onBackPress,
-                        modifier = Modifier.statusBarsPadding()
-                    )
-                }
+                Header(
+                    recipe = recipe,
+                    headerHeight = headerHeight,
+                    scrollOffset = scrollOffset
+                )
             }
             
             // Quick Info
@@ -219,6 +207,14 @@ private fun RecipeContent(
                 InstructionItem(index + 1, instruction)
             }
         }
+
+        // Fixed top bar that stays on top
+        TopBarOverlay(
+            recipe = recipe,
+            scrollOffset = scrollOffset,
+            onBackPress = onBackPress,
+            modifier = Modifier.statusBarsPadding()
+        )
     }
 }
 
