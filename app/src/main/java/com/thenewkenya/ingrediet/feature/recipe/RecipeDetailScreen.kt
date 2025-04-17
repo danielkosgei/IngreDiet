@@ -133,63 +133,52 @@ private fun RecipeContent(
     val scrollState = rememberLazyListState()
     val headerHeight = 400.dp
     val headerHeightPx = with(LocalDensity.current) { headerHeight.toPx() }
-    val scrollOffset = min(1f, max(0f, scrollState.firstVisibleItemScrollOffset / headerHeightPx))
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    
+    // Calculate scroll offset based on first visible item and its offset
+    val scrollOffset by remember {
+        derivedStateOf {
+            when {
+                scrollState.firstVisibleItemIndex > 0 -> 1f
+                scrollState.firstVisibleItemIndex == 0 -> {
+                    val scrollOffset = scrollState.firstVisibleItemScrollOffset
+                    (scrollOffset / headerHeightPx).coerceIn(0f, 1f)
+                }
+                else -> 0f
+            }
+        }
+    }
     
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = scrollState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                bottom = 80.dp,
-                top = statusBarHeight + 56.dp
-            )
+            contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            // Header
             item {
-                Header(
-                    recipe = recipe,
-                    headerHeight = headerHeight,
-                    scrollOffset = scrollOffset
-                )
-            }
-            
-            // Recipe Title and Rating
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 24.dp)
-                ) {
-                    Text(
-                        text = recipe.name,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
+                Box {
+                    // Header with image
+                    Header(
+                        recipe = recipe,
+                        headerHeight = headerHeight,
+                        scrollOffset = scrollOffset
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Star,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = recipe.rating.toString(),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                    
+                    // Top bar overlay - now part of the scrolling content
+                    TopBarOverlay(
+                        recipe = recipe,
+                        scrollOffset = scrollOffset,
+                        onBackPress = onBackPress,
+                        modifier = Modifier.statusBarsPadding()
+                    )
                 }
             }
             
             // Quick Info
             item {
+                Spacer(modifier = Modifier.height(24.dp))
                 QuickInfoSection(recipe)
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
             }
             
             // Description
@@ -230,13 +219,6 @@ private fun RecipeContent(
                 InstructionItem(index + 1, instruction)
             }
         }
-        
-        // Back button and title overlay
-        TopBarOverlay(
-            recipe = recipe,
-            scrollOffset = scrollOffset,
-            onBackPress = onBackPress
-        )
     }
 }
 
@@ -263,22 +245,27 @@ private fun Header(
                 .fillMaxSize()
                 .graphicsLayer {
                     alpha = 1f - (scrollOffset * 0.5f)
-                    translationY = scrollOffset * 100
+                    translationY = scrollOffset * 50
                 }
         )
         
-        // Gradient overlay
+        // Gradient overlay - now extends beyond visible area
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer {
+                    translationY = scrollOffset * 50 // Match image parallax
+                }
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
                             Color.Black.copy(alpha = 0.7f),
-                            Color.Black.copy(alpha = 0.15f),
-                            Color.Black.copy(alpha = 0.45f),
-                            Color.Black.copy(alpha = 0.8f)
-                        )
+                            Color.Black.copy(alpha = 0.3f),
+                            Color.Black.copy(alpha = 0.3f),
+                            Color.Black.copy(alpha = 0.7f),
+                        ),
+                        startY = -headerHeight.value * 0.5f, // Start gradient above visible area
+                        endY = headerHeight.value * 1.5f // End gradient below visible area
                     )
                 )
         )
@@ -288,6 +275,9 @@ private fun Header(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(16.dp)
+                .graphicsLayer {
+                    alpha = (1f - scrollOffset).coerceIn(0f, 1f)
+                }
         ) {
             Text(
                 text = recipe.name,
@@ -320,14 +310,12 @@ private fun Header(
 private fun TopBarOverlay(
     recipe: DetailedRecipe,
     scrollOffset: Float,
-    onBackPress: () -> Unit
+    onBackPress: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .statusBarsPadding()
             .height(56.dp),
         color = MaterialTheme.colorScheme.surface.copy(
             alpha = scrollOffset
@@ -350,17 +338,19 @@ private fun TopBarOverlay(
                 )
             }
             
-            // Title
+            // Title - only show when scrolled
             Text(
                 text = recipe.name,
                 style = MaterialTheme.typography.titleLarge,
-                color = if (scrollOffset > 0.5f) MaterialTheme.colorScheme.onSurface else Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .padding(horizontal = 56.dp)
-                    .alpha(scrollOffset)
+                    .graphicsLayer {
+                        alpha = scrollOffset
+                    }
             )
             
             // Action buttons
