@@ -716,12 +716,22 @@ private fun HomeHeader(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                placeholder = { Text("Search recipes...") },
+                    .height(56.dp)
+                    .shadow(
+                        elevation = 4.dp,
+                        shape = RoundedCornerShape(16.dp)
+                    ),
+                placeholder = { 
+                    Text(
+                        "Search recipes...",
+                        color = colors.onSurface.copy(alpha = 0.6f)
+                    )
+                },
                 leadingIcon = { 
                     Icon(
                         imageVector = Icons.Default.Search,
-                        contentDescription = "Search"
+                        contentDescription = "Search",
+                        tint = colors.primary
                     )
                 },
                 trailingIcon = {
@@ -735,18 +745,24 @@ private fun HomeHeader(
                         }) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "Clear search"
+                                contentDescription = "Clear search",
+                                tint = colors.onSurface.copy(alpha = 0.6f)
                             )
                         }
                     }
                 },
                 shape = RoundedCornerShape(16.dp),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = colors.surfaceVariant,
-                    unfocusedContainerColor = colors.surfaceVariant,
-                    disabledContainerColor = colors.surfaceVariant,
+                    focusedContainerColor = colors.surface,
+                    unfocusedContainerColor = colors.surface,
+                    disabledContainerColor = colors.surface,
                     focusedIndicatorColor = colors.primary,
-                    unfocusedIndicatorColor = Color.Transparent
+                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedTextColor = colors.onSurface,
+                    unfocusedTextColor = colors.onSurface,
+                    focusedLeadingIconColor = colors.primary,
+                    unfocusedLeadingIconColor = colors.primary.copy(alpha = 0.7f),
+                    cursorColor = colors.primary
                 ),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
@@ -754,12 +770,9 @@ private fun HomeHeader(
                 ),
                 keyboardActions = KeyboardActions(
                     onSearch = {
-                        // Handle search action
                         focusManager.clearFocus()
                         showSuggestions = false
                         if (localSearchQuery.value.isNotEmpty()) {
-                            // Don't navigate to a non-existent route
-                            // Just update the search query instead
                             scope.launch {
                                 onSearchQueryChange(localSearchQuery.value)
                             }
