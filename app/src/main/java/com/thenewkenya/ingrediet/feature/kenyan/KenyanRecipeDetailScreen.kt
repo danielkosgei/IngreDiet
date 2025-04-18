@@ -19,6 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.outlined.Restaurant
@@ -27,6 +29,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -98,12 +101,58 @@ fun KenyanRecipeDetailScreen(
                         )
                     }
                 },
+                actions = {
+                    // Favorite button
+                    if (selectedRecipe != null) {
+                        IconButton(onClick = { 
+                            viewModel.toggleFavorite(recipeId)
+                        }) {
+                            Icon(
+                                imageVector = if (selectedRecipe?.isFavorite == true) 
+                                               Icons.Default.Favorite 
+                                            else 
+                                               Icons.Filled.FavoriteBorder,
+                                contentDescription = if (selectedRecipe?.isFavorite == true) 
+                                                     "Remove from favorites" 
+                                                   else 
+                                                     "Add to favorites",
+                                tint = if (selectedRecipe?.isFavorite == true) 
+                                        MaterialTheme.colorScheme.errorContainer 
+                                      else 
+                                        MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
+        },
+        floatingActionButton = {
+            if (!isLoading && selectedRecipe != null) {
+                ExtendedFloatingActionButton(
+                    onClick = { /* TODO: Start cooking mode */ },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Timer,
+                            contentDescription = "Start cooking",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Start Cooking",
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->

@@ -59,6 +59,15 @@ class AuthManager(private val context: Context) {
 
             // Manually save session after sing up
             saveCurrentSession()
+            
+            // Save user ID
+            val userId = supabase.auth.currentUserOrNull()?.id
+            if (userId != null) {
+                sessionManager.saveUserId(userId)
+                Log.d("AuthManager", "User ID saved after signup: $userId")
+            } else {
+                Log.w("AuthManager", "No user ID available after signup")
+            }
 
             emit(AuthResponse.Success)
         } catch (e: Exception) {
@@ -87,6 +96,15 @@ class AuthManager(private val context: Context) {
 
             // Manually save session after login
             saveCurrentSession()
+            
+            // Save user ID
+            val userId = supabase.auth.currentUserOrNull()?.id
+            if (userId != null) {
+                sessionManager.saveUserId(userId)
+                Log.d("AuthManager", "User ID saved after login: $userId")
+            } else {
+                Log.w("AuthManager", "No user ID available after login")
+            }
 
             emit(AuthResponse.Success)
         } catch (e: Exception) {
@@ -140,6 +158,16 @@ class AuthManager(private val context: Context) {
                     Log.d("AuthManager", "Session restored successfully")
                     // Save the newly refreshed session
                     saveCurrentSession()
+                    
+                    // Save user ID
+                    val userId = supabase.auth.currentUserOrNull()?.id
+                    if (userId != null) {
+                        sessionManager.saveUserId(userId)
+                        Log.d("AuthManager", "User ID saved after session restore: $userId")
+                    } else {
+                        Log.w("AuthManager", "No user ID available after session restore")
+                    }
+                    
                     return true
                 } else {
                     Log.d("AuthManager", "Session refresh returned null")
@@ -201,17 +229,24 @@ class AuthManager(private val context: Context) {
             
             Log.d("GoogleSignIn", "Got user info - Name: $displayName, Picture: $profilePictureUrl")
 
-            // Sign in with Supabase using the ID token
+            // Sign in with Google token
             supabase.auth.signInWith(IDToken) {
                 idToken = googleIdToken
                 provider = Google
             }
-            
+
             // Wait briefly for the session to be created
             kotlinx.coroutines.delay(500)
             
-            // Save session data
+            // Save session and user ID
             saveCurrentSession()
+            val userId = supabase.auth.currentUserOrNull()?.id
+            if (userId != null) {
+                sessionManager.saveUserId(userId)
+                Log.d("AuthManager", "User ID saved after Google sign-in: $userId")
+            } else {
+                Log.w("AuthManager", "No user ID available after Google sign-in")
+            }
             
             // Store profile picture URL in user metadata
             try {

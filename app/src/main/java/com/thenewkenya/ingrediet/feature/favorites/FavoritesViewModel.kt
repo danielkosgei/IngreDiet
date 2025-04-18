@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 class FavoritesViewModel(context: Context) : ViewModel() {
     private val repository = RecipeRepository(context)
@@ -53,7 +54,40 @@ class FavoritesViewModel(context: Context) : ViewModel() {
     }
     
     fun refreshFavorites() {
-        loadFavorites()
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _error.value = null
+                
+                // Add a small delay to ensure the loading indicator is visible
+                // This is better for UX in case the data loads too quickly
+                delay(300)
+                
+                repository.getFavoriteRecipes().collect { result ->
+                    result.fold(
+                        onSuccess = { recipes ->
+                            _favorites.value = recipes
+                            _error.value = null
+                        },
+                        onFailure = { e ->
+                            _error.value = e.message ?: "Failed to load favorites"
+                            // Keep existing favorites in case of error to provide a better UX
+                            if (_favorites.value.isEmpty()) {
+                                _favorites.value = emptyList()
+                            }
+                        }
+                    )
+                    _isLoading.value = false
+                }
+            } catch (e: Exception) {
+                _error.value = e.message ?: "An unexpected error occurred"
+                // Keep existing favorites in case of error
+                if (_favorites.value.isEmpty()) {
+                    _favorites.value = emptyList()
+                }
+                _isLoading.value = false
+            }
+        }
     }
 }
 

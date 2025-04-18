@@ -2,6 +2,11 @@ package com.thenewkenya.ingrediet.data.model
 
 import kotlinx.serialization.Serializable
 import java.util.UUID
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 @Serializable
 data class DetailedRecipe(
@@ -78,6 +83,19 @@ data class NutritionFacts(
     val minerals: Map<String, Float> = emptyMap(),
     val dailyValuePercentage: Map<String, Int> = emptyMap()
 ) {
+    // Secondary constructor for simplified creation
+    constructor(
+        calories: Int,
+        protein: Int,
+        carbs: Int,
+        fat: Int
+    ) : this(
+        calories = calories,
+        protein = protein.toFloat(),
+        carbs = carbs.toFloat(),
+        fat = fat.toFloat()
+    )
+    
     // Calculate progress for each nutrient, ensuring values are between 0 and 1
     fun getCaloriesProgress(): Float = (calories.toFloat() / 2000).coerceIn(0f, 1f)
     fun getProteinProgress(): Float = (protein / 50).coerceIn(0f, 1f)
@@ -118,6 +136,39 @@ data class Recipe(
     val cuisineType: String,
     val dietaryInfo: List<String>
 ) {
+    // Secondary constructor for simplified recipe creation from favorites
+    constructor(
+        id: String,
+        name: String,
+        description: String,
+        imageUrl: String,
+        cookingTime: Int,
+        nutritionFacts: NutritionFacts,
+        ingredients: List<IngredientItem> = emptyList(),
+        instructions: List<String> = emptyList()
+    ) : this(
+        id = id,
+        recipeId = id,
+        name = name,
+        description = description,
+        imageUrl = imageUrl,
+        preparationTime = 15, // default
+        cookingTime = cookingTime,
+        servings = 4, // default
+        difficulty = "Medium", // default
+        ingredients = ingredients,
+        instructions = instructions,
+        nutritionFacts = nutritionFacts,
+        tags = emptyList(),
+        isFavorite = true, // Since it's coming from favorites
+        rating = 0f,
+        category = "",
+        author = "",
+        dateAdded = "",
+        cuisineType = "",
+        dietaryInfo = emptyList()
+    )
+    
     fun toDetailedRecipe(): DetailedRecipe {
         return DetailedRecipe(
             id = this.id,
@@ -148,11 +199,11 @@ data class Recipe(
 data class RecipeDto(
     val id: String = "",
     val name: String = "",
-    val description: String = "",
-    val image_url: String = "",
-    val category: String = "",
-    val ingredients: Map<String, String> = emptyMap(),
-    val instructions: String = "",
+    val description: String? = "",
+    val image_url: String? = null,
+    val category: String? = null,
+    val ingredients: JsonElement? = null,
+    val instructions: String? = "",
     val preparation_time: Int? = null,
     val cooking_time: Int? = null,
     val servings: Int? = null,
@@ -160,38 +211,60 @@ data class RecipeDto(
     val tags: List<String>? = null
 ) {
     fun toDetailedRecipe(): DetailedRecipe {
-        // Parse ingredients
-        val parsedIngredients = ingredients.map { (name, quantityStr) ->
-            val parts = quantityStr.split(" ", limit = 2)
-            val quantity = parts.firstOrNull()?.toFloatOrNull() ?: 1f
-            val unit = if (parts.size > 1) parts[1] else ""
-            
-            IngredientItem(
-                id = UUID.randomUUID().toString(),
-                name = name,
-                quantity = quantity,
-                unit = unit
-            )
+        // Parse ingredients based on the actual JSON type
+        val parsedIngredients = when (ingredients) {
+            is JsonArray -> {
+                // Handle array of strings
+                ingredients.mapNotNull { element ->
+                    element.jsonPrimitive.contentOrNull?.let { ingredientStr ->
+                        val parts = ingredientStr.split(" ", limit = 2)
+                        val quantity = parts.firstOrNull()?.toFloatOrNull() ?: 1f
+                        val unit = if (parts.size > 1) parts[1] else ""
+                        IngredientItem(
+                            id = UUID.randomUUID().toString(),
+                            name = ingredientStr, // Use the full string as name for now
+                            quantity = quantity,
+                            unit = unit
+                        )
+                    }
+                }
+            }
+            is JsonObject -> {
+                // Handle map/object structure
+                ingredients.map { (name, quantityStrElement) ->
+                    val quantityStr = quantityStrElement.jsonPrimitive.contentOrNull ?: ""
+                    val parts = quantityStr.split(" ", limit = 2)
+                    val quantity = parts.firstOrNull()?.toFloatOrNull() ?: 1f
+                    val unit = if (parts.size > 1) parts[1] else ""
+                    IngredientItem(
+                        id = UUID.randomUUID().toString(),
+                        name = name,
+                        quantity = quantity,
+                        unit = unit
+                    )
+                }
+            }
+            else -> emptyList() // Handle null or other unexpected types
         }
-        
+
         // Parse instructions
-        val parsedInstructions = instructions
+        val parsedInstructions = (instructions ?: "")
             .split(Regex("\\d+\\.\\s+"))
             .filter { it.isNotBlank() }
-        
+
         // Create a basic nutrition facts object
         val nutritionFacts = NutritionFacts(
-            calories = 0, 
+            calories = 0,
             protein = 0f,
             carbs = 0f,
             fat = 0f
         )
-        
+
         return DetailedRecipe(
             id = id,
             name = name,
-            description = description,
-            imageUrl = image_url,
+            description = description ?: "",
+            imageUrl = image_url ?: "",
             preparationTime = preparation_time ?: 15,
             cookingTime = cooking_time ?: 30,
             servings = servings ?: 4,
@@ -199,8 +272,8 @@ data class RecipeDto(
             ingredients = parsedIngredients,
             instructions = parsedInstructions,
             nutritionFacts = nutritionFacts,
-            tags = tags ?: listOf(category),
-            category = category
+            tags = tags ?: listOf(category ?: ""),
+            category = category ?: ""
         )
     }
 }

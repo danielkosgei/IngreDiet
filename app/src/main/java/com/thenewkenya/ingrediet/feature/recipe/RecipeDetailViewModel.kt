@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.UUID
 import androidx.lifecycle.ViewModelProvider
+import kotlinx.coroutines.async
 
 class RecipeDetailViewModel(
     private val recipeRepository: RecipeRepository,
@@ -36,46 +37,56 @@ class RecipeDetailViewModel(
     private val _addToShoppingListResult = MutableStateFlow<AddToShoppingListResult?>(null)
     val addToShoppingListResult: StateFlow<AddToShoppingListResult?> = _addToShoppingListResult.asStateFlow()
 
+    // Add a state for authentication errors
+    private val _authError = MutableStateFlow<String?>(null)
+    val authError: StateFlow<String?> = _authError.asStateFlow()
+
     fun loadRecipe(recipeId: String) {
         viewModelScope.launch {
             _uiState.value = RecipeDetailUiState.Loading
             Log.d("RecipeDetailViewModel", "Started loading recipe: $recipeId")
 
             try {
-                // Check data integrity first
-                val dataValidation = recipeRepository.validateRecipeData(recipeId)
-                Log.d("RecipeDetailViewModel", "Recipe data validation: $dataValidation")
-
-                // Even if some parts of the recipe data are missing, try to load what we can
-                if (!dataValidation.getOrDefault("recipe_exists", false)) {
-                    Log.w("RecipeDetailViewModel", "Recipe $recipeId doesn't seem to exist, but we'll try to load anyway")
+                // Create coroutines for parallel requests
+                val recipeDeferred = viewModelScope.async {
+                    var result: Result<DetailedRecipe>? = null
+                    recipeRepository.getRecipeDetails(recipeId).collect { 
+                        result = it
+                    }
+                    return@async result
                 }
 
-                // Log warnings about missing data but continue
-                if (!dataValidation.getOrDefault("ingredients_exist", false)) {
-                    Log.w("RecipeDetailViewModel", "Recipe $recipeId has no ingredients in the database")
+                val favoriteStatusDeferred = viewModelScope.async {
+                    var result: Result<Boolean>? = null
+                    recipeRepository.isRecipeFavorite(recipeId).collect {
+                        result = it
+                    }
+                    return@async result
                 }
 
-                if (!dataValidation.getOrDefault("nutrition_exists", false)) {
-                    Log.w("RecipeDetailViewModel", "Recipe $recipeId has no nutrition data in the database")
+                // Wait for both requests to complete
+                val recipeResult = recipeDeferred.await()
+                val favoriteResult = favoriteStatusDeferred.await()
+
+                if (recipeResult == null) {
+                    _uiState.value = RecipeDetailUiState.Error("Failed to load recipe details")
+                    return@launch
                 }
 
-                if (!dataValidation.getOrDefault("instructions_exist", false)) {
-                    Log.w("RecipeDetailViewModel", "Recipe $recipeId has no instructions in the database")
-                }
-
-                // Continue with normal loading
-                recipeRepository.getRecipeDetails(recipeId).collect { result ->
-                    result.fold(
-                        onSuccess = { recipe ->
-                            _recipe.value = recipe
-                            _uiState.value = RecipeDetailUiState.Success
-                        },
-                        onFailure = { error ->
-                            Log.e("RecipeDetailViewModel", "Error loading recipe: ${error.message}", error)
-                            _uiState.value = RecipeDetailUiState.Error(error.message ?: "Failed to load recipe details")
-                        }
-                    )
+                // Process recipe result
+                when {
+                    recipeResult.isSuccess -> {
+                        val recipe = recipeResult.getOrNull()!!
+                        // Apply favorite status if available
+                        val isFavorite = favoriteResult?.getOrNull() ?: false
+                        _recipe.value = recipe.copy(isFavorite = isFavorite)
+                        _uiState.value = RecipeDetailUiState.Success
+                    }
+                    recipeResult.isFailure -> {
+                        val error = recipeResult.exceptionOrNull()
+                        Log.e("RecipeDetailViewModel", "Error loading recipe: ${error?.message}", error)
+                        _uiState.value = RecipeDetailUiState.Error(error?.message ?: "Failed to load recipe details")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("RecipeDetailViewModel", "Exception in loadRecipe", e)
@@ -125,20 +136,71 @@ class RecipeDetailViewModel(
 
     fun toggleFavorite() {
         _recipe.value?.let { currentRecipe ->
+            // Clear any previous auth errors
+            _authError.value = null
+            
+            // Optimistically update UI immediately for better UX
+            val newFavoriteStatus = !currentRecipe.isFavorite
+            _recipe.value = currentRecipe.copy(isFavorite = newFavoriteStatus)
+            
+            // Log what's happening
+            val action = if (currentRecipe.isFavorite) "Removing from" else "Adding to"
+            Log.d("RecipeDetailViewModel", "$action favorites: ${currentRecipe.id}")
+            
+            // Start background operation
             viewModelScope.launch {
-                recipeRepository.toggleFavorite(currentRecipe.id)
-                    .collect { result ->
-                        result.fold(
-                            onSuccess = { success ->
-                                if (success) {
-                                    _recipe.value = currentRecipe.copy(isFavorite = !currentRecipe.isFavorite)
+                try {
+                    var apiCallSuccessful = false
+                    
+                    recipeRepository.toggleFavorite(currentRecipe.id)
+                        .collect { result ->
+                            when {
+                                result.isSuccess -> {
+                                    val success = result.getOrNull() ?: false
+                                    apiCallSuccessful = success
+                                    if (success) {
+                                        val actionCompleted = if (newFavoriteStatus) "added to" else "removed from"
+                                        Log.d("RecipeDetailViewModel", "Recipe ${currentRecipe.id} successfully $actionCompleted favorites")
+                                    } else {
+                                        Log.w("RecipeDetailViewModel", "Toggle favorite returned false")
+                                        // Revert UI state if API returns false
+                                        _recipe.value = currentRecipe
+                                    }
                                 }
-                            },
-                            onFailure = { /* Handle error */ }
-                        )
+                                result.isFailure -> {
+                                    val error = result.exceptionOrNull()
+                                    Log.e("RecipeDetailViewModel", "Error toggling favorite: ${error?.message}", error)
+                                    
+                                    // Check if it's an authentication error
+                                    if (error?.message?.contains("must be logged in", ignoreCase = true) == true ||
+                                        error?.message?.contains("not authenticated", ignoreCase = true) == true) {
+                                        _authError.value = "Please log in to save favorites"
+                                    }
+                                    
+                                    // Revert UI state on error
+                                    _recipe.value = currentRecipe
+                                }
+                            }
+                        }
+                } catch (e: Exception) {
+                    Log.e("RecipeDetailViewModel", "Exception toggling favorite", e)
+                    
+                    // Check if it's an authentication error
+                    if (e.message?.contains("must be logged in", ignoreCase = true) == true ||
+                        e.message?.contains("not authenticated", ignoreCase = true) == true) {
+                        _authError.value = "Please log in to save favorites"
                     }
+                    
+                    // Revert UI state on exception
+                    _recipe.value = currentRecipe
+                }
             }
         }
+    }
+
+    // Add a method to clear the auth error
+    fun clearAuthError() {
+        _authError.value = null
     }
 
     fun addIngredientsToShoppingList() {

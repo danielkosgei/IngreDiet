@@ -10,6 +10,7 @@ class SessionManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
     private val refreshTokenKey = "refresh_token"
     private val accessTokenKey = "access_token"
+    private val userIdKey = "user_id"
 
     suspend fun saveTokens(refreshToken: String, accessToken: String) {
         withContext(Dispatchers.IO) {
@@ -43,6 +44,7 @@ class SessionManager(context: Context) {
             prefs.edit()
                 .remove(refreshTokenKey)
                 .remove(accessTokenKey)
+                .remove(userIdKey)
                 .apply()
             Log.d("SessionManager", "Session cleared")
         }
@@ -54,6 +56,23 @@ class SessionManager(context: Context) {
             val hasToken = !refreshToken.isNullOrEmpty()
             Log.d("SessionManager", "Checking for valid session: $hasToken")
             hasToken
+        }
+    }
+
+    suspend fun saveUserId(userId: String) {
+        withContext(Dispatchers.IO) {
+            prefs.edit()
+                .putString(userIdKey, userId)
+                .apply()
+            Log.d("SessionManager", "User ID saved successfully")
+        }
+    }
+
+    suspend fun getCurrentUserId(): String? {
+        return withContext(Dispatchers.IO) {
+            val userId = prefs.getString(userIdKey, null)
+            Log.d("SessionManager", "Retrieved user ID: $userId")
+            userId
         }
     }
 }

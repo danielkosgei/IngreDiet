@@ -97,6 +97,7 @@ import com.thenewkenya.ingrediet.feature.search.SearchScreen
 import com.thenewkenya.ingrediet.feature.favorites.FavoritesScreen
 import com.thenewkenya.ingrediet.feature.mealplanner.MealPlannerScreen
 import com.thenewkenya.ingrediet.feature.create.CreateRecipeScreen
+import com.thenewkenya.ingrediet.feature.favorites.FavoritesViewModelSimpleFactory
 import com.thenewkenya.ingrediet.feature.shopping.ShoppingListScreen
 import com.thenewkenya.ingrediet.feature.search.IngredientSearchScreen
 import com.thenewkenya.ingrediet.feature.profile.AccountScreen
@@ -294,7 +295,12 @@ fun AppNavigation() {
                 composable("splash") { SplashScreen() }
                 composable("profile") { ProfileScreen(navController) }
                 composable("search") { SearchScreen(navController) }
-                composable("favorites") { FavoritesScreen(navController) }
+                composable("favorites") { 
+                    val context = LocalContext.current
+                    val repository = com.thenewkenya.ingrediet.data.repository.FavoritesRepository.getInstance(context)
+                    val factory = FavoritesViewModelSimpleFactory(repository)
+                    FavoritesScreen(navController, factory) 
+                }
                 composable("mealplanner") { MealPlannerScreen(navController) }
                 composable("create") { CreateRecipeScreen(navController) }
                 composable("shopping") { ShoppingListScreen(navController) }

@@ -7,7 +7,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 
     kotlin("plugin.serialization") version "$kotlin_version"
-
 }
 
 android {
@@ -97,8 +96,9 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.8")
 
     // Add Coil for image loading
-    implementation("io.coil-kt.coil3:coil-compose:3.1.0")
-    implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
+    implementation("io.coil-kt.coil3:coil:3.0.0-alpha04")
+    implementation("io.coil-kt.coil3:coil-compose:3.0.0-alpha04")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.0-alpha04")
     
     // Kotlin Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")

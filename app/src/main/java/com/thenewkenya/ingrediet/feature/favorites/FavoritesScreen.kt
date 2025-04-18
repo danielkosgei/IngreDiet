@@ -2,293 +2,256 @@ package com.thenewkenya.ingrediet.feature.favorites
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestaurantMenu
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Typography
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.thenewkenya.ingrediet.feature.components.RecipeCard
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import com.thenewkenya.ingrediet.R
+import com.thenewkenya.ingrediet.data.model.FavoriteRecipe
+import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
 
+/**
+ * Composable function to display the favorites screen
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FavoritesScreen(
     navController: NavController,
-    viewModel: FavoritesViewModel = viewModel(
-        factory = FavoritesViewModelFactory(LocalContext.current)
-    )
+    viewModelFactory: FavoritesViewModelSimpleFactory
 ) {
-    val colors = MaterialTheme.colorScheme
-    val typography = MaterialTheme.typography
-    val coroutineScope = rememberCoroutineScope()
-
-    // Collect state values
+    val viewModel: FavoritesViewModelSimple = viewModel(factory = viewModelFactory)
     val favorites by viewModel.favorites.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     
-    // Local UI state
-    var isRefreshing by remember { mutableStateOf(false) }
-    var showContent by remember { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
     
-    // Animation effects
-    LaunchedEffect(Unit) {
-        delay(100) // Small delay for better animation
-        showContent = true
+    var refreshing by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(isLoading) {
+        if (!isLoading) {
+            refreshing = false
+        }
     }
-
+    
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { 
                     Text(
                         text = "My Favorites",
-                        style = typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold)
-                    ) 
+                        style = typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
                 },
                 navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Navigate back"
+                        )
+                    }
+                },
+                actions = {
                     IconButton(
-                        onClick = { navController.navigateUp() },
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .size(40.dp)
+                        onClick = {
+                            refreshing = true
+                            viewModel.refreshFavorites()
+                        },
+                        enabled = !isLoading
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack, 
-                            contentDescription = "Back",
-                            tint = colors.onSurface,
-                            modifier = Modifier.size(24.dp)
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh favorites"
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = colors.surface,
                     titleContentColor = colors.onSurface
-                ),
-                actions = {
-                    IconButton(
-                        onClick = { 
-                            isRefreshing = true
-                            coroutineScope.launch {
-                                viewModel.refreshFavorites()
-                                delay(1000) // Give some visual feedback
-                                isRefreshing = false
-                            }
-                        },
-                        enabled = !isLoading && !isRefreshing,
-                        modifier = Modifier
-                            .padding(end = 8.dp)
-                            .size(40.dp)
-                    ) {
-                        if (isRefreshing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp,
-                                color = colors.primary
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh favorites",
-                                tint = colors.onSurfaceVariant,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-                }
+                )
             )
         }
     ) { paddingValues ->
-        AnimatedVisibility(
-            visible = showContent,
-            enter = slideInVertically(
-                initialOffsetY = { it },
-                animationSpec = tween(durationMillis = 500)
-            ) + fadeIn(animationSpec = tween(durationMillis = 500)),
-            exit = fadeOut(),
-            modifier = Modifier.fillMaxSize()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(colors.background)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .background(colors.background)
+            // Loading spinner
+            AnimatedVisibility(
+                visible = isLoading,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + slideOutVertically()
             ) {
-                when {
-                    isLoading && favorites.isEmpty() -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                CircularProgressIndicator(
-                                    color = colors.primary,
-                                    modifier = Modifier.size(48.dp),
-                                    strokeWidth = 4.dp
-                                )
-                                Text(
-                                    text = "Loading your favorites...",
-                                    style = typography.bodyLarge,
-                                    color = colors.onBackground.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
-                    }
-                    
-                    error != null -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Card(
-                                modifier = Modifier
-                                    .padding(24.dp)
-                                    .fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = colors.errorContainer
-                                ),
-                                shape = RoundedCornerShape(16.dp),
-                                elevation = CardDefaults.cardElevation(
-                                    defaultElevation = 4.dp
-                                )
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                                    modifier = Modifier.padding(24.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Error,
-                                        contentDescription = null,
-                                        tint = colors.error,
-                                        modifier = Modifier.size(48.dp)
-                                    )
-                                    
-                                    Text(
-                                        text = "Unable to load your favorites",
-                                        style = typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        color = colors.onErrorContainer,
-                                        textAlign = TextAlign.Center
-                                    )
-                                    
-                                    Text(
-                                        text = error ?: "An error occurred while retrieving your favorite recipes.",
-                                        style = typography.bodyMedium,
-                                        color = colors.onErrorContainer.copy(alpha = 0.8f),
-                                        textAlign = TextAlign.Center
-                                    )
-                                    
-                                    Button(
-                                        onClick = { viewModel.refreshFavorites() },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = colors.error,
-                                            contentColor = colors.onError
-                                        ),
-                                        modifier = Modifier
-                                            .padding(top = 8.dp)
-                                            .height(48.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Refresh,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Try Again")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    favorites.isEmpty() -> {
-                        EmptyFavoritesView(navController, colors, typography)
-                    }
-                    
-                    else -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(48.dp),
+                        color = colors.primary
+                    )
+                }
+            }
+            
+            // Error state
+            AnimatedVisibility(
+                visible = error != null && !isLoading,
+                enter = fadeIn() + slideInVertically(),
+                exit = fadeOut() + slideOutVertically()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = colors.errorContainer
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
                         Column(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp)
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 16.dp, top = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Text(
+                                text = "Error",
+                                style = typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = colors.onErrorContainer
+                            )
+                            Text(
+                                text = error ?: "An unknown error occurred",
+                                style = typography.bodyMedium,
+                                color = colors.onErrorContainer,
+                                textAlign = TextAlign.Center
+                            )
+                            Button(
+                                onClick = { viewModel.refreshFavorites() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colors.primary
+                                ),
+                                modifier = Modifier.padding(top = 8.dp)
                             ) {
-                                Text(
-                                    text = "${favorites.size} Recipe${if (favorites.size != 1) "s" else ""}",
-                                    style = typography.titleMedium,
-                                    color = colors.onBackground.copy(alpha = 0.7f)
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
                                 )
-                                
-                                if (isRefreshing) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                            color = colors.primary
-                                        )
-                                        Text(
-                                            text = "Refreshing...",
-                                            style = typography.bodySmall,
-                                            color = colors.primary
-                                        )
-                                    }
-                                }
-                            }
-                            
-                            LazyVerticalStaggeredGrid(
-                                columns = StaggeredGridCells.Fixed(2),
-                                contentPadding = PaddingValues(bottom = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                verticalItemSpacing = 16.dp,
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                items(favorites) { recipe ->
-                                    RecipeCardEnhanced(recipe = recipe.toRecipe()) {
-                                        navController.navigate("recipe/${recipe.id}")
-                                    }
-                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = "Try Again")
                             }
                         }
                     }
+                }
+            }
+            
+            // Content - Favorites or Empty State
+            AnimatedVisibility(
+                visible = !isLoading && error == null,
+                enter = fadeIn(tween(300)) + slideInVertically(tween(300)),
+                exit = fadeOut(tween(300))
+            ) {
+                if (favorites.isNotEmpty()) {
+                    LazyVerticalStaggeredGrid(
+                        columns = StaggeredGridCells.Fixed(2),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalItemSpacing = 16.dp
+                    ) {
+                        items(favorites) { recipe ->
+                            RecipeCardEnhanced(
+                                recipe = recipe,
+                                navController = navController,
+                                colors = colors,
+                                typography = typography
+                            )
+                        }
+                    }
+                } else {
+                    EmptyFavoritesView(
+                        navController = navController,
+                        colors = colors,
+                        typography = typography
+                    )
                 }
             }
         }
@@ -296,61 +259,54 @@ fun FavoritesScreen(
 }
 
 @Composable
-fun RecipeCardEnhanced(
-    recipe: com.thenewkenya.ingrediet.data.model.Recipe,
-    onClick: () -> Unit
+private fun RecipeCardEnhanced(
+    recipe: FavoriteRecipe,
+    navController: NavController,
+    colors: ColorScheme,
+    typography: Typography
 ) {
-    val colors = MaterialTheme.colorScheme
-    val typography = MaterialTheme.typography
-    
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = colors.surface
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 1.dp,
-            pressedElevation = 4.dp
-        )
+            .padding(8.dp),
+        onClick = {
+            navController.navigate("recipe_detail/${recipe.id}")
+        },
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Column {
-            // Recipe Image without gradient overlay
+        Box {
+            // Recipe Image
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(recipe.imageUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = recipe.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .height(120.dp)
+                    .fillMaxWidth()
+            )
+            
+            // Favorite Icon
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
+                    .padding(8.dp)
+                    .align(Alignment.TopEnd)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.8f)),
+                contentAlignment = Alignment.Center
             ) {
-                // Image
-                coil3.compose.AsyncImage(
-                    model = recipe.imageUrl,
-                    contentDescription = recipe.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                Icon(
+                    imageVector = Icons.Default.Favorite,
+                    contentDescription = "Favorite",
+                    tint = Color.Red,
+                    modifier = Modifier.size(18.dp)
                 )
-                
-                // Favorite icon
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(colors.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Favorite,
-                        contentDescription = null,
-                        tint = colors.error,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
             }
-
-            // Recipe name and info
+            
+            // Recipe Info
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

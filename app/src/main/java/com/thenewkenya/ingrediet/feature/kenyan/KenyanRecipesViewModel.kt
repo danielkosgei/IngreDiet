@@ -28,7 +28,8 @@ data class KenyanRecipe(
     val region: String,
     val tags: List<String> = emptyList(),
     val ingredients: List<String> = emptyList(),
-    val instructions: List<String> = emptyList()
+    val instructions: List<String> = emptyList(),
+    val isFavorite: Boolean = false
 ) {
     companion object {
         fun fromDetailedRecipe(recipe: DetailedRecipe): KenyanRecipe {
@@ -47,7 +48,8 @@ data class KenyanRecipe(
                 region = region,
                 tags = recipe.tags,
                 ingredients = recipe.ingredients.map { "${it.name} ${it.quantity} ${it.unit}".trim() },
-                instructions = recipe.instructions
+                instructions = recipe.instructions,
+                isFavorite = recipe.isFavorite
             )
         }
     }
@@ -252,5 +254,41 @@ class KenyanRecipesViewModel(
      */
     fun clearErrorMessage() {
         _errorMessage.value = null
+    }
+    
+    /**
+     * Toggle recipe favorite status
+     */
+    fun toggleFavorite(recipeId: String) {
+        viewModelScope.launch {
+            recipeRepository.toggleFavorite(recipeId)
+                .catch { e ->
+                    Log.e(TAG, "Error toggling favorite: ${e.message}", e)
+                    _errorMessage.value = "Failed to update favorite: ${e.message}"
+                }
+                .collect { result ->
+                    result.fold(
+                        onSuccess = { success ->
+                            if (success) {
+                                // Refresh the selected recipe to update its favorite status
+                                getRecipeById(recipeId)
+                                
+                                // Also refresh the recipe list
+                                if (_selectedRegion.value != null) {
+                                    selectRegion(_selectedRegion.value!!)
+                                } else if (_searchQuery.value.isNotBlank()) {
+                                    searchRecipes(_searchQuery.value)
+                                } else {
+                                    loadKenyanRecipes()
+                                }
+                            }
+                        },
+                        onFailure = { e ->
+                            Log.e(TAG, "Error toggling favorite: ${e.message}", e)
+                            _errorMessage.value = "Failed to update favorite: ${e.message}"
+                        }
+                    )
+                }
+        }
     }
 }

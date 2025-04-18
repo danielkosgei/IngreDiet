@@ -40,6 +40,13 @@ import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.ui.theme.Primary
 import kotlin.math.max
 import kotlin.math.min
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+
+// CompositionLocal for RecipeDetailViewModel
+val LocalRecipeDetailViewModel = staticCompositionLocalOf<RecipeDetailViewModel> {
+    error("No RecipeDetailViewModel provided")
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,38 +59,55 @@ fun RecipeDetailScreen(
     val recipe by viewModel.recipe.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     
+    // Observe auth error
+    val authError by viewModel.authError.collectAsState()
+    
     LaunchedEffect(recipeId) {
         viewModel.loadRecipe(recipeId)
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            if (uiState is RecipeDetailUiState.Success && recipe != null) {
-                FloatingActionButtons(recipe!!)
+    CompositionLocalProvider(LocalRecipeDetailViewModel provides viewModel) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            floatingActionButton = {
+                if (uiState is RecipeDetailUiState.Success && recipe != null) {
+                    FloatingActionButtons(recipe!!)
+                }
             }
-        }
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            when (uiState) {
-                is RecipeDetailUiState.Loading -> LoadingState()
-                is RecipeDetailUiState.Error -> ErrorState((uiState as RecipeDetailUiState.Error).message)
-                is RecipeDetailUiState.Success -> {
-                    recipe?.let { recipeData ->
-                        RecipeContent(
-                            recipe = recipeData,
-                            onBackPress = { navController.navigateUp() }
-                        )
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                when (uiState) {
+                    is RecipeDetailUiState.Loading -> LoadingState()
+                    is RecipeDetailUiState.Error -> ErrorState((uiState as RecipeDetailUiState.Error).message)
+                    is RecipeDetailUiState.Success -> {
+                        recipe?.let { recipeData ->
+                            RecipeContent(
+                                recipe = recipeData,
+                                onBackPress = { navController.navigateUp() }
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    // Show login dialog if auth error occurs
+    if (authError != null) {
+        LoginRequiredDialog(
+            message = authError ?: "Please log in to continue",
+            onDismiss = { viewModel.clearAuthError() },
+            onLogin = { 
+                viewModel.clearAuthError()
+                navController.navigate("login")
+            }
+        )
     }
 }
 
@@ -310,6 +334,9 @@ private fun TopBarOverlay(
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val surfaceColor = MaterialTheme.colorScheme.surface.copy(alpha = scrollOffset)
     
+    // Get the ViewModel
+    val viewModel = LocalRecipeDetailViewModel.current
+    
     Column(modifier = Modifier.fillMaxWidth()) {
         // Solid status bar background
         Box(
@@ -366,7 +393,7 @@ private fun TopBarOverlay(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     // Like button
-                    IconButton(onClick = { /* TODO: Toggle favorite */ }) {
+                    IconButton(onClick = { viewModel.toggleFavorite() }) {
                         Icon(
                             imageVector = if (recipe.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                             contentDescription = if (recipe.isFavorite) "Remove from favorites" else "Add to favorites",
@@ -377,7 +404,7 @@ private fun TopBarOverlay(
                     }
                     
                     // Share button
-                    IconButton(onClick = { /* TODO: Share recipe */ }) {
+                    IconButton(onClick = { viewModel.shareRecipe() }) {
                         Icon(
                             imageVector = Icons.Default.Share,
                             contentDescription = "Share recipe",
@@ -580,32 +607,24 @@ private fun InstructionItem(
 
 @Composable
 private fun FloatingActionButtons(recipe: DetailedRecipe) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.padding(horizontal = 16.dp)
-    ) {
-        FloatingActionButton(
-            onClick = { /* TODO: Add to favorites */ },
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        ) {
-            Icon(
-                imageVector = if (recipe.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                contentDescription = if (recipe.isFavorite) "Remove from favorites" else "Add to favorites",
-                tint = if (recipe.isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        }
-        
-        FloatingActionButton(
-            onClick = { /* TODO: Start cooking mode */ },
-            containerColor = Primary
-        ) {
+    ExtendedFloatingActionButton(
+        onClick = { /* TODO: Start cooking mode */ },
+        containerColor = Primary,
+        icon = {
             Icon(
                 imageVector = Icons.Filled.PlayArrow,
                 contentDescription = "Start cooking",
                 tint = MaterialTheme.colorScheme.onPrimary
             )
+        },
+        text = {
+            Text(
+                text = "Start Cooking",
+                color = MaterialTheme.colorScheme.onPrimary,
+                fontWeight = FontWeight.Medium
+            )
         }
-    }
+    )
 }
 
 @Composable
@@ -618,5 +637,28 @@ private fun TopAppBar(
         title = title,
         navigationIcon = navigationIcon,
         actions = actions
+    )
+}
+
+@Composable
+private fun LoginRequiredDialog(
+    message: String,
+    onDismiss: () -> Unit,
+    onLogin: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Authentication Required") },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onLogin) {
+                Text("Log In")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
     )
 }
