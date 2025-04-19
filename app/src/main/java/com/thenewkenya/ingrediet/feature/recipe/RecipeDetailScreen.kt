@@ -41,6 +41,8 @@ import com.thenewkenya.ingrediet.ui.theme.Primary
 import kotlin.math.max
 import kotlin.math.min
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TabRowDefaults.SecondaryIndicator
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.TextButton
 
 // CompositionLocal for RecipeDetailViewModel
@@ -149,40 +151,39 @@ private fun ErrorState(message: String) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RecipeContent(
     recipe: DetailedRecipe,
     onBackPress: () -> Unit
 ) {
     val scrollState = rememberLazyListState()
-    val headerHeight = 400.dp
+    val headerHeight = 300.dp
     val headerHeightPx = with(LocalDensity.current) { headerHeight.toPx() }
-    
-    // Calculate scroll offset based on first visible item and its offset
-    val scrollOffset by remember {
-        derivedStateOf {
-            when {
-                scrollState.firstVisibleItemIndex > 0 -> 1f
-                scrollState.firstVisibleItemIndex == 0 -> {
-                    val scrollOffset = scrollState.firstVisibleItemScrollOffset
-                    (scrollOffset / headerHeightPx).coerceIn(0f, 1f)
-                }
-                else -> 0f
-            }
-        }
+    val scrollOffset = remember { mutableStateOf(0f) }
+
+    // Update scroll offset based on first visible item
+    val firstVisibleItemIndex = scrollState.firstVisibleItemIndex
+    val firstVisibleItemScrollOffset = scrollState.firstVisibleItemScrollOffset
+    scrollOffset.value = if (firstVisibleItemIndex == 0) {
+        (firstVisibleItemScrollOffset / headerHeightPx).coerceIn(0f, 1f)
+    } else {
+        1f
     }
-    
+
     Box(modifier = Modifier.fillMaxSize()) {
+        var selectedTabIndex by remember { mutableStateOf(0) }
+        val tabs = listOf("Instructions", "Ingredients", "Nutrition")
+
         LazyColumn(
             state = scrollState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 80.dp)
+            modifier = Modifier.fillMaxSize()
         ) {
             item {
                 Header(
                     recipe = recipe,
                     headerHeight = headerHeight,
-                    scrollOffset = scrollOffset
+                    scrollOffset = scrollOffset.value
                 )
             }
             
@@ -192,50 +193,131 @@ private fun RecipeContent(
                 QuickInfoSection(recipe)
                 Spacer(modifier = Modifier.height(24.dp))
             }
-            
-            // Description
+
+            // Tabs
             item {
-                DescriptionSection(recipe)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        tonalElevation = 1.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .padding(4.dp)
+                                .fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            tabs.forEachIndexed { index, title ->
+                                val selected = selectedTabIndex == index
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(4.dp),
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                    onClick = { selectedTabIndex = index }
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(vertical = 8.dp, horizontal = 12.dp)
+                                            .fillMaxWidth(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = title,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = if (selected) {
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(24.dp))
             }
-            
-            // Ingredients
+
+            // Tab content
+            when (selectedTabIndex) {
+                0 -> {
+                    // Instructions tab
+                    item {
+                        Text(
+                            text = "Step by Step Instructions",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    items(recipe.instructions.withIndex().toList()) { (index, instruction) ->
+                        InstructionItem(index + 1, instruction)
+                    }
+                }
+                1 -> {
+                    // Ingredients tab
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Ingredients",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Text(
+                                    text = "${recipe.servings} servings",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                    }
+                    items(recipe.ingredients) { ingredient ->
+                        IngredientItem(ingredient)
+                    }
+                }
+                2 -> {
+                    // Nutrition tab
+                    item {
+                        NutritionSection(recipe)
+                    }
+                }
+            }
+
+            // Add bottom spacing for FAB
             item {
-                Text(
-                    text = "Ingredients",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-            
-            items(recipe.ingredients) { ingredient ->
-                IngredientItem(ingredient)
-            }
-            
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-            
-            // Instructions
-            item {
-                Text(
-                    text = "Instructions",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-            
-            items(recipe.instructions.withIndex().toList()) { (index, instruction) ->
-                InstructionItem(index + 1, instruction)
+                Spacer(modifier = Modifier.height(88.dp))
             }
         }
 
         // Fixed top bar that stays on top
         TopBarOverlay(
             recipe = recipe,
-            scrollOffset = scrollOffset,
+            scrollOffset = scrollOffset.value,
             onBackPress = onBackPress
         )
     }
@@ -488,23 +570,149 @@ private fun InfoItem(
 }
 
 @Composable
-private fun DescriptionSection(recipe: DetailedRecipe) {
+private fun NutritionSection(recipe: DetailedRecipe) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
     ) {
+        // Description Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = "About this Recipe",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = recipe.description,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Nutrition Facts
         Text(
-            text = "About",
-            style = MaterialTheme.typography.titleLarge,
+            text = "Nutrition Facts",
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
         )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Nutrition Grid
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            NutritionCard(
+                title = "Calories",
+                value = recipe.nutritionFacts.getFormattedCalories(),
+                unit = "kcal",
+                modifier = Modifier.weight(1f)
+            )
+            NutritionCard(
+                title = "Protein",
+                value = recipe.nutritionFacts.getFormattedProtein(),
+                unit = "g",
+                modifier = Modifier.weight(1f)
+            )
+        }
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = recipe.description,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            NutritionCard(
+                title = "Carbs",
+                value = recipe.nutritionFacts.getFormattedCarbs(),
+                unit = "g",
+                modifier = Modifier.weight(1f)
+            )
+            NutritionCard(
+                title = "Fat",
+                value = recipe.nutritionFacts.getFormattedFat(),
+                unit = "g",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Additional nutrition info if available
+        recipe.nutritionFacts.fiber?.let { fiber ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                recipe.nutritionFacts.getFormattedFiber()?.let { fiberStr ->
+                    NutritionCard(
+                        title = "Fiber",
+                        value = fiberStr,
+                        unit = "g",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                recipe.nutritionFacts.getFormattedSugar()?.let { sugarStr ->
+                    NutritionCard(
+                        title = "Sugar",
+                        value = sugarStr,
+                        unit = "g",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NutritionCard(
+    title: String,
+    value: String,
+    unit: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
         )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = unit,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
