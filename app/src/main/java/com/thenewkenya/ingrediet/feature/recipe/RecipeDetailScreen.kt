@@ -3,6 +3,7 @@ package com.thenewkenya.ingrediet.feature.recipe
 import android.util.Log
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -202,10 +203,16 @@ private fun RecipeContent(
                         .padding(horizontal = 16.dp)
                 ) {
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        tonalElevation = 1.dp
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                width = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(32.dp)
+                            ),
+                        shape = RoundedCornerShape(32.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                        tonalElevation = 0.dp
                     ) {
                         Row(
                             modifier = Modifier
@@ -218,30 +225,30 @@ private fun RecipeContent(
                                 Surface(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .padding(4.dp),
+                                        .padding(4.dp)
+                                        .height(36.dp),
                                     shape = RoundedCornerShape(20.dp),
                                     color = if (selected) {
-                                        MaterialTheme.colorScheme.primaryContainer
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                                     } else {
                                         Color.Transparent
                                     },
                                     onClick = { selectedTabIndex = index }
                                 ) {
                                     Box(
-                                        modifier = Modifier
-                                            .padding(vertical = 8.dp, horizontal = 12.dp)
-                                            .fillMaxWidth(),
+                                        modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = title,
                                             style = MaterialTheme.typography.labelLarge,
                                             color = if (selected) {
-                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                                MaterialTheme.colorScheme.primary
                                             } else {
                                                 MaterialTheme.colorScheme.onSurfaceVariant
                                             },
-                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                            fontSize = 13.sp
                                         )
                                     }
                                 }
@@ -257,53 +264,81 @@ private fun RecipeContent(
                 0 -> {
                     // Instructions tab
                     item {
-                        Text(
-                            text = "Step by Step Instructions",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-                    items(recipe.instructions.withIndex().toList()) { (index, instruction) ->
-                        InstructionItem(index + 1, instruction)
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 1.dp
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = "Step by Step Instructions",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                recipe.instructions.forEachIndexed { index, instruction ->
+                                    if (index > 0) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                    }
+                                    InstructionItem(index + 1, instruction)
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
                 1 -> {
                     // Ingredients tab
                     item {
-                        Row(
+                        Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 1.dp
                         ) {
-                            Text(
-                                text = "Ingredients",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer
-                            ) {
-                                Text(
-                                    text = "${recipe.servings} servings",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Ingredients",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer
+                                    ) {
+                                        Text(
+                                            text = "${recipe.servings} servings",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                recipe.ingredients.forEach { ingredient ->
+                                    IngredientItem(ingredient)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
                             }
                         }
-                    }
-                    items(recipe.ingredients) { ingredient ->
-                        IngredientItem(ingredient)
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
                 2 -> {
                     // Nutrition tab
                     item {
                         NutritionSection(recipe)
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
             }
