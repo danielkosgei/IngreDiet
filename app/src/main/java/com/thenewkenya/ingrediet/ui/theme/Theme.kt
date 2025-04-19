@@ -28,15 +28,15 @@ val DarkTextColor = Color(0xFFFFFFFF) // White text
 private val LightColorScheme = lightColorScheme(
     primary = Primary,
     onPrimary = Color.White,
-    primaryContainer = SurfaceLight,
+    primaryContainer = ButtonSecondaryLight,
     onPrimaryContainer = TextPrimary,
     secondary = Secondary,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE8F5E9),  // Light green container
+    secondaryContainer = SurfaceLight,
     onSecondaryContainer = TextPrimary,
     tertiary = Tertiary,
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFEFEBE9),  // Light brown container
+    tertiaryContainer = CardLight,
     onTertiaryContainer = TextPrimary,
     background = Background,
     onBackground = TextPrimary,
@@ -44,24 +44,27 @@ private val LightColorScheme = lightColorScheme(
     onSurface = TextPrimary,
     surfaceVariant = NavBarColor,
     onSurfaceVariant = TextSecondary,
+    outline = CardBorderLight,
+    outlineVariant = DividerLight,
+    scrim = OverlayLight,
     error = Error,
     onError = Color.White,
-    errorContainer = Error.copy(alpha = 0.1f),
+    errorContainer = Color(0xFFFFF3F3),  // Light Alert Container
     onErrorContainer = Error
 )
 
 private val DarkColorScheme = darkColorScheme(
     primary = DarkPrimary,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFF3E2723),  // Dark warm container
+    primaryContainer = ButtonSecondaryDark,
     onPrimaryContainer = DarkTextPrimary,
     secondary = DarkSecondary,
-    onSecondary = Color.Black,
-    secondaryContainer = Color(0xFF1B5E20),  // Dark green container
+    onSecondary = Color.White,
+    secondaryContainer = DarkSurfaceLight,
     onSecondaryContainer = DarkTextPrimary,
     tertiary = Tertiary,
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFF3E2723),  // Dark brown container
+    tertiaryContainer = CardDark,
     onTertiaryContainer = DarkTextPrimary,
     background = DarkBackground,
     onBackground = DarkTextPrimary,
@@ -69,9 +72,12 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = DarkTextPrimary,
     surfaceVariant = DarkNavBarColor,
     onSurfaceVariant = DarkTextSecondary,
+    outline = CardBorderDark,
+    outlineVariant = DividerDark,
+    scrim = OverlayDark,
     error = Error,
     onError = Color.White,
-    errorContainer = Error.copy(alpha = 0.1f),
+    errorContainer = Color(0xFF2C1F1F),  // Dark Alert Container
     onErrorContainer = Error
 )
 
