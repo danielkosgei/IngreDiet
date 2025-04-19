@@ -2,15 +2,26 @@ package com.thenewkenya.ingrediet.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.thenewkenya.ingrediet.R
 
-// Set of Material typography styles to start with
+// Create Outfit font family
+val Outfit = FontFamily(
+    Font(R.font.outfit_light, FontWeight.Light),
+    Font(R.font.outfit_regular, FontWeight.Normal),
+    Font(R.font.outfit_medium, FontWeight.Medium),
+    Font(R.font.outfit_semibold, FontWeight.SemiBold),
+    Font(R.font.outfit_bold, FontWeight.Bold)
+)
+
+// Set of Material typography styles using Outfit
 val Typography = Typography(
     // Large titles, like screen headers
     displayLarge = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Outfit,
         fontWeight = FontWeight.Bold,
         fontSize = 32.sp,
         lineHeight = 40.sp,
@@ -18,7 +29,7 @@ val Typography = Typography(
     ),
     // Section headers
     displayMedium = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Outfit,
         fontWeight = FontWeight.Bold,
         fontSize = 28.sp,
         lineHeight = 36.sp,
@@ -26,7 +37,7 @@ val Typography = Typography(
     ),
     // Smaller section headers
     displaySmall = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Outfit,
         fontWeight = FontWeight.Medium,
         fontSize = 24.sp,
         lineHeight = 32.sp,
@@ -34,7 +45,7 @@ val Typography = Typography(
     ),
     // Card titles, important text
     titleLarge = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Outfit,
         fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp,
         lineHeight = 28.sp,
@@ -42,7 +53,7 @@ val Typography = Typography(
     ),
     // Secondary titles
     titleMedium = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Outfit,
         fontWeight = FontWeight.Medium,
         fontSize = 18.sp,
         lineHeight = 24.sp,
@@ -50,7 +61,7 @@ val Typography = Typography(
     ),
     // Small titles, labels
     titleSmall = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Outfit,
         fontWeight = FontWeight.Medium,
         fontSize = 16.sp,
         lineHeight = 22.sp,
@@ -58,7 +69,7 @@ val Typography = Typography(
     ),
     // Body text
     bodyLarge = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Outfit,
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 24.sp,
@@ -66,7 +77,7 @@ val Typography = Typography(
     ),
     // Secondary text
     bodyMedium = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Outfit,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 20.sp,
@@ -74,7 +85,7 @@ val Typography = Typography(
     ),
     // Caption text
     bodySmall = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Outfit,
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 16.sp,
@@ -82,7 +93,7 @@ val Typography = Typography(
     ),
     // Labels
     labelLarge = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Outfit,
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 20.sp,
@@ -90,7 +101,7 @@ val Typography = Typography(
     ),
     // Small labels
     labelMedium = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Outfit,
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
@@ -98,7 +109,7 @@ val Typography = Typography(
     ),
     // Smallest text elements
     labelSmall = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Outfit,
         fontWeight = FontWeight.Medium,
         fontSize = 10.sp,
         lineHeight = 14.sp,
