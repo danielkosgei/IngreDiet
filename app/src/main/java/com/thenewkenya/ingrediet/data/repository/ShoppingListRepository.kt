@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.Serializable
 import java.util.UUID
+import com.thenewkenya.ingrediet.data.model.IngredientItem
 
 private const val TAG = "ShoppingListRepository"
 
@@ -21,12 +22,19 @@ data class ShoppingItemDto(
     val user_id: String,
     val name: String,
     val category: String = "",
-    val is_checked: Boolean = false
+    val is_checked: Boolean = false,
+    val quantity: Float? = null,
+    val unit: String? = null
 ) {
     fun toShoppingItem(): ShoppingItem {
+        val displayName = if (quantity != null && unit != null) {
+            "$name ($quantity $unit)"
+        } else {
+            name
+        }
         return ShoppingItem(
             id = id,
-            name = name,
+            name = displayName,
             category = category,
             isChecked = is_checked
         )
@@ -34,6 +42,71 @@ data class ShoppingItemDto(
 }
 
 class ShoppingListRepository(private val context: Context) {
+    // TODO: Replace with actual database operations
+    private val shoppingList = mutableListOf<IngredientItem>()
+
+    suspend fun addIngredient(ingredient: IngredientItem) {
+        addShoppingItem(
+            ShoppingItem(
+                id = UUID.randomUUID().toString(),
+                name = "${ingredient.name} (${ingredient.quantity} ${ingredient.unit})",
+                category = mapIngredientToCategory(ingredient.name),
+                isChecked = false
+            )
+        ).collect { /* Collect to execute the flow */ }
+    }
+
+    suspend fun addIngredients(ingredients: List<IngredientItem>) {
+        ingredients.forEach { ingredient ->
+            addIngredient(ingredient)
+        }
+    }
+
+    private fun mapIngredientToCategory(name: String): String {
+        val lowerName = name.lowercase()
+        
+        return when {
+            // Dairy
+            lowerName.contains("milk") || lowerName.contains("cheese") || 
+            lowerName.contains("yogurt") || lowerName.contains("cream") || 
+            lowerName.contains("butter") -> "Dairy"
+            
+            // Produce
+            lowerName.contains("apple") || lowerName.contains("banana") || 
+            lowerName.contains("orange") || lowerName.contains("pepper") || 
+            lowerName.contains("tomato") || lowerName.contains("potato") || 
+            lowerName.contains("onion") || lowerName.contains("garlic") || 
+            lowerName.contains("lettuce") || lowerName.contains("spinach") || 
+            lowerName.contains("broccoli") || lowerName.contains("carrot") ||
+            lowerName.contains("berry") || lowerName.contains("fruit") ||
+            lowerName.contains("vegetable") -> "Produce"
+            
+            // Meat
+            lowerName.contains("beef") || lowerName.contains("chicken") || 
+            lowerName.contains("pork") || lowerName.contains("lamb") || 
+            lowerName.contains("sausage") || lowerName.contains("meat") ||
+            lowerName.contains("bacon") || lowerName.contains("steak") -> "Meat"
+            
+            // Bakery
+            lowerName.contains("bread") || lowerName.contains("bun") || 
+            lowerName.contains("roll") || lowerName.contains("cake") || 
+            lowerName.contains("cookie") || lowerName.contains("flour") -> "Bakery"
+            
+            // Spices and condiments
+            lowerName.contains("salt") || lowerName.contains("pepper") || 
+            lowerName.contains("spice") || lowerName.contains("sauce") || 
+            lowerName.contains("oil") || lowerName.contains("vinegar") || 
+            lowerName.contains("herb") -> "Spices"
+            
+            // Grains
+            lowerName.contains("rice") || lowerName.contains("pasta") || 
+            lowerName.contains("cereal") || lowerName.contains("grain") ||
+            lowerName.contains("quinoa") || lowerName.contains("oat") -> "Grains"
+            
+            // Default category
+            else -> "General"
+        }
+    }
 
     suspend fun getShoppingItems(): Flow<Result<List<ShoppingItem>>> = 
         DatabaseErrorHandler.executeDatabaseOperation(
@@ -174,4 +247,16 @@ class ShoppingListRepository(private val context: Context) {
                 
             true
         }.flowOn(Dispatchers.IO)
+
+    suspend fun getShoppingList(): List<IngredientItem> {
+        return shoppingList.toList()
+    }
+
+    suspend fun removeIngredient(ingredient: IngredientItem) {
+        shoppingList.remove(ingredient)
+    }
+
+    suspend fun clearShoppingList() {
+        shoppingList.clear()
+    }
 } 

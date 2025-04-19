@@ -19,17 +19,28 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import androidx.lifecycle.ViewModelProvider
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import com.thenewkenya.ingrediet.data.network.supabase
+import io.github.jan.supabase.auth.auth
 
 class RecipeDetailViewModel(
-    private val recipeRepository: RecipeRepository,
-    private val shoppingListRepository: ShoppingListRepository,
     private val context: Context
 ) : ViewModel() {
+    private val recipeRepository = RecipeRepository(context)
+    private val shoppingListRepository = ShoppingListRepository(context)
+    
     private val _uiState = MutableStateFlow<RecipeDetailUiState>(RecipeDetailUiState.Loading)
     val uiState: StateFlow<RecipeDetailUiState> = _uiState.asStateFlow()
 
     private val _recipe = MutableStateFlow<DetailedRecipe?>(null)
     val recipe: StateFlow<DetailedRecipe?> = _recipe.asStateFlow()
+
+    private val _servings = MutableStateFlow(1)
+    val servings: StateFlow<Int> = _servings.asStateFlow()
+
+    private val _selectedIngredients = MutableStateFlow<Set<String>>(emptySet())
+    val selectedIngredients: StateFlow<Set<String>> = _selectedIngredients.asStateFlow()
 
     private val _isAddingToShoppingList = MutableStateFlow(false)
     val isAddingToShoppingList: StateFlow<Boolean> = _isAddingToShoppingList.asStateFlow()
@@ -40,6 +51,9 @@ class RecipeDetailViewModel(
     // Add a state for authentication errors
     private val _authError = MutableStateFlow<String?>(null)
     val authError: StateFlow<String?> = _authError.asStateFlow()
+
+    private val _snackbarMessage = MutableSharedFlow<String>()
+    val snackbarMessage: SharedFlow<String> = _snackbarMessage
 
     fun loadRecipe(recipeId: String) {
         viewModelScope.launch {
@@ -363,6 +377,192 @@ class RecipeDetailViewModel(
             
             val shareIntent = android.content.Intent.createChooser(intent, null)
             context.startActivity(shareIntent)
+        }
+    }
+
+    fun addIngredientToShoppingList(ingredient: IngredientItem) {
+        viewModelScope.launch {
+            try {
+                // Clear any previous auth errors
+                _authError.value = null
+                
+                // Get current user or throw
+                val userId = supabase.auth.currentUserOrNull()?.id
+                    ?: throw Exception("User not authenticated")
+                
+                // Create shopping item
+                val shoppingItem = ShoppingItem(
+                    id = UUID.randomUUID().toString(),
+                    name = "${ingredient.name} (${ingredient.quantity} ${ingredient.unit})",
+                    category = mapIngredientToCategory(ingredient.name),
+                    isChecked = false
+                )
+                
+                // Add to shopping list
+                shoppingListRepository.addShoppingItem(shoppingItem)
+                    .collect { result ->
+                        result.fold(
+                            onSuccess = {
+                                _snackbarMessage.emit("Added ${ingredient.name} to shopping list")
+                            },
+                            onFailure = { error ->
+                                if (error.message?.contains("not authenticated", ignoreCase = true) == true) {
+                                    _authError.value = "Please log in to add items to your shopping list"
+                                } else {
+                                    _snackbarMessage.emit("Failed to add ingredient to shopping list")
+                                }
+                            }
+                        )
+                    }
+            } catch (e: Exception) {
+                // Check if it's an authentication error
+                if (e.message?.contains("not authenticated", ignoreCase = true) == true) {
+                    _authError.value = "Please log in to add items to your shopping list"
+                } else {
+                    _snackbarMessage.emit("Failed to add ingredient to shopping list: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun addAllIngredientsToShoppingList() {
+        viewModelScope.launch {
+            try {
+                // Clear any previous auth errors
+                _authError.value = null
+                
+                // Get current user or throw
+                val userId = supabase.auth.currentUserOrNull()?.id
+                    ?: throw Exception("User not authenticated")
+                
+                recipe.value?.ingredients?.let { ingredients ->
+                    var successCount = 0
+                    var failureCount = 0
+                    
+                    // Add each ingredient
+                    ingredients.forEach { ingredient ->
+                        val shoppingItem = ShoppingItem(
+                            id = UUID.randomUUID().toString(),
+                            name = "${ingredient.name} (${ingredient.quantity} ${ingredient.unit})",
+                            category = mapIngredientToCategory(ingredient.name),
+                            isChecked = false
+                        )
+                        
+                        try {
+                            shoppingListRepository.addShoppingItem(shoppingItem)
+                                .collect { result ->
+                                    result.fold(
+                                        onSuccess = { successCount++ },
+                                        onFailure = { failureCount++ }
+                                    )
+                                }
+                        } catch (e: Exception) {
+                            failureCount++
+                        }
+                    }
+                    
+                    // Show appropriate message based on results
+                    when {
+                        successCount == ingredients.size -> 
+                            _snackbarMessage.emit("Added all ingredients to shopping list")
+                        successCount > 0 -> 
+                            _snackbarMessage.emit("Added $successCount of ${ingredients.size} ingredients to shopping list")
+                        else -> 
+                            _snackbarMessage.emit("Failed to add ingredients to shopping list")
+                    }
+                }
+            } catch (e: Exception) {
+                // Check if it's an authentication error
+                if (e.message?.contains("not authenticated", ignoreCase = true) == true) {
+                    _authError.value = "Please log in to add items to your shopping list"
+                } else {
+                    _snackbarMessage.emit("Failed to add ingredients to shopping list: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun updateServings(newServings: Int) {
+        if (newServings > 0) {
+            _servings.value = newServings
+        }
+    }
+
+    fun toggleIngredientSelection(ingredientId: String) {
+        val currentSelection = _selectedIngredients.value
+        _selectedIngredients.value = if (currentSelection.contains(ingredientId)) {
+            currentSelection - ingredientId
+        } else {
+            currentSelection + ingredientId
+        }
+    }
+
+    fun addSelectedIngredientsToShoppingList() {
+        viewModelScope.launch {
+            try {
+                // Clear any previous auth errors
+                _authError.value = null
+                
+                // Get current user or throw
+                val userId = supabase.auth.currentUserOrNull()?.id
+                    ?: throw Exception("User not authenticated")
+                
+                val selectedIds = _selectedIngredients.value
+                val currentRecipe = recipe.value ?: return@launch
+                val currentServings = servings.value
+                val originalServings = currentRecipe.servings
+                val multiplier = currentServings.toFloat() / originalServings.toFloat()
+
+                var successCount = 0
+                
+                // Add each selected ingredient
+                currentRecipe.ingredients
+                    .filter { it.id in selectedIds }
+                    .forEach { ingredient ->
+                        val adjustedQuantity = ingredient.quantity * multiplier
+                        val shoppingItem = ShoppingItem(
+                            id = UUID.randomUUID().toString(),
+                            name = "${ingredient.name} (${adjustedQuantity} ${ingredient.unit})",
+                            category = mapIngredientToCategory(ingredient.name),
+                            isChecked = false
+                        )
+                        
+                        try {
+                            shoppingListRepository.addShoppingItem(shoppingItem)
+                                .collect { result ->
+                                    result.fold(
+                                        onSuccess = { successCount++ },
+                                        onFailure = { /* count not incremented */ }
+                                    )
+                                }
+                        } catch (e: Exception) {
+                            // Log error but continue with other ingredients
+                            Log.e("RecipeDetailViewModel", "Error adding item: ${e.message}")
+                        }
+                    }
+                
+                // Show appropriate message based on results
+                val totalSelected = selectedIds.size
+                when {
+                    successCount == totalSelected -> 
+                        _snackbarMessage.emit("Added selected ingredients to shopping list")
+                    successCount > 0 -> 
+                        _snackbarMessage.emit("Added $successCount of $totalSelected ingredients to shopping list")
+                    else -> 
+                        _snackbarMessage.emit("Failed to add ingredients to shopping list")
+                }
+                
+                // Clear selection after adding
+                _selectedIngredients.value = emptySet()
+                
+            } catch (e: Exception) {
+                // Check if it's an authentication error
+                if (e.message?.contains("not authenticated", ignoreCase = true) == true) {
+                    _authError.value = "Please log in to add items to your shopping list"
+                } else {
+                    _snackbarMessage.emit("Failed to add ingredients to shopping list: ${e.message}")
+                }
+            }
         }
     }
 }

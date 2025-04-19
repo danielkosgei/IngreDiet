@@ -5,7 +5,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-
     kotlin("plugin.serialization") version "$kotlin_version"
 }
 
@@ -69,6 +68,9 @@ android {
     lint {
         baseline = file("lint-baseline.xml")
         abortOnError = false // Temporarily disable build failing on lint errors
+        checkDependencies = true
+        checkReleaseBuilds = false
+        warningsAsErrors = false
     }
 }
 
@@ -111,6 +113,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation("androidx.compose.material3:material3:1.2.1")
     implementation("androidx.compose.foundation:foundation:1.7.6")
     implementation(libs.googleid)
     testImplementation(libs.junit)
@@ -121,4 +124,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
+    // Kotlin Coroutines and Flow
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 }

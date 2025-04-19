@@ -13,7 +13,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-class IngreDietApplication: Application() {
+class IngreDietApplication : Application() {
     lateinit var sessionManager: SessionManager
         private set
 

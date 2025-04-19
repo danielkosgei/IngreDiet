@@ -47,7 +47,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.TextButton
 
 // CompositionLocal for RecipeDetailViewModel
-val LocalRecipeDetailViewModel = staticCompositionLocalOf<RecipeDetailViewModel> {
+val LocalRecipeDetailViewModel = compositionLocalOf<RecipeDetailViewModel> {
     error("No RecipeDetailViewModel provided")
 }
 
@@ -61,6 +61,16 @@ fun RecipeDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     val recipe by viewModel.recipe.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Collect snackbar messages
+    LaunchedEffect(viewModel) {
+        viewModel.snackbarMessage.collect { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
     
     // Observe auth error
     val authError by viewModel.authError.collectAsState()
@@ -293,44 +303,12 @@ private fun RecipeContent(
                 1 -> {
                     // Ingredients tab
                     item {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            shape = RoundedCornerShape(24.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 1.dp
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Ingredients",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Surface(
-                                        shape = RoundedCornerShape(16.dp),
-                                        color = MaterialTheme.colorScheme.primaryContainer
-                                    ) {
-                                        Text(
-                                            text = "${recipe.servings} servings",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                recipe.ingredients.forEach { ingredient ->
-                                    IngredientItem(ingredient)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                }
-                            }
-                        }
+                        val viewModel = LocalRecipeDetailViewModel.current
+                        IngredientsSection(
+                            ingredients = recipe.ingredients,
+                            servings = recipe.servings,
+                            onAddAllToShoppingList = { viewModel.addAllIngredientsToShoppingList() }
+                        )
                         Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
@@ -752,52 +730,206 @@ private fun NutritionCard(
 }
 
 @Composable
-private fun IngredientItem(ingredient: IngredientItem) {
-    Card(
+private fun IngredientsSection(
+    ingredients: List<IngredientItem>,
+    servings: Int,
+    onAddAllToShoppingList: () -> Unit
+) {
+    val viewModel = LocalRecipeDetailViewModel.current
+    val currentServings by viewModel.servings.collectAsState()
+    val selectedIngredients by viewModel.selectedIngredients.collectAsState()
+    
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        ),
-        shape = RoundedCornerShape(12.dp)
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(
+                start = 20.dp,
+                end = 20.dp,
+                top = 24.dp,
+                bottom = 16.dp
+            )
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Ingredients",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Serving size adjustment
+                    Surface(
+                        modifier = Modifier
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                                shape = RoundedCornerShape(12.dp)
+                            ),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surface
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            IconButton(
+                                onClick = { viewModel.updateServings(currentServings - 1) },
+                                enabled = currentServings > 1,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Remove,
+                                    contentDescription = "Decrease servings",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Text(
+                                text = "$currentServings",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.widthIn(min = 32.dp),
+                                textAlign = TextAlign.Center
+                            )
+                            IconButton(
+                                onClick = { viewModel.updateServings(currentServings + 1) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = "Increase servings",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Add selected ingredients button
+                    if (selectedIngredients.isNotEmpty()) {
+                        FilledIconButton(
+                            onClick = { viewModel.addSelectedIngredientsToShoppingList() },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.AddShoppingCart,
+                                contentDescription = "Add selected ingredients to shopping list",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    
+                    // Add all ingredients button
+                    FilledIconButton(
+                        onClick = onAddAllToShoppingList,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.PlaylistAddCheck,
+                            contentDescription = "Add all ingredients to shopping list",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            ingredients.forEach { ingredient ->
+                val isSelected = ingredient.id in selectedIngredients
+                val originalQuantity = ingredient.quantity
+                val adjustedQuantity = originalQuantity * (currentServings.toFloat() / servings.toFloat())
+                
+                IngredientItem(
+                    ingredient = ingredient.copy(quantity = adjustedQuantity),
+                    isSelected = isSelected,
+                    onToggleSelection = { viewModel.toggleIngredientSelection(ingredient.id) },
+                    onAddToShoppingList = { viewModel.addIngredientToShoppingList(ingredient.copy(quantity = adjustedQuantity)) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun IngredientItem(
+    ingredient: IngredientItem,
+    isSelected: Boolean = false,
+    onToggleSelection: () -> Unit = {},
+    onAddToShoppingList: () -> Unit = {}
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min),
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        }
     ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .padding(
+                    start = 8.dp,
+                    end = 12.dp,
+                    top = 12.dp,
+                    bottom = 12.dp
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(Primary.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.ShoppingCart,
-                    contentDescription = null,
-                    tint = Primary,
-                    modifier = Modifier.size(16.dp)
+            // Selection checkbox
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = { onToggleSelection() },
+                colors = CheckboxDefaults.colors(
+                    checkedColor = MaterialTheme.colorScheme.primary,
+                    uncheckedColor = MaterialTheme.colorScheme.outline
                 )
-            }
+            )
             
-            Spacer(modifier = Modifier.width(12.dp))
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = ingredient.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-            
+            // Ingredient name
             Text(
-                text = "${ingredient.quantity} ${ingredient.unit}",
+                text = ingredient.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            
+            // Quantity and unit
+            Text(
+                text = "${String.format("%.1f", ingredient.quantity).replace(".0", "")} ${ingredient.unit}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            
+            // Add to shopping list button
+            FilledIconButton(
+                onClick = onAddToShoppingList,
+                modifier = Modifier.size(36.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    contentColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AddShoppingCart,
+                    contentDescription = "Add ${ingredient.name} to shopping list",
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }
