@@ -1,28 +1,98 @@
 package com.thenewkenya.ingrediet.feature.recipe
 
-import android.util.Log
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.AddShoppingCart
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.FitnessCenter
+import androidx.compose.material.icons.outlined.LocalFireDepartment
+import androidx.compose.material.icons.outlined.PlaylistAddCheck
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.Water
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -32,6 +102,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -39,25 +110,6 @@ import coil3.request.crossfade
 import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.ui.theme.Primary
-import kotlin.math.max
-import kotlin.math.min
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TabRowDefaults.SecondaryIndicator
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
-import androidx.compose.material3.TextButton
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.rotate
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.shrinkHorizontally
-import com.thenewkenya.ingrediet.R
 import kotlinx.coroutines.delay
 
 // CompositionLocal for RecipeDetailViewModel
@@ -949,6 +1001,9 @@ private fun IngredientItem(
     onLongPress: () -> Unit = {},
     onAddToShoppingList: () -> Unit = {}
 ) {
+    // Add state for showing ingredient details dialog
+    var showIngredientDetails by remember { mutableStateOf(false) }
+    
     // Add animating color transition
     val backgroundColor by animateColorAsState(
         targetValue = if (isSelected) {
@@ -966,7 +1021,8 @@ private fun IngredientItem(
             .height(IntrinsicSize.Min)
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onLongPress = { onLongPress() }
+                    onLongPress = { onLongPress() },
+                    onTap = { if (!showCheckbox) showIngredientDetails = true }
                 )
             },
         shape = RoundedCornerShape(12.dp),
@@ -1053,6 +1109,312 @@ private fun IngredientItem(
             }
         }
     }
+    
+    // Show ingredient details dialog when clicked
+    if (showIngredientDetails) {
+        IngredientDetailsDialog(
+            ingredient = ingredient,
+            onDismiss = { showIngredientDetails = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IngredientDetailsDialog(
+    ingredient: IngredientItem,
+    onDismiss: () -> Unit
+) {
+    val scrollState = rememberScrollState()
+    
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 500.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+            ) {
+                // Ingredient image
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(ingredient.imageUrl ?: "")
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = ingredient.name,
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+                
+                // Gradient overlay for better text visibility
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.1f),
+                                    Color.Black.copy(alpha = 0.6f)
+                                ),
+                                startY = 0f,
+                                endY = 200f * LocalDensity.current.density
+                            )
+                        )
+                )
+                
+                // Close button
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(32.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                            shape = CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                
+                // Ingredient name at the bottom
+                Text(
+                    text = ingredient.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(16.dp)
+                )
+            }
+            
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Nutritional info
+                InfoSection(
+                    title = "Nutritional Information",
+                    content = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            NutrientItem(
+                                name = "Calories",
+                                value = "${(ingredient.quantity * 24).toInt()} kcal",
+                                icon = Icons.Outlined.LocalFireDepartment
+                            )
+                            NutrientItem(
+                                name = "Protein",
+                                value = "${(ingredient.quantity * 1.2).toInt()}g",
+                                icon = Icons.Outlined.FitnessCenter
+                            )
+                            NutrientItem(
+                                name = "Fat",
+                                value = "${(ingredient.quantity * 0.8).toInt()}g",
+                                icon = Icons.Outlined.Water
+                            )
+                        }
+                    }
+                )
+                
+                // Benefits
+                InfoSection(
+                    title = "Health Benefits",
+                    content = {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            BenefitItem(
+                                text = generateBenefit(ingredient.name, 1)
+                            )
+                            BenefitItem(
+                                text = generateBenefit(ingredient.name, 2)
+                            )
+                            BenefitItem(
+                                text = generateBenefit(ingredient.name, 3)
+                            )
+                        }
+                    }
+                )
+                
+                // Description
+                InfoSection(
+                    title = "About ${ingredient.name}",
+                    content = {
+                        Text(
+                            text = generateDescription(ingredient.name),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                )
+                
+                // Store and use
+                InfoSection(
+                    title = "Storage & Usage",
+                    content = {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            UsageItem(
+                                title = "Storage",
+                                description = generateStorage(ingredient.name)
+                            )
+                            UsageItem(
+                                title = "Cooking Tips",
+                                description = generateCookingTip(ingredient.name)
+                            )
+                            UsageItem(
+                                title = "Pairs Well With",
+                                description = generatePairings(ingredient.name)
+                            )
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoSection(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        HorizontalDivider(
+            modifier = Modifier.padding(bottom = 8.dp),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+        content()
+    }
+}
+
+@Composable
+private fun NutrientItem(
+    name: String,
+    value: String,
+    icon: ImageVector
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Primary,
+            modifier = Modifier.size(24.dp)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun BenefitItem(
+    text: String
+) {
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Check,
+            contentDescription = null,
+            tint = Primary,
+            modifier = Modifier.size(18.dp)
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun UsageItem(
+    title: String,
+    description: String
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+// Helper functions to generate dummy content
+private fun generateDescription(ingredientName: String): String {
+    return "The $ingredientName is a versatile and nutritious ingredient commonly used in various cuisines around the world. It's known for its unique flavor profile and health benefits. Rich in essential vitamins and minerals, $ingredientName can be prepared in numerous ways to enhance your meals."
+}
+
+private fun generateBenefit(ingredientName: String, index: Int): String {
+    return when (index) {
+        1 -> "Contains essential vitamins and minerals that support overall health."
+        2 -> "Rich in antioxidants that help fight inflammation and boost immunity."
+        3 -> "Provides dietary fiber that supports digestive health and helps maintain healthy cholesterol levels."
+        else -> "Good source of nutrients that contribute to a balanced diet."
+    }
+}
+
+private fun generateStorage(ingredientName: String): String {
+    return "Store $ingredientName in a cool, dry place or refrigerate to maintain freshness. Always check for signs of spoilage before use."
+}
+
+private fun generateCookingTip(ingredientName: String): String {
+    return "For best results, $ingredientName should be prepared just before cooking to preserve its flavor and nutritional value."
+}
+
+private fun generatePairings(ingredientName: String): String {
+    return "Garlic, onions, olive oil, lemon juice, black pepper, and fresh herbs."
 }
 
 @Composable
