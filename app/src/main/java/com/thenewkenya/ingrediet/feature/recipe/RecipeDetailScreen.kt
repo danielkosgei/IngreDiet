@@ -56,6 +56,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import com.thenewkenya.ingrediet.R
+import kotlinx.coroutines.delay
 
 // CompositionLocal for RecipeDetailViewModel
 val LocalRecipeDetailViewModel = compositionLocalOf<RecipeDetailViewModel> {
@@ -750,6 +751,18 @@ private fun IngredientsSection(
     val currentServings by viewModel.servings.collectAsState()
     val selectedIngredients by viewModel.selectedIngredients.collectAsState()
     
+    // Shared state for showing checkboxes across all ingredients
+    var showCheckboxes by remember { mutableStateOf(false) }
+    
+    // Hide checkboxes when no ingredients are selected
+    LaunchedEffect(selectedIngredients) {
+        if (selectedIngredients.isEmpty() && showCheckboxes) {
+            // Add a small delay to ensure the animation completes smoothly
+            delay(300)
+            showCheckboxes = false
+        }
+    }
+    
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -914,7 +927,9 @@ private fun IngredientsSection(
                 IngredientItem(
                     ingredient = ingredient.copy(quantity = adjustedQuantity),
                     isSelected = isSelected,
+                    showCheckbox = showCheckboxes,
                     onToggleSelection = { viewModel.toggleIngredientSelection(ingredient.id) },
+                    onLongPress = { showCheckboxes = !showCheckboxes },
                     onAddToShoppingList = { viewModel.addIngredientToShoppingList(ingredient.copy(quantity = adjustedQuantity)) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -927,20 +942,18 @@ private fun IngredientsSection(
 private fun IngredientItem(
     ingredient: IngredientItem,
     isSelected: Boolean = false,
+    showCheckbox: Boolean = false,
     onToggleSelection: () -> Unit = {},
+    onLongPress: () -> Unit = {},
     onAddToShoppingList: () -> Unit = {}
 ) {
-    var showCheckbox by remember { mutableStateOf(false) }
-    
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onLongPress = {
-                        showCheckbox = !showCheckbox
-                    }
+                    onLongPress = { onLongPress() }
                 )
             },
         shape = RoundedCornerShape(12.dp),
@@ -976,7 +989,7 @@ private fun IngredientItem(
                 contentScale = ContentScale.Crop
             )
             
-            // Selection checkbox (shown only on long press)
+            // Selection checkbox (shown when showCheckbox is true)
             AnimatedVisibility(visible = showCheckbox) {
                 Checkbox(
                     checked = isSelected,
