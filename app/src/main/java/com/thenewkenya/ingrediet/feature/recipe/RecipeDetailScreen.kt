@@ -45,6 +45,17 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TabRowDefaults.SecondaryIndicator
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.rotate
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
+import com.thenewkenya.ingrediet.R
 
 // CompositionLocal for RecipeDetailViewModel
 val LocalRecipeDetailViewModel = compositionLocalOf<RecipeDetailViewModel> {
@@ -755,6 +766,7 @@ private fun IngredientsSection(
                 bottom = 16.dp
             )
         ) {
+            // Title row with Ingredients heading
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -765,84 +777,135 @@ private fun IngredientsSection(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                
+                // Add all ingredients button
+                FilledIconButton(
+                    onClick = onAddAllToShoppingList,
+                    modifier = Modifier.size(40.dp)
                 ) {
-                    // Serving size adjustment
-                    Surface(
-                        modifier = Modifier
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                                shape = RoundedCornerShape(12.dp)
-                            ),
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surface
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            IconButton(
-                                onClick = { viewModel.updateServings(currentServings - 1) },
-                                enabled = currentServings > 1,
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Remove,
-                                    contentDescription = "Decrease servings",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Text(
-                                text = "$currentServings",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.widthIn(min = 32.dp),
-                                textAlign = TextAlign.Center
-                            )
-                            IconButton(
-                                onClick = { viewModel.updateServings(currentServings + 1) },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Add,
-                                    contentDescription = "Increase servings",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.Outlined.PlaylistAddCheck,
+                        contentDescription = "Add all ingredients to shopping list",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            
+            // Add serving size adjuster with clear label
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Adjust Servings",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     
-                    // Add selected ingredients button
-                    if (selectedIngredients.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Decrease servings button
                         FilledIconButton(
-                            onClick = { viewModel.addSelectedIngredientsToShoppingList() },
-                            modifier = Modifier.size(40.dp)
+                            onClick = { viewModel.updateServings(currentServings - 1) },
+                            enabled = currentServings > 1,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
                         ) {
                             Icon(
-                                imageVector = Icons.Outlined.AddShoppingCart,
-                                contentDescription = "Add selected ingredients to shopping list",
-                                modifier = Modifier.size(20.dp)
+                                imageVector = Icons.Filled.Remove,
+                                contentDescription = "Decrease servings",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        
+                        // Current servings display
+                        Surface(
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp)
+                                .widthIn(min = 80.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "$currentServings",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "servings",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        
+                        // Increase servings button
+                        FilledIconButton(
+                            onClick = { viewModel.updateServings(currentServings + 1) },
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = "Increase servings",
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                     
-                    // Add all ingredients button
-                    FilledIconButton(
-                        onClick = onAddAllToShoppingList,
-                        modifier = Modifier.size(40.dp)
+                    // Recipe original servings info
+                    Text(
+                        text = "(Recipe originally for $servings ${if (servings == 1) "serving" else "servings"})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+            
+            // Add selected ingredients button if any are selected
+            if (selectedIngredients.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = { viewModel.addSelectedIngredientsToShoppingList() },
+                        modifier = Modifier.padding(vertical = 4.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.PlaylistAddCheck,
-                            contentDescription = "Add all ingredients to shopping list",
-                            modifier = Modifier.size(20.dp)
+                            imageVector = Icons.Outlined.AddShoppingCart,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add Selected (${selectedIngredients.size})")
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Ingredients list
             ingredients.forEach { ingredient ->
                 val isSelected = ingredient.id in selectedIngredients
                 val originalQuantity = ingredient.quantity
@@ -867,10 +930,19 @@ private fun IngredientItem(
     onToggleSelection: () -> Unit = {},
     onAddToShoppingList: () -> Unit = {}
 ) {
+    var showCheckbox by remember { mutableStateOf(false) }
+    
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(IntrinsicSize.Min),
+            .height(IntrinsicSize.Min)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onLongPress = {
+                        showCheckbox = !showCheckbox
+                    }
+                )
+            },
         shape = RoundedCornerShape(12.dp),
         color = if (isSelected) {
             MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
@@ -890,15 +962,31 @@ private fun IngredientItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Selection checkbox
-            Checkbox(
-                checked = isSelected,
-                onCheckedChange = { onToggleSelection() },
-                colors = CheckboxDefaults.colors(
-                    checkedColor = MaterialTheme.colorScheme.primary,
-                    uncheckedColor = MaterialTheme.colorScheme.outline
-                )
+            // Ingredient image
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(ingredient.imageUrl ?: "")
+                    .crossfade(true)
+                    .build(),
+                contentDescription = ingredient.name,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentScale = ContentScale.Crop
             )
+            
+            // Selection checkbox (shown only on long press)
+            AnimatedVisibility(visible = showCheckbox) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelection() },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = MaterialTheme.colorScheme.primary,
+                        uncheckedColor = MaterialTheme.colorScheme.outline
+                    )
+                )
+            }
             
             // Ingredient name
             Text(
