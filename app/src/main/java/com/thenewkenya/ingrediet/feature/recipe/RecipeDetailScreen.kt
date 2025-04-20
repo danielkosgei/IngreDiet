@@ -51,6 +51,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.rotate
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandHorizontally
@@ -947,6 +949,17 @@ private fun IngredientItem(
     onLongPress: () -> Unit = {},
     onAddToShoppingList: () -> Unit = {}
 ) {
+    // Add animating color transition
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        },
+        animationSpec = tween(durationMillis = 300),
+        label = "backgroundColor"
+    )
+    
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -957,11 +970,7 @@ private fun IngredientItem(
                 )
             },
         shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        }
+        color = backgroundColor
     ) {
         Row(
             modifier = Modifier
@@ -973,8 +982,31 @@ private fun IngredientItem(
                     bottom = 12.dp
                 ),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Selection checkbox (shown when showCheckbox is true)
+            AnimatedVisibility(
+                visible = showCheckbox,
+                enter = fadeIn(animationSpec = tween(300)) + expandHorizontally(
+                    animationSpec = tween(300),
+                    expandFrom = Alignment.Start
+                ),
+                exit = fadeOut(animationSpec = tween(200)) + shrinkHorizontally(
+                    animationSpec = tween(200),
+                    shrinkTowards = Alignment.Start
+                )
+            ) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelection() },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = MaterialTheme.colorScheme.primary,
+                        uncheckedColor = MaterialTheme.colorScheme.outline
+                    ),
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+            }
+            
             // Ingredient image
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
@@ -988,18 +1020,6 @@ private fun IngredientItem(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentScale = ContentScale.Crop
             )
-            
-            // Selection checkbox (shown when showCheckbox is true)
-            AnimatedVisibility(visible = showCheckbox) {
-                Checkbox(
-                    checked = isSelected,
-                    onCheckedChange = { onToggleSelection() },
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = MaterialTheme.colorScheme.primary,
-                        uncheckedColor = MaterialTheme.colorScheme.outline
-                    )
-                )
-            }
             
             // Ingredient name
             Text(
