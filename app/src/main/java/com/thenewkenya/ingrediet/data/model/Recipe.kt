@@ -211,41 +211,9 @@ data class RecipeDto(
     val tags: List<String>? = null
 ) {
     fun toDetailedRecipe(): DetailedRecipe {
-        // Parse ingredients based on the actual JSON type
-        val parsedIngredients = when (ingredients) {
-            is JsonArray -> {
-                // Handle array of strings
-                ingredients.mapNotNull { element ->
-                    element.jsonPrimitive.contentOrNull?.let { ingredientStr ->
-                        val parts = ingredientStr.split(" ", limit = 2)
-                        val quantity = parts.firstOrNull()?.toFloatOrNull() ?: 1f
-                        val unit = if (parts.size > 1) parts[1] else ""
-                        IngredientItem(
-                            id = UUID.randomUUID().toString(),
-                            name = ingredientStr, // Use the full string as name for now
-                            quantity = quantity,
-                            unit = unit
-                        )
-                    }
-                }
-            }
-            is JsonObject -> {
-                // Handle map/object structure
-                ingredients.map { (name, quantityStrElement) ->
-                    val quantityStr = quantityStrElement.jsonPrimitive.contentOrNull ?: ""
-                    val parts = quantityStr.split(" ", limit = 2)
-                    val quantity = parts.firstOrNull()?.toFloatOrNull() ?: 1f
-                    val unit = if (parts.size > 1) parts[1] else ""
-                    IngredientItem(
-                        id = UUID.randomUUID().toString(),
-                        name = name,
-                        quantity = quantity,
-                        unit = unit
-                    )
-                }
-            }
-            else -> emptyList() // Handle null or other unexpected types
-        }
+        // Now that we fetch ingredients separately, we use an empty list here
+        // The RecipeRepository will populate this with data from the recipe_ingredients table
+        val parsedIngredients = emptyList<IngredientItem>()
 
         // Parse instructions
         val parsedInstructions = (instructions ?: "")

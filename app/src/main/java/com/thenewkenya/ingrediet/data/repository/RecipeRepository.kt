@@ -8,6 +8,7 @@ import com.thenewkenya.ingrediet.data.model.NutritionFacts
 import com.thenewkenya.ingrediet.data.network.DatabaseErrorHandler
 import com.thenewkenya.ingrediet.data.network.supabase
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -22,6 +23,9 @@ import com.thenewkenya.ingrediet.data.model.RecipeDto
 import com.thenewkenya.ingrediet.data.mealplan.MealPlanGenerator
 import com.thenewkenya.ingrediet.data.network.SessionManager
 import com.thenewkenya.ingrediet.data.model.UserFavoriteDto
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.Serializable
 
 // Add this extension property for temporary compilation fix
 private val io.github.jan.supabase.SupabaseClient.auth get() = object {
@@ -32,6 +36,34 @@ private val io.github.jan.supabase.SupabaseClient.auth get() = object {
 private val Any?.user get() = object { 
     val id: String? = null 
 }
+
+@Serializable
+data class RecipeIngredientResponse(
+    val id: String = "",
+    val recipe_id: String = "",
+    val quantity: Float = 0f,
+    val unit: String = "",
+    val ingredient_id: String = "",
+    val ingredients: IngredientResponse? = null
+)
+
+@Serializable
+data class IngredientResponse(
+    val id: String = "",
+    val name: String = "",
+    val image_url: String? = null,
+    val calories: Int? = null
+)
+
+@Serializable
+data class NutritionResponse(
+    val calories: Int? = 0,
+    val protein: Float? = 0f,
+    val carbs: Float? = 0f,
+    val fat: Float? = 0f,
+    val fiber: Float? = null,
+    val sugar: Float? = null
+)
 
 class RecipeRepository(context: Context) {
 
@@ -85,6 +117,84 @@ class RecipeRepository(context: Context) {
     }
 
     /**
+     * Helper method to populate ingredients for a list of recipes
+     */
+    private suspend fun populateIngredientsForRecipes(recipes: List<DetailedRecipe>): List<DetailedRecipe> {
+        if (recipes.isEmpty()) {
+            return recipes
+        }
+        
+        try {
+            // Extract all recipe IDs
+            val recipeIds = recipes.map { it.id }
+            
+            // Fetch ingredients for all these recipes at once
+            val ingredientsResult = try {
+                supabase.from("recipe_ingredients")
+                    .select(Columns.list(
+                        "id", 
+                        "recipe_id", 
+                        "quantity", 
+                        "unit", 
+                        "ingredient_id", 
+                        "ingredients(id, name, image_url, calories)"
+                    )) {
+                        filter {
+                            if (recipeIds.size == 1) {
+                                eq("recipe_id", recipeIds.first())
+                            } else {
+                                or {
+                                    recipeIds.forEach { recipeId ->
+                                        eq("recipe_id", recipeId)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .decodeList<RecipeIngredientResponse>()
+            } catch (e: Exception) {
+                Log.e("RecipeRepository", "Error getting ingredients for recipes: ${e.message}", e)
+                emptyList<RecipeIngredientResponse>()
+            }
+            
+            // Group ingredients by recipe_id
+            val ingredientsByRecipeId = ingredientsResult.groupBy { it.recipe_id }
+            
+            // Create map of recipe ID to ingredients list
+            val ingredientsMap = ingredientsByRecipeId.mapValues { (_, items) ->
+                items.mapNotNull { item ->
+                    try {
+                        val ingredientData = item.ingredients
+                        if (ingredientData != null) {
+                            IngredientItem(
+                                id = ingredientData.id,
+                                name = ingredientData.name,
+                                quantity = item.quantity,
+                                unit = item.unit,
+                                calories = ingredientData.calories,
+                                imageUrl = ingredientData.image_url
+                            )
+                        } else {
+                            null
+                        }
+                    } catch (e: Exception) {
+                        Log.e("RecipeRepository", "Error parsing ingredient: ${e.message}", e)
+                        null
+                    }
+                }
+            }
+            
+            // Update each recipe with its ingredients
+            return recipes.map { recipe ->
+                recipe.copy(ingredients = ingredientsMap[recipe.id] ?: emptyList())
+            }
+        } catch (e: Exception) {
+            Log.e("RecipeRepository", "Error populating ingredients: ${e.message}", e)
+            return recipes // Return original recipes if there's an error
+        }
+    }
+
+    /**
      * Search for recipes directly from the Supabase database
      * This function specifically searches the recipes table
      * @param query The search query to match against recipe name and description
@@ -133,7 +243,8 @@ class RecipeRepository(context: Context) {
                 }
             }
             
-            result
+            // Populate ingredients for all recipes
+            populateIngredientsForRecipes(result)
         }
         
     /**
@@ -171,9 +282,13 @@ class RecipeRepository(context: Context) {
             // If no recipes found, return empty list
             if (result.isEmpty()) {
                 Log.d("RecipeRepository", "No random recipes found, returning empty list")
+                emit(Result.success(emptyList()))
+                return@flow
             }
             
-            emit(Result.success(result))
+            // Populate ingredients for all recipes
+            val recipesWithIngredients = populateIngredientsForRecipes(result)
+            emit(Result.success(recipesWithIngredients))
         } catch (e: Exception) {
             Log.e("RecipeRepository", "Error getting random recipes", e)
             emit(Result.failure(e))
@@ -189,7 +304,8 @@ class RecipeRepository(context: Context) {
         try {
             Log.d("RecipeRepository", "Getting recipe details for ID: $recipeId")
             
-            val searchResult = try {
+            // Fetch basic recipe information
+            val recipeResult = try {
                 supabase.from("recipes")
                     .select() {
                         filter {
@@ -203,13 +319,87 @@ class RecipeRepository(context: Context) {
                 null
             }
             
-            if (searchResult == null) {
+            if (recipeResult == null) {
                 emit(Result.failure(NoSuchElementException("Recipe not found with ID: $recipeId")))
                 return@flow
             }
             
             try {
-                val detailedRecipe = searchResult.toDetailedRecipe()
+                // First create a basic DetailedRecipe with empty ingredients list
+                var detailedRecipe = recipeResult.toDetailedRecipe()
+                
+                // Fetch ingredients from recipe_ingredients table joining with ingredients table
+                val ingredientsResult = try {
+                    supabase.from("recipe_ingredients")
+                        .select(Columns.list(
+                            "id", 
+                            "quantity", 
+                            "unit", 
+                            "ingredient_id", 
+                            "ingredients(id, name, image_url, calories)"
+                        )) {
+                            filter {
+                                eq("recipe_id", recipeId)
+                            }
+                        }
+                        .decodeList<RecipeIngredientResponse>()
+                } catch (e: Exception) {
+                    Log.e("RecipeRepository", "Error getting recipe ingredients: ${e.message}", e)
+                    emptyList<RecipeIngredientResponse>()
+                }
+                
+                // Process ingredients into IngredientItem list
+                val ingredients = ingredientsResult.mapNotNull { item ->
+                    try {
+                        val ingredientData = item.ingredients
+                        if (ingredientData != null) {
+                            IngredientItem(
+                                id = ingredientData.id,
+                                name = ingredientData.name,
+                                quantity = item.quantity,
+                                unit = item.unit,
+                                calories = ingredientData.calories,
+                                imageUrl = ingredientData.image_url
+                            )
+                        } else {
+                            null
+                        }
+                    } catch (e: Exception) {
+                        Log.e("RecipeRepository", "Error parsing ingredient: ${e.message}", e)
+                        null
+                    }
+                }
+                
+                // Update the recipe with the fetched ingredients
+                detailedRecipe = detailedRecipe.copy(ingredients = ingredients)
+                
+                // Fetch nutrition information if available
+                try {
+                    val nutritionResult = supabase.from("recipe_nutrition")
+                        .select {
+                            filter {
+                                eq("recipe_id", recipeId)
+                            }
+                        }
+                        .decodeList<NutritionResponse>()
+                        .firstOrNull()
+                    
+                    if (nutritionResult != null) {
+                        val nutritionFacts = NutritionFacts(
+                            calories = nutritionResult.calories ?: 0,
+                            protein = nutritionResult.protein ?: 0f,
+                            carbs = nutritionResult.carbs ?: 0f,
+                            fat = nutritionResult.fat ?: 0f,
+                            fiber = nutritionResult.fiber,
+                            sugar = nutritionResult.sugar
+                        )
+                        detailedRecipe = detailedRecipe.copy(nutritionFacts = nutritionFacts)
+                    }
+                } catch (e: Exception) {
+                    Log.e("RecipeRepository", "Error getting recipe nutrition: ${e.message}", e)
+                    // Continue with default nutrition facts
+                }
+                
                 emit(Result.success(detailedRecipe))
             } catch (e: Exception) {
                 Log.e("RecipeRepository", "Error parsing recipe data from database", e)
@@ -274,7 +464,7 @@ class RecipeRepository(context: Context) {
             
             val searchResults = try {
                 supabase.from("recipes")
-                .select() {
+                .select {
                         filter {
                             eq("category", "Kenyan")
                 }
@@ -382,7 +572,9 @@ class RecipeRepository(context: Context) {
                 }
             }
             
-            result.take(limit)
+            // Populate ingredients for all recipes
+            val recipesWithIngredients = populateIngredientsForRecipes(result.take(limit))
+            recipesWithIngredients
         }
         
     /**
@@ -456,7 +648,7 @@ class RecipeRepository(context: Context) {
 
             // Check if the recipe is already favorited
             val existingFavorite = supabase.from("user_favorites")
-                .select() {
+                .select {
                     filter {
                         eq("user_id", userId)
                         eq("recipe_id", recipeId)
@@ -511,7 +703,7 @@ class RecipeRepository(context: Context) {
             }
 
             val existingFavorite = supabase.from("user_favorites")
-                .select() {
+                .select {
                     filter {
                         eq("user_id", userId)
                         eq("recipe_id", recipeId)
