@@ -144,6 +144,13 @@ fun RecipeDetailScreen(
     LaunchedEffect(recipeId) {
         viewModel.loadRecipe(recipeId)
     }
+    
+    // Initialize servings when recipe is loaded
+    LaunchedEffect(recipe) {
+        recipe?.let {
+            viewModel.updateServings(it.servings)
+        }
+    }
 
     CompositionLocalProvider(LocalRecipeDetailViewModel provides viewModel) {
         Scaffold(
@@ -845,109 +852,61 @@ private fun IngredientsSection(
                     fontWeight = FontWeight.Bold
                 )
                 
-                // Add all ingredients button
-                FilledIconButton(
-                    onClick = onAddAllToShoppingList,
-                    modifier = Modifier.size(40.dp)
+                // Servings adjuster in the top row with clear label
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.PlaylistAddCheck,
-                        contentDescription = "Add all ingredients to shopping list",
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-            
-            // Add serving size adjuster with clear label
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
+                    // Label to make it clear what's being adjusted
                     Text(
-                        text = "Adjust Servings",
-                        style = MaterialTheme.typography.labelLarge,
+                        text = "Servings:",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                    // Decrease servings button
+                    IconButton(
+                        onClick = { viewModel.updateServings(currentServings - 1) },
+                        enabled = currentServings > 1,
+                        modifier = Modifier.size(28.dp)
                     ) {
-                        // Decrease servings button
-                        FilledIconButton(
-                            onClick = { viewModel.updateServings(currentServings - 1) },
-                            enabled = currentServings > 1,
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Remove,
-                                contentDescription = "Decrease servings",
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        
-                        // Current servings display
-                        Surface(
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .widthIn(min = 80.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = "$currentServings",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "servings",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        
-                        // Increase servings button
-                        FilledIconButton(
-                            onClick = { viewModel.updateServings(currentServings + 1) },
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Add,
-                                contentDescription = "Increase servings",
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Filled.Remove,
+                            contentDescription = "Decrease servings",
+                            modifier = Modifier.size(16.dp),
+                            tint = if (currentServings > 1) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
                     }
                     
-                    // Recipe original servings info
+                    // Current servings display
                     Text(
-                        text = "(Recipe originally for $servings ${if (servings == 1) "serving" else "servings"})",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp)
+                        text = "$currentServings",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.widthIn(min = 24.dp),
+                        textAlign = TextAlign.Center
                     )
+                    
+                    // Increase servings button
+                    IconButton(
+                        onClick = { viewModel.updateServings(currentServings + 1) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "Increase servings",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
+            
+            // Remove the standalone servings adjuster surface and keep only a small spacer
+            Spacer(modifier = Modifier.height(16.dp))
             
             // Add selected ingredients button if any are selected
             if (selectedIngredients.isNotEmpty()) {
