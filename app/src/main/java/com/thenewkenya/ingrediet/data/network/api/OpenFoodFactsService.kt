@@ -26,7 +26,7 @@ class OpenFoodFactsService {
     suspend fun searchIngredients(query: String): List<IngredientItem> = withContext(Dispatchers.IO) {
         try {
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
-            val url = URL("$baseUrl/search?search_terms=$encodedQuery&page_size=10")
+            val url = URL("https://world.openfoodfacts.org/cgi/search.pl?search_terms=$encodedQuery&page_size=10&json=1")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             
@@ -83,7 +83,7 @@ class OpenFoodFactsService {
     }
     
     /**
-     * Get nutrition facts for an ingredient
+     * Get nutrition facts for an ingredient by barcode
      */
     suspend fun getNutritionFacts(barcode: String): NutritionFacts? = withContext(Dispatchers.IO) {
         try {
@@ -114,6 +114,39 @@ class OpenFoodFactsService {
             }
         } catch (e: Exception) {
             Log.e("OpenFoodFactsService", "Error getting nutrition facts: ${e.message}", e)
+            return@withContext null
+        }
+    }
+
+    /**
+     * Get nutrition facts for an ingredient by name (best search match, per 100g)
+     */
+    suspend fun getNutritionFactsByName(name: String): NutritionFacts? = withContext(Dispatchers.IO) {
+        try {
+            val encodedQuery = URLEncoder.encode(name, "UTF-8")
+            val url = URL("https://world.openfoodfacts.org/cgi/search.pl?search_terms=$encodedQuery&page_size=10&json=1")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+
+            val response = connection.inputStream.bufferedReader().use { it.readText() }
+            val searchResponse = json.decodeFromString<ProductSearchResponse>(response)
+            val product = searchResponse.products.firstOrNull { it.nutriments != null } ?: return@withContext null
+            val nutriments = product.nutriments ?: return@withContext null
+            return@withContext NutritionFacts(
+                calories = nutriments.energyKcal100g?.toInt() ?: 0,
+                protein = nutriments.proteins100g ?: 0f,
+                carbs = nutriments.carbohydrates100g ?: 0f,
+                fat = nutriments.fat100g ?: 0f,
+                fiber = nutriments.fiber100g,
+                sugar = nutriments.sugars100g,
+                sodium = nutriments.sodium100g,
+                cholesterol = null,
+                vitamins = mapOf(),
+                minerals = mapOf(),
+                dailyValuePercentage = mapOf()
+            )
+        } catch (e: Exception) {
+            Log.e("OpenFoodFactsService", "Error getting nutrition facts by name: ${e.message}", e)
             return@withContext null
         }
     }

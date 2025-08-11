@@ -560,17 +560,52 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
     
     private fun updateNutritionSummary(day: DayOfWeek) {
         val meals = _mealPlans.value[day] ?: emptyList()
-        val totalCalories = meals.sumOf { it.calories }
-        
-        val nutritionSummary = NutritionSummary(
-            calories = totalCalories,
-            protein = (totalCalories * 0.3).toInt(),
-            carbs = (totalCalories * 0.4).toInt(),
-            fat = (totalCalories * 0.3).toInt()
+        // Launch async aggregation so UI stays responsive; keep heuristic until we compute
+        val heuristicCalories = meals.sumOf { it.calories }
+        val heuristic = NutritionSummary(
+            calories = heuristicCalories,
+            protein = (heuristicCalories * 0.3).toInt(),
+            carbs = (heuristicCalories * 0.4).toInt(),
+            fat = (heuristicCalories * 0.3).toInt()
         )
-        
-        _dailyNutrition.value = _dailyNutrition.value.toMutableMap().apply {
-            put(day, nutritionSummary)
+        _dailyNutrition.value = _dailyNutrition.value.toMutableMap().apply { put(day, heuristic) }
+
+        viewModelScope.launch {
+            try {
+                var totalCalories = 0
+                var totalProtein = 0f
+                var totalCarbs = 0f
+                var totalFat = 0f
+
+                val nutritionRepo = com.thenewkenya.ingrediet.data.repository.NutritionRepository(appContext)
+                val recipeRepo = RecipeRepository(appContext)
+
+                // For each meal, fetch its recipe and aggregate
+                for (meal in meals) {
+                    val recipeId = meal.recipeId ?: continue
+                    val recipe = recipeRepo.getRecipeDetails(recipeId).first().getOrNull() ?: continue
+                    for (ing in recipe.ingredients) {
+                        val nut = nutritionRepo.getNutritionByName(ing.name) ?: continue
+                        val grams = com.thenewkenya.ingrediet.feature.recipe.UnitConversion.toGrams(ing.quantity, ing.unit, ing.name)
+                        val totals = com.thenewkenya.ingrediet.feature.recipe.NutritionMath.totalForWeight(nut.per100g, grams)
+                        totalCalories += totals.calories
+                        totalProtein += totals.protein
+                        totalCarbs += totals.carbs
+                        totalFat += totals.fat
+                    }
+                }
+
+                val computed = NutritionSummary(
+                    calories = totalCalories,
+                    protein = totalProtein.toInt(),
+                    carbs = totalCarbs.toInt(),
+                    fat = totalFat.toInt()
+                )
+                _dailyNutrition.value = _dailyNutrition.value.toMutableMap().apply { put(day, computed) }
+            } catch (e: Exception) {
+                // Keep heuristic on failure
+                android.util.Log.e("MealPlannerViewModel", "Failed to compute nutrition: ${e.message}", e)
+            }
         }
     }
     

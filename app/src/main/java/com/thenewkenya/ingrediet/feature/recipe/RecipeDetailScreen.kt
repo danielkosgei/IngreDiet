@@ -112,6 +112,7 @@ import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.ui.theme.Primary
 import kotlinx.coroutines.delay
 
+
 // CompositionLocal for RecipeDetailViewModel
 val LocalRecipeDetailViewModel = compositionLocalOf<RecipeDetailViewModel> {
     error("No RecipeDetailViewModel provided")
@@ -1095,10 +1096,18 @@ private fun IngredientDetailsDialog(
                     .fillMaxWidth()
                     .height(200.dp)
             ) {
-                // Ingredient image
+                // Ingredient image (OFF override when available)
+                val context = LocalContext.current
+                var offImageUrl by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(ingredient.name) {
+                    // Preload OFF image URL if available
+                    val repo = com.thenewkenya.ingrediet.data.repository.NutritionRepository(context)
+                    val nutrition = repo.getNutritionByName(ingredient.name)
+                    offImageUrl = nutrition?.imageUrl
+                }
                 AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(ingredient.imageUrl ?: "")
+                    model = ImageRequest.Builder(context)
+                        .data(offImageUrl ?: (ingredient.imageUrl ?: ""))
                         .crossfade(true)
                         .build(),
                     contentDescription = ingredient.name,
@@ -1166,25 +1175,71 @@ private fun IngredientDetailsDialog(
                 InfoSection(
                     title = "Nutritional Information",
                     content = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            NutrientItem(
-                                name = "Calories",
-                                value = "${(ingredient.quantity * 24).toInt()} kcal",
-                                icon = Icons.Outlined.LocalFireDepartment
-                            )
-                            NutrientItem(
-                                name = "Protein",
-                                value = "${(ingredient.quantity * 1.2).toInt()}g",
-                                icon = Icons.Outlined.FitnessCenter
-                            )
-                            NutrientItem(
-                                name = "Fat",
-                                value = "${(ingredient.quantity * 0.8).toInt()}g",
-                                icon = Icons.Outlined.Water
-                            )
+                        val context = LocalContext.current
+                        var isLoading by remember { mutableStateOf(true) }
+                        var calories by remember { mutableStateOf(0) }
+                        var protein by remember { mutableStateOf(0f) }
+                        var carbs by remember { mutableStateOf(0f) }
+                        var fat by remember { mutableStateOf(0f) }
+                        var offImageUrl by remember { mutableStateOf<String?>(null) }
+
+                        LaunchedEffect(ingredient.name, ingredient.quantity, ingredient.unit) {
+                            isLoading = true
+                            val repo = com.thenewkenya.ingrediet.data.repository.NutritionRepository(context)
+                            val nutrition = repo.getNutritionByName(ingredient.name)
+                            if (nutrition != null) {
+                                offImageUrl = nutrition.imageUrl
+                                val grams = com.thenewkenya.ingrediet.feature.recipe.UnitConversion.toGrams(
+                                    ingredient.quantity, ingredient.unit, ingredient.name
+                                )
+                                val totals = com.thenewkenya.ingrediet.feature.recipe.NutritionMath.totalForWeight(nutrition.per100g, grams)
+                                calories = totals.calories
+                                protein = totals.protein
+                                carbs = totals.carbs
+                                fat = totals.fat
+                            }
+                            isLoading = false
+                        }
+
+                        // If OFF provides an image, swap the header image
+                        if (offImageUrl != null) {
+                            // This is a no-op here since header already rendered; in a fuller impl
+                            // we would hoist state to swap the AsyncImage model.
+                        }
+
+                        if (isLoading) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                NutrientItem(
+                                    name = "Calories",
+                                    value = "$calories kcal",
+                                    icon = Icons.Outlined.LocalFireDepartment
+                                )
+                                NutrientItem(
+                                    name = "Protein",
+                                    value = "${protein.toInt()}g",
+                                    icon = Icons.Outlined.FitnessCenter
+                                )
+                                NutrientItem(
+                                    name = "Carbs",
+                                    value = "${carbs.toInt()}g",
+                                    icon = Icons.Outlined.Speed
+                                )
+                                NutrientItem(
+                                    name = "Fat",
+                                    value = "${fat.toInt()}g",
+                                    icon = Icons.Outlined.Water
+                                )
+                            }
                         }
                     }
                 )
@@ -1196,15 +1251,30 @@ private fun IngredientDetailsDialog(
                         Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            BenefitItem(
-                                text = generateBenefit(ingredient.name, 1)
-                            )
-                            BenefitItem(
-                                text = generateBenefit(ingredient.name, 2)
-                            )
-                            BenefitItem(
-                                text = generateBenefit(ingredient.name, 3)
-                            )
+                            val nameLower = ingredient.name.lowercase()
+                            val lines = when {
+                                nameLower.contains("tomato") -> listOf(
+                                    "Rich in lycopene, an antioxidant supporting heart health",
+                                    "Provides vitamin C for immunity",
+                                    "Low in calories and hydrating"
+                                )
+                                nameLower.contains("onion") -> listOf(
+                                    "Contains quercetin which may reduce inflammation",
+                                    "Source of vitamin C and fiber",
+                                    "Adds prebiotics that support gut health"
+                                )
+                                nameLower.contains("garlic") -> listOf(
+                                    "May support heart health",
+                                    "Contains allicin with antibacterial properties",
+                                    "Flavorful way to reduce salt usage"
+                                )
+                                else -> listOf(
+                                    "Provides essential vitamins and minerals",
+                                    "May support overall wellbeing",
+                                    "Versatile addition to balanced meals"
+                                )
+                            }
+                            lines.forEach { BenefitItem(text = it) }
                         }
                     }
                 )
@@ -1213,11 +1283,14 @@ private fun IngredientDetailsDialog(
                 InfoSection(
                     title = "About ${ingredient.name}",
                     content = {
-                        Text(
-                            text = generateDescription(ingredient.name),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        val nameLower = ingredient.name.lowercase()
+                        val desc = when {
+                            nameLower.contains("tomato") -> "Tomatoes are juicy fruits used as vegetables, known for their bright flavor and lycopene content."
+                            nameLower.contains("onion") -> "Onions are aromatic bulbs that form the base of many dishes, offering sweetness when cooked."
+                            nameLower.contains("garlic") -> "Garlic is a pungent bulb used worldwide to add depth and aroma to dishes."
+                            else -> "A versatile ingredient commonly used in a variety of cuisines."
+                        }
+                        Text(desc, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 )
                 
@@ -1228,18 +1301,28 @@ private fun IngredientDetailsDialog(
                         Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            UsageItem(
-                                title = "Storage",
-                                description = generateStorage(ingredient.name)
-                            )
-                            UsageItem(
-                                title = "Cooking Tips",
-                                description = generateCookingTip(ingredient.name)
-                            )
-                            UsageItem(
-                                title = "Pairs Well With",
-                                description = generatePairings(ingredient.name)
-                            )
+                            val nameLower = ingredient.name.lowercase()
+                            val storage = when {
+                                nameLower.contains("tomato") -> "Store at room temperature away from direct sun; refrigerate only when fully ripe to extend life."
+                                nameLower.contains("onion") -> "Store in a cool, dry, ventilated place; keep away from potatoes."
+                                nameLower.contains("garlic") -> "Keep whole bulbs in a cool, dry place; avoid airtight containers."
+                                else -> "Store in a cool, dry place or refrigerate per freshness."
+                            }
+                            val tip = when {
+                                nameLower.contains("tomato") -> "Roast to concentrate sweetness; avoid overcooking to keep texture."
+                                nameLower.contains("onion") -> "Sauté low and slow for sweetness; caramelize for deeper flavor."
+                                nameLower.contains("garlic") -> "Add minced garlic toward the end to prevent burning and bitterness."
+                                else -> "Adjust seasoning and doneness to taste for best results."
+                            }
+                            val pairs = when {
+                                nameLower.contains("tomato") -> "Basil, garlic, olive oil, mozzarella"
+                                nameLower.contains("onion") -> "Garlic, thyme, butter, beef"
+                                nameLower.contains("garlic") -> "Olive oil, lemon, parsley, chili"
+                                else -> "Herbs, spices, olive oil, citrus"
+                            }
+                            UsageItem(title = "Storage", description = storage)
+                            UsageItem(title = "Cooking Tips", description = tip)
+                            UsageItem(title = "Pairs Well With", description = pairs)
                         }
                     }
                 )

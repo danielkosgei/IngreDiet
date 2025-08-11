@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.util.Log
 import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.model.IngredientItem
+import com.thenewkenya.ingrediet.data.model.IngredientNutrition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -20,6 +21,7 @@ class CacheManager(private val context: Context) {
         private const val PREFS_NAME = "ingrediet_cache"
         private const val RECIPE_PREFIX = "recipe_"
         private const val INGREDIENT_PREFIX = "ingredient_"
+        private const val NUTRITION_PREFIX = "nutrition_"
         private const val LAST_USED_PREFIX = "last_used_"
         private const val CACHE_EXPIRY_DAYS = 7 // Default cache expiry in days
         private const val RECIPE_CACHE_DIR = "recipe_cache"
@@ -124,7 +126,35 @@ class CacheManager(private val context: Context) {
             Log.e("CacheManager", "Error caching ingredient: ${e.message}", e)
         }
     }
-    
+
+    /**
+     * Cache ingredient nutrition by normalized name
+     */
+    suspend fun cacheIngredientNutrition(nameNormalized: String, data: IngredientNutrition) = withContext(Dispatchers.IO) {
+        try {
+            val key = "$NUTRITION_PREFIX$nameNormalized"
+            prefs.edit()
+                .putString(key, json.encodeToString(data))
+                .putLong("$LAST_USED_PREFIX$key", System.currentTimeMillis())
+                .apply()
+            Log.d("CacheManager", "Cached nutrition: $nameNormalized")
+        } catch (e: Exception) {
+            Log.e("CacheManager", "Error caching nutrition: ${e.message}", e)
+        }
+    }
+
+    suspend fun getCachedIngredientNutrition(nameNormalized: String): IngredientNutrition? = withContext(Dispatchers.IO) {
+        try {
+            val key = "$NUTRITION_PREFIX$nameNormalized"
+            val jsonStr = prefs.getString(key, null) ?: return@withContext null
+            prefs.edit().putLong("$LAST_USED_PREFIX$key", System.currentTimeMillis()).apply()
+            return@withContext json.decodeFromString<IngredientNutrition>(jsonStr)
+        } catch (e: Exception) {
+            Log.e("CacheManager", "Error getting cached nutrition: ${e.message}", e)
+            return@withContext null
+        }
+    }
+
     /**
      * Get a cached ingredient by ID
      * @return The cached ingredient or null if not found or expired
@@ -195,7 +225,7 @@ class CacheManager(private val context: Context) {
                 val key = entry.key
                 
                 // Skip non-cache entries
-                if (!key.startsWith(RECIPE_PREFIX) && !key.startsWith(INGREDIENT_PREFIX)) continue
+                if (!key.startsWith(RECIPE_PREFIX) && !key.startsWith(INGREDIENT_PREFIX) && !key.startsWith(NUTRITION_PREFIX)) continue
                 
                 // Check if expired
                 val lastUsedKey = "$LAST_USED_PREFIX$key"
