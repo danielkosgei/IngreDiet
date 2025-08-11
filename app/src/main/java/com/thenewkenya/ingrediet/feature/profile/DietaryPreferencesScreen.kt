@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
@@ -25,6 +27,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,6 +49,11 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.repository.ProfileRepository
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.HealthAndSafety
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +74,8 @@ fun DietaryPreferencesScreen(navController: NavController) {
     
     // Load user's preferences from profile
     var selectedPreferences by remember { mutableStateOf(profile?.dietaryPreferences ?: emptyList()) }
+    var customPref by remember { mutableStateOf("") }
+    var isSaving by remember { mutableStateOf(false) }
     
     LaunchedEffect(profile) {
         profile?.let {
@@ -147,51 +157,33 @@ fun DietaryPreferencesScreen(navController: NavController) {
             
             Spacer(modifier = Modifier.height(8.dp))
             
-            // Common Diets Section
-            Text(
-                text = "Common Diets",
-                style = typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = colors.onBackground
-            )
-            
-            DietChipGroup(
-                options = commonDiets,
-                selectedOptions = selectedPreferences,
-                onSelectionChanged = { selectedPreferences = it }
-            )
+            SectionCard(title = "Common Diets", icon = Icons.Outlined.Restaurant) {
+                DietChipGroup(
+                    options = commonDiets,
+                    selectedOptions = selectedPreferences,
+                    onSelectionChanged = { selectedPreferences = it }
+                )
+            }
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Religious Diets
-            Text(
-                text = "Religious & Cultural",
-                style = typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = colors.onBackground
-            )
-            
-            DietChipGroup(
-                options = religiousDiets,
-                selectedOptions = selectedPreferences,
-                onSelectionChanged = { selectedPreferences = it }
-            )
+            SectionCard(title = "Religious & Cultural", icon = Icons.Outlined.FavoriteBorder) {
+                DietChipGroup(
+                    options = religiousDiets,
+                    selectedOptions = selectedPreferences,
+                    onSelectionChanged = { selectedPreferences = it }
+                )
+            }
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Health-related Diets
-            Text(
-                text = "Health Conditions",
-                style = typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = colors.onBackground
-            )
-            
-            DietChipGroup(
-                options = healthDiets,
-                selectedOptions = selectedPreferences,
-                onSelectionChanged = { selectedPreferences = it }
-            )
+            SectionCard(title = "Health Conditions", icon = Icons.Outlined.HealthAndSafety) {
+                DietChipGroup(
+                    options = healthDiets,
+                    selectedOptions = selectedPreferences,
+                    onSelectionChanged = { selectedPreferences = it }
+                )
+            }
             
             Spacer(modifier = Modifier.height(24.dp))
             
@@ -202,23 +194,52 @@ fun DietaryPreferencesScreen(navController: NavController) {
                 fontWeight = FontWeight.Medium,
                 color = colors.onBackground
             )
-            
-            // TODO: Add TextField for custom preferences
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = customPref,
+                    onValueChange = { customPref = it },
+                    label = { Text("Add preference") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = {
+                        val v = customPref.trim()
+                        if (v.isNotEmpty() && !selectedPreferences.contains(v)) {
+                            selectedPreferences = selectedPreferences + v
+                            customPref = ""
+                        }
+                    },
+                    enabled = customPref.trim().isNotEmpty()
+                ) { Text("Add") }
+            }
             
             Spacer(modifier = Modifier.height(24.dp))
             
             // Save button
-            Button(
-                onClick = {
-                    profile?.let {
-                        val updatedProfile = it.copy(dietaryPreferences = selectedPreferences)
-                        viewModel.updateProfile(updatedProfile)
-                        navController.navigateUp()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Save Preferences")
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(
+                    onClick = {
+                        selectedPreferences = profile?.dietaryPreferences ?: emptyList()
+                        customPref = ""
+                    },
+                    modifier = Modifier.weight(1f)
+                ) { Text("Reset") }
+                Button(
+                    onClick = {
+                        profile?.let {
+                            isSaving = true
+                            val updatedProfile = it.copy(dietaryPreferences = selectedPreferences)
+                            viewModel.updateProfile(updatedProfile)
+                            isSaving = false
+                            navController.navigateUp()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = profile != null && (selectedPreferences != (profile?.dietaryPreferences ?: emptyList()))
+                ) {
+                    Text(if (isSaving) "Saving..." else "Save Preferences")
+                }
             }
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -226,7 +247,7 @@ fun DietaryPreferencesScreen(navController: NavController) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DietChipGroup(
     options: List<String>,
@@ -234,25 +255,19 @@ fun DietChipGroup(
     onSelectionChanged: (List<String>) -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
-    
-    Row(
+    FlowRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Create a flow of filter chips
         options.forEach { option ->
             val isSelected = selectedOptions.contains(option)
-            
             FilterChip(
                 selected = isSelected,
                 onClick = {
-                    if (isSelected) {
-                        onSelectionChanged(selectedOptions - option)
-                    } else {
-                        onSelectionChanged(selectedOptions + option)
-                    }
+                    if (isSelected) onSelectionChanged(selectedOptions - option)
+                    else onSelectionChanged(selectedOptions + option)
                 },
                 label = { Text(option) },
                 leadingIcon = if (isSelected) {
@@ -263,8 +278,34 @@ fun DietChipGroup(
                             modifier = Modifier.size(FilterChipDefaults.IconSize)
                         )
                     }
-                } else null
+                } else null,
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = colors.primaryContainer,
+                    selectedLabelColor = colors.onPrimaryContainer
+                )
             )
+        }
+    }
+}
+
+@Composable
+private fun SectionCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    content: @Composable () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    Card(
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(icon, contentDescription = null, tint = colors.primary)
+                Text(title, style = typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+            }
+            content()
         }
     }
 } 

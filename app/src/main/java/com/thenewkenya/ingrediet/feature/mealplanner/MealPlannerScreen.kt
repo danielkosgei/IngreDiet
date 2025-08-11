@@ -131,104 +131,12 @@ fun MealPlannerScreen(
             )
         },
         floatingActionButton = {
-            val context = LocalContext.current
-            val scope = rememberCoroutineScope()
-            var detectedLabels by remember { mutableStateOf<List<String>>(emptyList()) }
-            var showPortionSheet by remember { mutableStateOf(false) }
-            var portion by remember { mutableStateOf(100f) } // grams
-            val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
-                contract = androidx.activity.result.contract.ActivityResultContracts.TakePicturePreview(),
-                onResult = { bitmap: android.graphics.Bitmap? ->
-                    if (bitmap != null) {
-                        try {
-                            val image = com.google.mlkit.vision.common.InputImage.fromBitmap(bitmap, 0)
-                            val labeler = com.google.mlkit.vision.label.ImageLabeling.getClient(
-                                com.google.mlkit.vision.label.defaults.ImageLabelerOptions.DEFAULT_OPTIONS
-                            )
-                            labeler.process(image)
-                                .addOnSuccessListener { labels ->
-                                    val top = labels.sortedByDescending { it.confidence }.take(3).map { it.text }
-                                    detectedLabels = top
-                                    showPortionSheet = true
-                                }
-                                .addOnFailureListener {
-                                    Toast.makeText(context, "Scan failed", Toast.LENGTH_SHORT).show()
-                                }
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Scan error: ${e.message}", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
-            )
             FloatingActionButton(
-                onClick = {
-                    // Request camera permission if needed then launch
-                    launcher.launch(null)
-                },
+                onClick = { showAddMealDialog = true },
                 containerColor = colors.primary,
                 contentColor = colors.onPrimary
             ) {
-                Icon(Icons.Default.CameraAlt, contentDescription = "Log Meal")
-            }
-
-            if (showPortionSheet && detectedLabels.isNotEmpty()) {
-                androidx.compose.material3.ModalBottomSheet(
-                    onDismissRequest = { showPortionSheet = false },
-                    dragHandle = { androidx.compose.material3.BottomSheetDefaults.DragHandle() }
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text("Confirm portion size", style = typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("Detected: ${detectedLabels.joinToString()}")
-                        Text("Portion: ${portion.toInt()} g")
-                        Slider(
-                            value = portion,
-                            onValueChange = { portion = it },
-                            valueRange = 20f..800f,
-                            steps = 15
-                        )
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = { showPortionSheet = false }, modifier = Modifier.weight(1f)) { Text("Cancel") }
-                            Button(
-                                onClick = {
-                                    val repo = com.thenewkenya.ingrediet.data.repository.NutritionRepository(context)
-                                    scope.launch {
-                                        var calories = 0f
-                                        var protein = 0f
-                                        var carbs = 0f
-                                        var fat = 0f
-                                        for (name in detectedLabels) {
-                                            val n = repo.getNutritionByName(name)
-                                            if (n != null) {
-                                                val factor = (portion / 100f)
-                                                calories += n.per100g.calories * factor
-                                                protein += n.per100g.protein * factor
-                                                carbs += n.per100g.carbs * factor
-                                                fat += n.per100g.fat * factor
-                                            }
-                                        }
-                                        val summary = NutritionSummary(calories.toInt(), protein.toInt(), carbs.toInt(), fat.toInt())
-                                        viewModel.logScannedMeal(summary)
-                                        viewModel.addLoggedMeal(
-                                            LoggedMeal(
-                                                labels = detectedLabels,
-                                                portionGrams = portion.toInt(),
-                                                nutrition = summary
-                                            )
-                                        )
-                                        Toast.makeText(context, "Meal saved and logged", Toast.LENGTH_SHORT).show()
-                                        showPortionSheet = false
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) { Text("Save") }
-                        }
-                    }
-                }
+                Icon(Icons.Default.Add, contentDescription = "Add Meal")
             }
         }
     ) { paddingValues ->
@@ -373,48 +281,7 @@ fun MealPlannerScreen(
                             }
                         )
 
-                        // Logged meals section
-                        val loggedMeals by viewModel.loggedMeals.collectAsState()
-                        var editMealId by remember { mutableStateOf<String?>(null) }
-                        var editPortion by remember { mutableStateOf(0f) }
-                        LoggedMealsSection(
-                            entries = loggedMeals.filter { it.loggedAt.toLocalDate() == selectedDateValue },
-                            onEdit = { entry ->
-                                editMealId = entry.id
-                                editPortion = entry.portionGrams.toFloat()
-                            },
-                            onDelete = { id -> viewModel.deleteLoggedMeal(id) },
-                            colors = colors,
-                            typography = typography
-                        )
-
-                        if (editMealId != null) {
-                            androidx.compose.material3.ModalBottomSheet(
-                                onDismissRequest = { editMealId = null },
-                                dragHandle = { androidx.compose.material3.BottomSheetDefaults.DragHandle() }
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    Text("Edit portion", style = typography.titleMedium, fontWeight = FontWeight.Bold)
-                                    Text("Portion: ${editPortion.toInt()} g")
-                                    Slider(value = editPortion, onValueChange = { editPortion = it }, valueRange = 20f..1200f, steps = 23)
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        OutlinedButton(onClick = { editMealId = null }, modifier = Modifier.weight(1f)) { Text("Cancel") }
-                                        Button(onClick = {
-                                            val id = editMealId
-                                            if (id != null) {
-                                                viewModel.updateLoggedMealPortion(id, editPortion.toInt())
-                                            }
-                                            editMealId = null
-                                        }, modifier = Modifier.weight(1f)) { Text("Save") }
-                                    }
-                                }
-                            }
-                        }
+                        // Logged meals removed
                     }
                 }
             }
@@ -1299,45 +1166,6 @@ private fun MacroPieChart(
     }
 } 
 
-@Composable
-fun LoggedMealsSection(
-    entries: List<LoggedMeal>,
-    onEdit: (LoggedMeal) -> Unit,
-    onDelete: (String) -> Unit,
-    colors: ColorScheme,
-    typography: Typography
-) {
-    if (entries.isEmpty()) return
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Logged meals",
-            style = typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-            color = colors.onBackground
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        entries.forEach { entry ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.surface)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(entry.labels.joinToString(), style = typography.bodyMedium, color = colors.onSurface)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("${entry.portionGrams} g • ${entry.nutrition.calories} kcal • P ${entry.nutrition.protein}g • C ${entry.nutrition.carbs}g • F ${entry.nutrition.fat}g", style = typography.bodySmall, color = colors.onSurface.copy(alpha = 0.7f))
-                    }
-                    IconButton(onClick = { onEdit(entry) }) { Icon(Icons.Default.Edit, contentDescription = "Edit", tint = colors.primary) }
-                    IconButton(onClick = { onDelete(entry.id) }) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = colors.error) }
-                }
-            }
-        }
-    }
-} 
+// Logged meals UI removed
+
+// Scanner helpers removed 

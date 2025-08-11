@@ -58,14 +58,6 @@ data class NutritionSummary(
     val fat: Int      // grams
 )
 
-data class LoggedMeal(
-    val id: String = UUID.randomUUID().toString(),
-    val loggedAt: LocalDateTime = LocalDateTime.now(),
-    val labels: List<String>,
-    val portionGrams: Int,
-    val nutrition: NutritionSummary
-)
-
 // Add a custom exception class
 class MealPlanTimeoutException(message: String) : Exception(message)
 
@@ -86,8 +78,6 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
     
     private val _dailyNutrition = MutableStateFlow<Map<DayOfWeek, NutritionSummary>>(emptyMap())
     val dailyNutrition: StateFlow<Map<DayOfWeek, NutritionSummary>> = _dailyNutrition.asStateFlow()
-    private val _loggedMeals = MutableStateFlow<List<LoggedMeal>>(emptyList())
-    val loggedMeals: StateFlow<List<LoggedMeal>> = _loggedMeals.asStateFlow()
     
     // Loading and error states
     private val _isLoading = MutableStateFlow(false)
@@ -1178,76 +1168,6 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
         return Pair(text, fileName)
     }
 
-    fun logScannedMeal(nutrition: NutritionSummary, day: DayOfWeek = LocalDate.now().dayOfWeek) {
-        val current = _dailyNutrition.value.toMutableMap()
-        val existing = current[day]
-        val updated = if (existing != null) {
-            NutritionSummary(
-                calories = existing.calories + nutrition.calories,
-                protein = existing.protein + nutrition.protein,
-                carbs = existing.carbs + nutrition.carbs,
-                fat = existing.fat + nutrition.fat
-            )
-        } else nutrition
-        current[day] = updated
-        _dailyNutrition.value = current
-    }
-
-    fun addLoggedMeal(entry: LoggedMeal) {
-        _loggedMeals.value = _loggedMeals.value + entry
-    }
-
-    fun getLoggedMealsForDay(day: DayOfWeek): List<LoggedMeal> =
-        _loggedMeals.value.filter { it.loggedAt.toLocalDate().dayOfWeek == day }
-
-    fun updateLoggedMealPortion(id: String, newPortionGrams: Int) {
-        if (newPortionGrams <= 0) return
-        val currentList = _loggedMeals.value.toMutableList()
-        val index = currentList.indexOfFirst { it.id == id }
-        if (index == -1) return
-        val old = currentList[index]
-        val factor = (newPortionGrams.toFloat() / old.portionGrams.toFloat()).coerceAtLeast(0f)
-        val newNutrition = NutritionSummary(
-            calories = (old.nutrition.calories * factor).toInt(),
-            protein = (old.nutrition.protein * factor).toInt(),
-            carbs = (old.nutrition.carbs * factor).toInt(),
-            fat = (old.nutrition.fat * factor).toInt()
-        )
-        currentList[index] = old.copy(portionGrams = newPortionGrams, nutrition = newNutrition)
-        _loggedMeals.value = currentList
-
-        val day = old.loggedAt.toLocalDate().dayOfWeek
-        val current = _dailyNutrition.value.toMutableMap()
-        val existing = current[day] ?: NutritionSummary(0, 0, 0, 0)
-        val adjusted = NutritionSummary(
-            calories = (existing.calories - old.nutrition.calories + newNutrition.calories).coerceAtLeast(0),
-            protein = (existing.protein - old.nutrition.protein + newNutrition.protein).coerceAtLeast(0),
-            carbs = (existing.carbs - old.nutrition.carbs + newNutrition.carbs).coerceAtLeast(0),
-            fat = (existing.fat - old.nutrition.fat + newNutrition.fat).coerceAtLeast(0)
-        )
-        current[day] = adjusted
-        _dailyNutrition.value = current
-    }
-
-    fun deleteLoggedMeal(id: String) {
-        val currentList = _loggedMeals.value.toMutableList()
-        val index = currentList.indexOfFirst { it.id == id }
-        if (index == -1) return
-        val old = currentList.removeAt(index)
-        _loggedMeals.value = currentList
-
-        val day = old.loggedAt.toLocalDate().dayOfWeek
-        val current = _dailyNutrition.value.toMutableMap()
-        val existing = current[day] ?: NutritionSummary(0, 0, 0, 0)
-        val adjusted = NutritionSummary(
-            calories = (existing.calories - old.nutrition.calories).coerceAtLeast(0),
-            protein = (existing.protein - old.nutrition.protein).coerceAtLeast(0),
-            carbs = (existing.carbs - old.nutrition.carbs).coerceAtLeast(0),
-            fat = (existing.fat - old.nutrition.fat).coerceAtLeast(0)
-        )
-        current[day] = adjusted
-        _dailyNutrition.value = current
-    }
 
     /**
      * Generate a meal plan with specific parameters
