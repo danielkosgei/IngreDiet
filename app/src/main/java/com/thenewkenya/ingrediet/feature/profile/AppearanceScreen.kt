@@ -1,8 +1,7 @@
 package com.thenewkenya.ingrediet.feature.profile
 
+import android.content.Context
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,10 +43,38 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+
+enum class ThemeMode {
+    SYSTEM, LIGHT, DARK
+}
+
+object ThemePreferences {
+    private const val PREFS_NAME = "theme_preferences"
+    private const val THEME_MODE_KEY = "theme_mode"
+    
+    // Mutable state for reactive theme changes
+    private var _currentThemeMode = mutableStateOf(ThemeMode.SYSTEM)
+    val currentThemeMode = _currentThemeMode
+    
+    fun getThemeMode(context: Context): ThemeMode {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val mode = prefs.getString(THEME_MODE_KEY, ThemeMode.SYSTEM.name)
+        val themeMode = ThemeMode.valueOf(mode ?: ThemeMode.SYSTEM.name)
+        _currentThemeMode.value = themeMode
+        return themeMode
+    }
+    
+    fun setThemeMode(context: Context, themeMode: ThemeMode) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(THEME_MODE_KEY, themeMode.name).apply()
+        _currentThemeMode.value = themeMode
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,10 +82,14 @@ fun AppearanceScreen(navController: NavController) {
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
     
-    // Theme options - in a real app, this would be stored in preferences
-    val themeOptions = listOf("System Default", "Light", "Dark")
-    var selectedTheme by remember { mutableStateOf(themeOptions[0]) }
+    var selectedTheme by remember { mutableStateOf(ThemeMode.SYSTEM) }
+    
+    // Load current theme preference
+    LaunchedEffect(Unit) {
+        selectedTheme = ThemePreferences.getThemeMode(context)
+    }
 
     Scaffold(
         topBar = {
@@ -117,8 +149,11 @@ fun AppearanceScreen(navController: NavController) {
                         ThemeOption(
                             text = "System Default",
                             icon = Icons.Outlined.SettingsBrightness,
-                            isSelected = selectedTheme == "System Default",
-                            onSelected = { selectedTheme = "System Default" }
+                            isSelected = selectedTheme == ThemeMode.SYSTEM,
+                            onSelected = { 
+                                selectedTheme = ThemeMode.SYSTEM
+                                ThemePreferences.setThemeMode(context, ThemeMode.SYSTEM)
+                            }
                         )
                         
                         HorizontalDivider(
@@ -130,8 +165,11 @@ fun AppearanceScreen(navController: NavController) {
                         ThemeOption(
                             text = "Light",
                             icon = Icons.Outlined.LightMode,
-                            isSelected = selectedTheme == "Light",
-                            onSelected = { selectedTheme = "Light" }
+                            isSelected = selectedTheme == ThemeMode.LIGHT,
+                            onSelected = { 
+                                selectedTheme = ThemeMode.LIGHT
+                                ThemePreferences.setThemeMode(context, ThemeMode.LIGHT)
+                            }
                         )
                         
                         HorizontalDivider(
@@ -143,57 +181,17 @@ fun AppearanceScreen(navController: NavController) {
                         ThemeOption(
                             text = "Dark",
                             icon = Icons.Outlined.DarkMode,
-                            isSelected = selectedTheme == "Dark",
-                            onSelected = { selectedTheme = "Dark" }
+                            isSelected = selectedTheme == ThemeMode.DARK,
+                            onSelected = { 
+                                selectedTheme = ThemeMode.DARK
+                                ThemePreferences.setThemeMode(context, ThemeMode.DARK)
+                            }
                         )
                     }
                 }
             }
             
             Spacer(modifier = Modifier.height(16.dp))
-            
-            // Text Size Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = colors.surface),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        text = "Text Size",
-                        style = typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Text size preview samples
-                    Text(
-                        text = "Small",
-                        style = typography.bodySmall
-                    )
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Text(
-                        text = "Medium (Default)",
-                        style = typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Text(
-                        text = "Large",
-                        style = typography.bodyLarge
-                    )
-                    
-                    // Text size slider would go here in a real implementation
-                }
-            }
         }
     }
 }

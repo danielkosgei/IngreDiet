@@ -4,9 +4,22 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.util.Log
 import java.util.Calendar
 
 object NotificationScheduler {
+    private const val TAG = "NotificationScheduler"
+    
+    private fun canScheduleExactAlarms(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmManager.canScheduleExactAlarms()
+        } else {
+            true
+        }
+    }
+    
     private fun scheduleExact(context: Context, triggerAtMillis: Long, intent: Intent) {
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pi = PendingIntent.getBroadcast(
@@ -15,7 +28,24 @@ object NotificationScheduler {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+        
+        try {
+            if (canScheduleExactAlarms(context)) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+                Log.d(TAG, "Scheduled exact alarm for ${triggerAtMillis}")
+            } else {
+                // Fallback to inexact alarm
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+                Log.d(TAG, "Scheduled inexact alarm for ${triggerAtMillis} (exact alarms not available)")
+            }
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Failed to schedule exact alarm, falling back to inexact alarm", e)
+            try {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+            } catch (fallbackException: Exception) {
+                Log.e(TAG, "Failed to schedule any alarm", fallbackException)
+            }
+        }
     }
 
     fun scheduleMealReminder(context: Context, hour: Int, minute: Int, mealName: String) {

@@ -10,6 +10,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.thenewkenya.ingrediet.feature.profile.ThemeMode
 
 // Updated color definitions for a harmonious health and wellness theme
 val PrimaryColor = Color(0xFF4CAF50) // Soft muted green
@@ -83,9 +84,15 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun IngreDietTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
     content: @Composable () -> Unit
 ) {
+    val darkTheme = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+    
     val colorScheme = when {
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
