@@ -270,7 +270,7 @@ private fun RecipeCardEnhanced(
             .fillMaxWidth()
             .padding(8.dp),
         onClick = {
-            navController.navigate("recipe_detail/${recipe.id}")
+            navController.navigate("recipe/${recipe.id}")
         },
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
