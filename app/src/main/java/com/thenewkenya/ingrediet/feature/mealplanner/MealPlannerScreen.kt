@@ -280,8 +280,26 @@ fun MealPlannerScreen(
                                 }
                             }
                         )
-
-                        // Logged meals removed
+                        // Hydration nudge between sections
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            colors = CardDefaults.cardColors(containerColor = colors.primaryContainer.copy(alpha = 0.3f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Stay hydrated — drink water!", style = typography.bodyMedium, color = colors.onPrimaryContainer)
+                                TextButton(onClick = { /* could open hydration scheduling */ }) { Text("Tips") }
+                            }
+                        }
                     }
                 }
             }
@@ -299,25 +317,21 @@ fun MealPlannerScreen(
         )
     }
     
-    // Add custom meal dialog (for FAB)
+    // Add custom meal bottom sheet
     if (showAddMealDialog) {
-        AddCustomMealTimeDialog(
+        AddCustomMealBottomSheet(
+            selectedDay = selectedDateValue.dayOfWeek,
             onDismiss = { showAddMealDialog = false },
-            onSelectMealTime = { mealTime, name, description, calories, recipeId ->
+            onAdd = { time, name, description, calories ->
                 val meal = MealPlanItem(
-                    id = "${selectedDateValue.dayOfWeek}_${mealTime}_${System.currentTimeMillis()}",
-                    name = mealTime,
+                    id = "${selectedDateValue.dayOfWeek}_${time.name}_${System.currentTimeMillis()}",
+                    name = when(time) { MealTime.Breakfast -> "Breakfast"; MealTime.Lunch -> "Lunch"; MealTime.Dinner -> "Dinner"; MealTime.Snacks -> "Snacks" },
                     calories = calories,
                     day = selectedDateValue.dayOfWeek,
-                    time = when(mealTime) {
-                        "Breakfast" -> MealTime.Breakfast
-                        "Lunch" -> MealTime.Lunch
-                        "Dinner" -> MealTime.Dinner
-                        else -> MealTime.Snacks
-                    },
+                    time = time,
                     description = description.ifEmpty { name },
-                    recipeId = recipeId,
-                    imageUrl = recipeId?.let { "https://source.unsplash.com/random/300x200?food" }
+                    recipeId = null,
+                    imageUrl = null
                 )
                 viewModel.addMeal(meal)
                 showAddMealDialog = false
@@ -1169,3 +1183,38 @@ private fun MacroPieChart(
 // Logged meals UI removed
 
 // Scanner helpers removed 
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddCustomMealBottomSheet(
+    selectedDay: DayOfWeek,
+    onDismiss: () -> Unit,
+    onAdd: (MealTime, String, String, Int) -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    var selectedTime by remember { mutableStateOf(MealTime.Breakfast) }
+    var name by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var caloriesText by remember { mutableStateOf("") }
+    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = { BottomSheetDefaults.DragHandle() }) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Add custom meal", style = typography.titleLarge.copy(fontWeight = FontWeight.Bold))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(MealTime.Breakfast, MealTime.Lunch, MealTime.Dinner, MealTime.Snacks).forEach { t ->
+                    FilterChip(selected = selectedTime == t, onClick = { selectedTime = t }, label = { Text(t.name) })
+                }
+            }
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Meal name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description (optional)") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = caloriesText, onValueChange = { if (it.all { c -> c.isDigit() } || it.isEmpty()) caloriesText = it }, label = { Text("Calories") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
+                Button(onClick = {
+                    val cal = caloriesText.toIntOrNull() ?: 0
+                    onAdd(selectedTime, name, description, cal)
+                }, enabled = name.isNotBlank() && (caloriesText.toIntOrNull() ?: 0) > 0, modifier = Modifier.weight(1f)) { Text("Add") }
+            }
+        }
+    }
+} 

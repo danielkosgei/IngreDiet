@@ -100,6 +100,13 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
     init {
         checkAuthentication()
         loadExistingMealPlansOnly()
+        // Load local cache if present
+        try {
+            val cached = LocalMealPlanStore.load(appContext)
+            if (cached.isNotEmpty()) {
+                _mealPlans.value = cached
+            }
+        } catch (_: Exception) {}
     }
     
     private fun checkAuthentication() {
@@ -542,6 +549,12 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
         currentMeals[meal.day] = dayMeals
         _mealPlans.value = currentMeals
         updateNutritionSummary(meal.day)
+        try { LocalMealPlanStore.save(appContext, _mealPlans.value) } catch (_: Exception) {}
+        viewModelScope.launch {
+            try {
+                mealPlanRepository.saveUserMealPlans(_mealPlans.value).collect { }
+            } catch (_: Exception) {}
+        }
     }
 
     fun removeMeal(mealId: String) {
@@ -558,6 +571,28 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
         
         _mealPlans.value = currentMeals
         affectedDay?.let { updateNutritionSummary(it) }
+        try { LocalMealPlanStore.save(appContext, _mealPlans.value) } catch (_: Exception) {}
+        viewModelScope.launch {
+            try {
+                mealPlanRepository.saveUserMealPlans(_mealPlans.value).collect { }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun updateMeal(updated: MealPlanItem) {
+        val currentMeals = _mealPlans.value.toMutableMap()
+        val dayMeals = currentMeals[updated.day]?.toMutableList() ?: mutableListOf()
+        val index = dayMeals.indexOfFirst { it.id == updated.id }
+        if (index >= 0) {
+            dayMeals[index] = updated
+            currentMeals[updated.day] = dayMeals
+            _mealPlans.value = currentMeals
+            updateNutritionSummary(updated.day)
+            try { LocalMealPlanStore.save(appContext, _mealPlans.value) } catch (_: Exception) {}
+            viewModelScope.launch {
+                try { mealPlanRepository.saveUserMealPlans(_mealPlans.value).collect { } } catch (_: Exception) {}
+            }
+        }
     }
     
     private fun updateNutritionSummary(day: DayOfWeek) {
