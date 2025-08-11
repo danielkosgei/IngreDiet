@@ -28,7 +28,7 @@ data class ShoppingItemDto(
 ) {
     fun toShoppingItem(): ShoppingItem {
         val displayName = if (quantity != null && unit != null) {
-            "$name ($quantity $unit)"
+            com.thenewkenya.ingrediet.feature.recipe.formatIngredientPhrase(quantity ?: 0f, unit, name)
         } else {
             name
         }
@@ -49,7 +49,7 @@ class ShoppingListRepository(private val context: Context) {
         addShoppingItem(
             ShoppingItem(
                 id = UUID.randomUUID().toString(),
-                name = "${ingredient.name} (${ingredient.quantity} ${ingredient.unit})",
+                name = com.thenewkenya.ingrediet.feature.recipe.formatIngredientPhrase(ingredient.quantity, ingredient.unit, ingredient.name),
                 category = mapIngredientToCategory(ingredient.name),
                 isChecked = false
             )

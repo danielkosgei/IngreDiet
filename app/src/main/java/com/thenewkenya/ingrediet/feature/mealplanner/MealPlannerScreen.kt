@@ -1180,34 +1180,47 @@ fun NutritionSummaryDialog(
                     val carbsPercentage = if (totalMacros > 0) selectedDayNutrition.carbs * 100f / totalMacros else 0f
                     val fatPercentage = if (totalMacros > 0) selectedDayNutrition.fat * 100f / totalMacros else 0f
                     
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(24.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                    ) {
-                        // Protein segment
+                    // Render distribution bar only for positive segments to avoid weight(0f)
+                    if (totalMacros > 0f) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(24.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        ) {
+                            if (proteinPercentage > 0f) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(proteinPercentage)
+                                        .fillMaxHeight()
+                                        .background(Color(0xFF4CAF50))
+                                )
+                            }
+                            if (carbsPercentage > 0f) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(carbsPercentage)
+                                        .fillMaxHeight()
+                                        .background(Color(0xFFFFC107))
+                                )
+                            }
+                            if (fatPercentage > 0f) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(fatPercentage)
+                                        .fillMaxHeight()
+                                        .background(Color(0xFFE91E63))
+                                )
+                            }
+                        }
+                    } else {
+                        // No macro data: show an empty placeholder bar
                         Box(
                             modifier = Modifier
-                                .weight(proteinPercentage)
-                                .fillMaxHeight()
-                                .background(Color(0xFF4CAF50))
-                        )
-                        
-                        // Carbs segment
-                        Box(
-                            modifier = Modifier
-                                .weight(carbsPercentage)
-                                .fillMaxHeight()
-                                .background(Color(0xFFFFC107))
-                        )
-                        
-                        // Fat segment
-                        Box(
-                            modifier = Modifier
-                                .weight(fatPercentage)
-                                .fillMaxHeight()
-                                .background(Color(0xFFE91E63))
+                                .fillMaxWidth()
+                                .height(24.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.surfaceVariant)
                         )
                     }
                     

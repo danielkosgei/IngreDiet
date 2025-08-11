@@ -1038,17 +1038,11 @@ private fun IngredientItem(
             
             // Ingredient name
             Text(
-                text = ingredient.name,
+                text = formatIngredientPhrase(ingredient.quantity, ingredient.unit, ingredient.name),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f)
-            )
-            
-            // Quantity and unit
-            Text(
-                text = "${String.format("%.1f", ingredient.quantity).replace(".0", "")} ${ingredient.unit}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.onSurface
             )
             
             // Add to shopping list button

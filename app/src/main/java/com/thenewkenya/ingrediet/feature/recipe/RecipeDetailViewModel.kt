@@ -226,12 +226,11 @@ class RecipeDetailViewModel(
             try {
                 // Map ingredients to shopping items
                 val shoppingItems = currentRecipe.ingredients.map { ingredient ->
-                    val formattedQuantity = formatQuantity(ingredient.quantity, ingredient.unit)
                     val category = mapIngredientToCategory(ingredient.name)
                     
                     ShoppingItem(
                         id = UUID.randomUUID().toString(),
-                        name = "${ingredient.name} ($formattedQuantity)",
+                        name = formatIngredientPhrase(ingredient.quantity, ingredient.unit, ingredient.name),
                         category = category,
                         isChecked = false
                     )
@@ -279,14 +278,7 @@ class RecipeDetailViewModel(
      * Format the quantity and unit for display
      */
     private fun formatQuantity(quantity: Float, unit: String): String {
-        // Format whole numbers without decimal point
-        val formattedQuantity = if (quantity == quantity.toInt().toFloat()) {
-            quantity.toInt().toString()
-        } else {
-            quantity.toString()
-        }
-        
-        return "$formattedQuantity $unit"
+        return formatQuantityUnit(quantity, unit)
     }
     
     /**
@@ -354,7 +346,7 @@ class RecipeDetailViewModel(
                 appendLine()
                 appendLine("Ingredients:")
                 recipe.ingredients.forEach { ingredient ->
-                    appendLine("- ${formatQuantity(ingredient.quantity, ingredient.unit)} ${ingredient.name}")
+                    appendLine("- ${formatIngredientPhrase(ingredient.quantity, ingredient.unit, ingredient.name)}")
                 }
                 appendLine()
                 appendLine("Instructions:")
@@ -391,12 +383,12 @@ class RecipeDetailViewModel(
                     ?: throw Exception("User not authenticated")
                 
                 // Create shopping item
-                val shoppingItem = ShoppingItem(
-                    id = UUID.randomUUID().toString(),
-                    name = "${ingredient.name} (${ingredient.quantity} ${ingredient.unit})",
-                    category = mapIngredientToCategory(ingredient.name),
-                    isChecked = false
-                )
+                                    val shoppingItem = ShoppingItem(
+                        id = UUID.randomUUID().toString(),
+                        name = formatIngredientPhrase(ingredient.quantity, ingredient.unit, ingredient.name),
+                        category = mapIngredientToCategory(ingredient.name),
+                        isChecked = false
+                    )
                 
                 // Add to shopping list
                 shoppingListRepository.addShoppingItem(shoppingItem)
