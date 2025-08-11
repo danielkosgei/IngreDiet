@@ -580,18 +580,33 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                 val nutritionRepo = com.thenewkenya.ingrediet.data.repository.NutritionRepository(appContext)
                 val recipeRepo = RecipeRepository(appContext)
 
+                fun cookingFactors(recipeName: String, description: String?): Triple<Float, Float, Float> {
+                    val text = (recipeName + " " + (description ?: "")).lowercase()
+                    return when {
+                        // frying increases fat via oil absorption; minor protein loss
+                        text.contains("fried") || text.contains("fry") -> Triple(1.0f, 0.95f, 1.15f)
+                        // roasting reduces water, concentrates macros slightly
+                        text.contains("roast") || text.contains("baked") -> Triple(1.0f, 1.05f, 1.05f)
+                        // boiling may leach some carbs; protein/fat largely unchanged
+                        text.contains("boil") || text.contains("simmer") -> Triple(0.95f, 1.0f, 1.0f)
+                        else -> Triple(1.0f, 1.0f, 1.0f)
+                    }
+                }
+
                 // For each meal, fetch its recipe and aggregate
                 for (meal in meals) {
                     val recipeId = meal.recipeId ?: continue
                     val recipe = recipeRepo.getRecipeDetails(recipeId).first().getOrNull() ?: continue
+                    val (carbFactor, proteinFactor, fatFactor) = cookingFactors(recipe.name, recipe.description)
                     for (ing in recipe.ingredients) {
                         val nut = nutritionRepo.getNutritionByName(ing.name) ?: continue
                         val grams = com.thenewkenya.ingrediet.feature.recipe.UnitConversion.toGrams(ing.quantity, ing.unit, ing.name)
                         val totals = com.thenewkenya.ingrediet.feature.recipe.NutritionMath.totalForWeight(nut.per100g, grams)
+                        // Apply cooking method factors
                         totalCalories += totals.calories
-                        totalProtein += totals.protein
-                        totalCarbs += totals.carbs
-                        totalFat += totals.fat
+                        totalProtein += totals.protein * proteinFactor
+                        totalCarbs += totals.carbs * carbFactor
+                        totalFat += totals.fat * fatFactor
                     }
                 }
 

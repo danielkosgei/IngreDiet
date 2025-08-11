@@ -663,6 +663,57 @@ private fun NutritionSection(recipe: DetailedRecipe) {
             .fillMaxWidth()
             .padding(16.dp)
     ) {
+        val context = LocalContext.current
+        var isLoading by remember { mutableStateOf(true) }
+        var cals by remember { mutableStateOf(0) }
+        var prot by remember { mutableStateOf(0f) }
+        var carbs by remember { mutableStateOf(0f) }
+        var fat by remember { mutableStateOf(0f) }
+        var fiber by remember { mutableStateOf<Float?>(null) }
+        var sugar by remember { mutableStateOf<Float?>(null) }
+
+        LaunchedEffect(recipe.id) {
+            isLoading = true
+            try {
+                val repo = com.thenewkenya.ingrediet.data.repository.NutritionRepository(context)
+                fun factors(name: String, desc: String?): Triple<Float, Float, Float> {
+                    val txt = (name + " " + (desc ?: "")).lowercase()
+                    return when {
+                        txt.contains("fried") || txt.contains("fry") -> Triple(1.0f, 0.95f, 1.15f)
+                        txt.contains("roast") || txt.contains("baked") -> Triple(1.0f, 1.05f, 1.05f)
+                        txt.contains("boil") || txt.contains("simmer") -> Triple(0.95f, 1.0f, 1.0f)
+                        else -> Triple(1.0f, 1.0f, 1.0f)
+                    }
+                }
+                val (carbFactor, proteinFactor, fatFactor) = factors(recipe.name, recipe.description)
+                var sumCals = 0
+                var sumProt = 0f
+                var sumCarb = 0f
+                var sumFat = 0f
+                var sumFiber: Float? = null
+                var sumSugar: Float? = null
+
+                for (ing in recipe.ingredients) {
+                    val off = repo.getNutritionByName(ing.name) ?: continue
+                    val grams = com.thenewkenya.ingrediet.feature.recipe.UnitConversion.toGrams(ing.quantity, ing.unit, ing.name)
+                    val totals = com.thenewkenya.ingrediet.feature.recipe.NutritionMath.totalForWeight(off.per100g, grams)
+                    sumCals += totals.calories
+                    sumProt += totals.protein * proteinFactor
+                    sumCarb += totals.carbs * carbFactor
+                    sumFat += totals.fat * fatFactor
+                    totals.fiber?.let { sumFiber = (sumFiber ?: 0f) + it }
+                    totals.sugar?.let { sumSugar = (sumSugar ?: 0f) + it }
+                }
+                cals = sumCals
+                prot = sumProt
+                carbs = sumCarb
+                fat = sumFat
+                fiber = sumFiber
+                sugar = sumSugar
+            } finally {
+                isLoading = false
+            }
+        }
         // Description Card
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -698,65 +749,105 @@ private fun NutritionSection(recipe: DetailedRecipe) {
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Nutrition Grid
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            NutritionCard(
-                title = "Calories",
-                value = recipe.nutritionFacts.getFormattedCalories(),
-                unit = "kcal",
-                modifier = Modifier.weight(1f)
-            )
-            NutritionCard(
-                title = "Protein",
-                value = recipe.nutritionFacts.getFormattedProtein(),
-                unit = "g",
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            NutritionCard(
-                title = "Carbs",
-                value = recipe.nutritionFacts.getFormattedCarbs(),
-                unit = "g",
-                modifier = Modifier.weight(1f)
-            )
-            NutritionCard(
-                title = "Fat",
-                value = recipe.nutritionFacts.getFormattedFat(),
-                unit = "g",
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        // Additional nutrition info if available
-        recipe.nutritionFacts.fiber?.let { fiber ->
+        if (isLoading) {
+            // Skeleton placeholders (no zero values shown)
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(96.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(96.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(96.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(96.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    )
+                }
+            }
+        } else {
+            // Nutrition Grid
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                NutritionCard(
+                    title = "Calories",
+                    value = cals.toString(),
+                    unit = "kcal",
+                    modifier = Modifier.weight(1f)
+                )
+                NutritionCard(
+                    title = "Protein",
+                    value = "${prot.toInt()}",
+                    unit = "g",
+                    modifier = Modifier.weight(1f)
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                recipe.nutritionFacts.getFormattedFiber()?.let { fiberStr ->
-                    NutritionCard(
-                        title = "Fiber",
-                        value = fiberStr,
-                        unit = "g",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                recipe.nutritionFacts.getFormattedSugar()?.let { sugarStr ->
-                    NutritionCard(
-                        title = "Sugar",
-                        value = sugarStr,
-                        unit = "g",
-                        modifier = Modifier.weight(1f)
-                    )
+                NutritionCard(
+                    title = "Carbs",
+                    value = "${carbs.toInt()}",
+                    unit = "g",
+                    modifier = Modifier.weight(1f)
+                )
+                NutritionCard(
+                    title = "Fat",
+                    value = "${fat.toInt()}",
+                    unit = "g",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        // Additional nutrition info if available
+        if (!isLoading) fiber?.let { fiberVal ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val fiberStr = fiberVal.toInt().toString()
+                NutritionCard(
+                    title = "Fiber",
+                    value = fiberStr,
+                    unit = "g",
+                    modifier = Modifier.weight(1f)
+                )
+                sugar?.let { sVal ->
+                    val sugarStr = sVal.toInt().toString()
+                    NutritionCard(title = "Sugar", value = sugarStr, unit = "g", modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -854,56 +945,11 @@ private fun IngredientsSection(
                 )
                 
                 // Servings adjuster in the top row with clear label
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Label to make it clear what's being adjusted
-                    Text(
-                        text = "Servings:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    
-                    // Decrease servings button
-                    IconButton(
-                        onClick = { viewModel.updateServings(currentServings - 1) },
-                        enabled = currentServings > 1,
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Remove,
-                            contentDescription = "Decrease servings",
-                            modifier = Modifier.size(16.dp),
-                            tint = if (currentServings > 1) 
-                                MaterialTheme.colorScheme.primary 
-                            else 
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        )
-                    }
-                    
-                    // Current servings display
-                    Text(
-                        text = "$currentServings",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.widthIn(min = 24.dp),
-                        textAlign = TextAlign.Center
-                    )
-                    
-                    // Increase servings button
-                    IconButton(
-                        onClick = { viewModel.updateServings(currentServings + 1) },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Add,
-                            contentDescription = "Increase servings",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+                Text(
+                    text = "Servings: $servings",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             
             // Remove the standalone servings adjuster surface and keep only a small spacer
@@ -936,7 +982,7 @@ private fun IngredientsSection(
             ingredients.forEach { ingredient ->
                 val isSelected = ingredient.id in selectedIngredients
                 val originalQuantity = ingredient.quantity
-                val adjustedQuantity = originalQuantity * (currentServings.toFloat() / servings.toFloat())
+                val adjustedQuantity = originalQuantity
                 
                 IngredientItem(
                     ingredient = ingredient.copy(quantity = adjustedQuantity),

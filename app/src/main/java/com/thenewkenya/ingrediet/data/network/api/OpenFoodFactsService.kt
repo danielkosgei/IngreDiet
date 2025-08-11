@@ -20,6 +20,11 @@ class OpenFoodFactsService {
     private val json = Json { ignoreUnknownKeys = true }
     private val baseUrl = "https://world.openfoodfacts.org/api/v0"
 
+    data class OffNutritionResult(
+        val nutritionFacts: NutritionFacts,
+        val imageUrl: String?
+    )
+
     /**
      * Search for ingredients by name
      */
@@ -121,7 +126,7 @@ class OpenFoodFactsService {
     /**
      * Get nutrition facts for an ingredient by name (best search match, per 100g)
      */
-    suspend fun getNutritionFactsByName(name: String): NutritionFacts? = withContext(Dispatchers.IO) {
+    suspend fun getNutritionFactsByName(name: String): OffNutritionResult? = withContext(Dispatchers.IO) {
         try {
             val encodedQuery = URLEncoder.encode(name, "UTF-8")
             val url = URL("https://world.openfoodfacts.org/cgi/search.pl?search_terms=$encodedQuery&page_size=10&json=1")
@@ -130,9 +135,12 @@ class OpenFoodFactsService {
 
             val response = connection.inputStream.bufferedReader().use { it.readText() }
             val searchResponse = json.decodeFromString<ProductSearchResponse>(response)
-            val product = searchResponse.products.firstOrNull { it.nutriments != null } ?: return@withContext null
+            // Prefer products that have both nutriments and image
+            val product = searchResponse.products.firstOrNull { it.nutriments != null && !it.imageUrl.isNullOrBlank() }
+                ?: searchResponse.products.firstOrNull { it.nutriments != null }
+                ?: return@withContext null
             val nutriments = product.nutriments ?: return@withContext null
-            return@withContext NutritionFacts(
+            val facts = NutritionFacts(
                 calories = nutriments.energyKcal100g?.toInt() ?: 0,
                 protein = nutriments.proteins100g ?: 0f,
                 carbs = nutriments.carbohydrates100g ?: 0f,
@@ -145,6 +153,7 @@ class OpenFoodFactsService {
                 minerals = mapOf(),
                 dailyValuePercentage = mapOf()
             )
+            return@withContext OffNutritionResult(facts, product.imageUrl)
         } catch (e: Exception) {
             Log.e("OpenFoodFactsService", "Error getting nutrition facts by name: ${e.message}", e)
             return@withContext null
@@ -155,12 +164,12 @@ class OpenFoodFactsService {
 // Data Transfer Objects for Open Food Facts API
 @Serializable
 data class ProductSearchResponse(
-    val count: Int,
-    val page: Int,
-    val pageCount: Int,
-    val pageSize: Int,
-    val products: List<ProductDto>,
-    val skip: Int
+    val count: Int? = null,
+    val page: Int? = null,
+    @SerialName("page_count") val pageCount: Int? = null,
+    @SerialName("page_size") val pageSize: Int? = null,
+    val products: List<ProductDto> = emptyList(),
+    val skip: Int? = null
 )
 
 @Serializable

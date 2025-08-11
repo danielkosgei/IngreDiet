@@ -16,9 +16,33 @@ class NutritionRepository(context: Context) {
 
     private fun normalizeName(name: String): String = name
         .lowercase(Locale.getDefault())
-        .replace(Regex("[^a-z0-9\\s]"), "")
+        .replace(Regex("\\(.*?\\)"), "") // remove parentheses content
+        .replace(Regex("[^a-z0-9\\s-]"), "")
         .replace(Regex("\\s+"), " ")
         .trim()
+
+    private val synonyms: Map<String, List<String>> = mapOf(
+        "spring onion" to listOf("green onion", "scallion"),
+        "scallion" to listOf("green onion", "spring onion"),
+        "bell pepper" to listOf("capsicum"),
+        "courgette" to listOf("zucchini"),
+        "aubergine" to listOf("eggplant"),
+        "cilantro" to listOf("coriander"),
+        "garbanzo" to listOf("chickpea"),
+        "brown sugar" to listOf("sugar"),
+        "powdered sugar" to listOf("icing sugar", "confectioners sugar"),
+        "bicarbonate of soda" to listOf("baking soda"),
+        "maize flour" to listOf("corn flour", "cornmeal")
+    )
+
+    private fun candidateQueries(norm: String): List<String> {
+        val base = norm
+        val singular = if (base.endsWith("s")) base.removeSuffix("s") else base
+        val list = mutableSetOf(base, singular)
+        synonyms[base]?.let { list.addAll(it) }
+        synonyms[singular]?.let { list.addAll(it) }
+        return list.toList()
+    }
 
     // Approximate per 100g nutrition for common ingredients as a fallback
     private val fallbackPer100g: Map<String, NutritionFacts> = mapOf(
@@ -55,18 +79,19 @@ class NutritionRepository(context: Context) {
             // Check nutrition cache first
             cache.getCachedIngredientNutrition(norm)?.let { return@withContext it }
 
-            // Lookup via OpenFoodFacts by name
-            val results = off.searchIngredients(norm)
-            val best = results.firstOrNull()
-            if (best != null) {
-                val per100g = off.getNutritionFactsByName(best.name) ?: fallbackFor(norm) ?: NutritionFacts(0,0f,0f,0f)
-                val nutrition = IngredientNutrition(
-                    nameNormalized = norm,
-                    per100g = per100g,
-                    imageUrl = best.imageUrl
-                )
-                cache.cacheIngredientNutrition(norm, nutrition)
-                return@withContext nutrition
+            // Lookup via OpenFoodFacts by multiple candidate queries
+            val queries = candidateQueries(norm)
+            for (q in queries) {
+                val offResult = off.getNutritionFactsByName(q)
+                if (offResult != null) {
+                    val nutrition = IngredientNutrition(
+                        nameNormalized = norm,
+                        per100g = offResult.nutritionFacts,
+                        imageUrl = offResult.imageUrl
+                    )
+                    cache.cacheIngredientNutrition(norm, nutrition)
+                    return@withContext nutrition
+                }
             }
             // Fallback even if no OFF results
             fallbackFor(norm)?.let { fb ->

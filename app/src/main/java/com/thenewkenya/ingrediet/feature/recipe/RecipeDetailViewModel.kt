@@ -501,9 +501,9 @@ class RecipeDetailViewModel(
                 
                 val selectedIds = _selectedIngredients.value
                 val currentRecipe = recipe.value ?: return@launch
-                val currentServings = servings.value
+                val currentServings = currentRecipe.servings
                 val originalServings = currentRecipe.servings
-                val multiplier = currentServings.toFloat() / originalServings.toFloat()
+                val multiplier = 1f
 
                 var successCount = 0
                 
