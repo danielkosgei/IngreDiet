@@ -385,8 +385,9 @@ class IngreDietService(private val context: Context) {
             // Check if this is just a Flow abort exception (normal cancellation)
             if (e.message?.contains("Flow was aborted") == true || 
                 e::class.java.name.contains("AbortFlowException")) {
-                Log.d(TAG, "Random recipes flow completed normally")
-                return@flow  // Just return, don't emit or rethrow
+                Log.d(TAG, "Random recipes flow completed normally (abort)")
+                emit(emptyList())
+                return@flow
             }
             
             // Handle other exceptions based on their type

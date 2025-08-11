@@ -279,19 +279,17 @@ class RecipeRepository(context: Context) {
                 }
             }
             
-            // If no recipes found, return empty list
-            if (result.isEmpty()) {
-                Log.d("RecipeRepository", "No random recipes found, returning empty list")
-                emit(Result.success(emptyList()))
-                return@flow
-            }
-            
-            // Populate ingredients for all recipes
-            val recipesWithIngredients = populateIngredientsForRecipes(result)
-            emit(Result.success(recipesWithIngredients))
+            // Emit immediately to avoid downstream first() cancellations aborting our work
+            emit(Result.success(result))
         } catch (e: Exception) {
-            Log.e("RecipeRepository", "Error getting random recipes", e)
-            emit(Result.failure(e))
+            // Treat abort/cancellation as normal without emitting
+            if (e is kotlinx.coroutines.CancellationException ||
+                e.message?.contains("Flow was aborted") == true ||
+                e::class.java.name.contains("AbortFlowException")) {
+                throw e
+            } else {
+                Log.e("RecipeRepository", "Error getting random recipes", e)
+            }
         }
     }
 
@@ -402,10 +400,21 @@ class RecipeRepository(context: Context) {
                 
                 emit(Result.success(detailedRecipe))
             } catch (e: Exception) {
+                // Respect flow cancellation/abort
+                if (e is kotlinx.coroutines.CancellationException ||
+                    e.message?.contains("Flow was aborted") == true ||
+                    e::class.java.name.contains("AbortFlowException")) {
+                    throw e
+                }
                 Log.e("RecipeRepository", "Error parsing recipe data from database", e)
                 emit(Result.failure(e))
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException ||
+                e.message?.contains("Flow was aborted") == true ||
+                e::class.java.name.contains("AbortFlowException")) {
+                throw e
+            }
             Log.e("RecipeRepository", "Error getting recipe details", e)
             emit(Result.failure(e))
         }

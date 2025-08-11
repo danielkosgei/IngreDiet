@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package com.thenewkenya.ingrediet.feature.mealplanner
 
 import android.content.Intent
@@ -62,6 +63,18 @@ fun MealPlannerScreen(
     val generationProgress by viewModel.generationProgress.collectAsState()
     val generationStage by viewModel.generationStage.collectAsState()
     
+    // Debug logging for state changes
+    LaunchedEffect(mealPlans) {
+        android.util.Log.d("MealPlannerScreen", "MealPlans state changed: ${mealPlans.size} days")
+        mealPlans.forEach { (day, meals) ->
+            android.util.Log.d("MealPlannerScreen", "$day: ${meals.size} meals")
+        }
+    }
+    
+    LaunchedEffect(isGenerating) {
+        android.util.Log.d("MealPlannerScreen", "Generation state changed: isGenerating=$isGenerating")
+    }
+    
     // Generate dates for the weekly calendar
     val selectedDate = remember { mutableStateOf(LocalDate.now()) }
     val selectedDateValue by selectedDate
@@ -87,8 +100,11 @@ fun MealPlannerScreen(
     
 
     
+    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     Scaffold(
         containerColor = colors.background,
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { 
@@ -250,10 +266,28 @@ fun MealPlannerScreen(
                     
                     else -> {
                         // Daily meal plan
+                        val mealsForDay = mealPlans[selectedDateValue.dayOfWeek] ?: emptyList()
+                        android.util.Log.d("MealPlannerScreen", "Rendering DailyMealPlan for ${selectedDateValue.dayOfWeek}: ${mealsForDay.size} meals")
+                        mealsForDay.forEach { meal ->
+                            android.util.Log.d("MealPlannerScreen", "Meal: ${meal.time.name} - ${meal.name}")
+                        }
+                        
                         DailyMealPlan(
                             date = selectedDateValue,
-                            meals = viewModel.getMealsForDay(selectedDateValue.dayOfWeek),
-                            onDeleteMeal = { viewModel.removeMeal(it) },
+                            meals = mealsForDay,
+                            onDeleteMeal = { meal ->
+                                viewModel.removeMeal(meal.id)
+                                scope.launch {
+                                    val res = snackbarHostState.showSnackbar(
+                                        message = "Meal deleted",
+                                        actionLabel = "Undo",
+                                        duration = androidx.compose.material3.SnackbarDuration.Short
+                                    )
+                                    if (res == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                                        viewModel.addMeal(meal)
+                                    }
+                                }
+                            },
                             onAddMeal = { mealTime, name, description, calories, recipeId ->
                                 val meal = MealPlanItem(
                                     id = "${selectedDateValue.dayOfWeek}_${mealTime}_${System.currentTimeMillis()}",
@@ -279,7 +313,8 @@ fun MealPlannerScreen(
                                     navController.navigate("recipe/$recipeId")
                                 }
                             },
-                            onUpdateMeal = { updated -> viewModel.updateMeal(updated) }
+                            onUpdateMeal = { updated -> viewModel.updateMeal(updated) },
+                            onShowAddSheet = { showAddMealDialog = true }
                         )
                         // Hydration nudge between sections
                         Spacer(modifier = Modifier.height(8.dp))
@@ -451,12 +486,13 @@ fun DateItem(
 fun DailyMealPlan(
     date: LocalDate,
     meals: List<MealPlanItem>,
-    onDeleteMeal: (String) -> Unit,
+    onDeleteMeal: (MealPlanItem) -> Unit,
     onAddMeal: (mealTime: String, name: String, description: String, calories: Int, recipeId: String?) -> Unit,
     colors: ColorScheme,
     typography: Typography,
     onRecipeClick: (String?) -> Unit,
-    onUpdateMeal: (MealPlanItem) -> Unit
+    onUpdateMeal: (MealPlanItem) -> Unit,
+    onShowAddSheet: () -> Unit
 ) {
     val mealTimes = listOf("Breakfast", "Lunch", "Dinner", "Snacks")
     
@@ -478,7 +514,8 @@ fun DailyMealPlan(
             modifier = Modifier.fillMaxWidth()
         ) {
             items(mealTimes) { mealTime ->
-                val mealForTime = meals.firstOrNull { it.name == mealTime }
+                val mealForTime = meals.firstOrNull { it.time.name == mealTime }
+                android.util.Log.d("MealPlannerScreen", "Looking for $mealTime, found: ${mealForTime?.name ?: "none"}")
                 
                 MealTimeCard(
                     mealTime = mealTime,
@@ -488,7 +525,8 @@ fun DailyMealPlan(
                     colors = colors,
                     typography = typography,
                     onRecipeClick = onRecipeClick,
-                    onUpdateMeal = onUpdateMeal
+                    onUpdateMeal = onUpdateMeal,
+                    onShowAddSheet = onShowAddSheet
                 )
             }
             
@@ -503,12 +541,13 @@ fun DailyMealPlan(
 fun MealTimeCard(
     mealTime: String,
     meal: MealPlanItem?,
-    onDeleteMeal: (String) -> Unit,
+    onDeleteMeal: (MealPlanItem) -> Unit,
     onAddMeal: (mealTime: String, name: String, description: String, calories: Int, recipeId: String?) -> Unit,
     colors: ColorScheme,
     typography: Typography,
     onRecipeClick: (String?) -> Unit,
-    onUpdateMeal: (MealPlanItem) -> Unit
+    onUpdateMeal: (MealPlanItem) -> Unit,
+    onShowAddSheet: () -> Unit
 ) {
     val mealTimeIcon = when(mealTime) {
         "Breakfast" -> Icons.Default.FreeBreakfast
@@ -519,6 +558,55 @@ fun MealTimeCard(
     
     var showAddMealDialog by remember { mutableStateOf(false) }
     
+    // Swipe to edit/delete for manual meals
+    @OptIn(ExperimentalMaterial3Api::class)
+    val canSwipe = meal != null
+    if (canSwipe && meal != null) {
+        var showEdit by remember { mutableStateOf(false) }
+        val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(confirmValueChange = { value ->
+            when (value) {
+                androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> {
+                    onDeleteMeal(meal)
+                    true
+                }
+                androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> {
+                    showEdit = true
+                    false
+                }
+                else -> false
+            }
+        })
+        androidx.compose.material3.SwipeToDismissBox(
+            state = dismissState,
+            backgroundContent = {},
+            enableDismissFromStartToEnd = true,
+            enableDismissFromEndToStart = true
+        ) {
+            MealCardContent(mealTime, meal, onDeleteMeal, onAddMeal, colors, typography, onRecipeClick, onUpdateMeal, onShowAddSheet)
+        }
+        if (showEdit) {
+            EditMealBottomSheet(meal = meal, colors = colors, typography = typography, onDismiss = { showEdit = false }) { updated ->
+                onUpdateMeal(updated)
+                showEdit = false
+            }
+        }
+    } else {
+        MealCardContent(mealTime, meal, onDeleteMeal, onAddMeal, colors, typography, onRecipeClick, onUpdateMeal, onShowAddSheet)
+    }
+}
+
+@Composable
+private fun MealCardContent(
+    mealTime: String,
+    meal: MealPlanItem?,
+    onDeleteMeal: (MealPlanItem) -> Unit,
+    onAddMeal: (mealTime: String, name: String, description: String, calories: Int, recipeId: String?) -> Unit,
+    colors: ColorScheme,
+    typography: Typography,
+    onRecipeClick: (String?) -> Unit,
+    onUpdateMeal: (MealPlanItem) -> Unit,
+    onShowAddSheet: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -557,8 +645,14 @@ fun MealTimeCard(
                         .background(colors.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
+                    val icon = when(mealTime) {
+                        "Breakfast" -> Icons.Default.FreeBreakfast
+                        "Lunch" -> Icons.Default.LunchDining
+                        "Dinner" -> Icons.Default.DinnerDining
+                        else -> Icons.Default.Restaurant
+                    }
                     Icon(
-                        imageVector = mealTimeIcon,
+                        imageVector = icon,
                         contentDescription = mealTime,
                         tint = colors.onPrimaryContainer,
                         modifier = Modifier.size(24.dp)
@@ -631,7 +725,7 @@ fun MealTimeCard(
                                 }
                             }
                         }
-                        IconButton(onClick = { meal.id.let { onDeleteMeal(it) } }) {
+                        IconButton(onClick = { onDeleteMeal(meal) }) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = "Delete meal",
@@ -640,7 +734,7 @@ fun MealTimeCard(
                         }
                     } else {
                         TextButton(
-                            onClick = { showAddMealDialog = true },
+                            onClick = onShowAddSheet,
                             colors = ButtonDefaults.textButtonColors(
                                 contentColor = colors.primary
                             )
@@ -653,16 +747,6 @@ fun MealTimeCard(
         }
     }
     
-    if (showAddMealDialog) {
-        AddCustomMealDialog(
-            mealTime = mealTime,
-            onDismiss = { showAddMealDialog = false },
-            onAddMeal = { name, description, calories, recipeId ->
-                onAddMeal(mealTime, name, description, calories, recipeId)
-                showAddMealDialog = false
-            }
-        )
-    }
 }
 
 @Composable

@@ -648,7 +648,7 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                 }
 
                 val computed = NutritionSummary(
-                    calories = totalCalories,
+            calories = totalCalories,
                     protein = totalProtein.toInt(),
                     carbs = totalCarbs.toInt(),
                     fat = totalFat.toInt()
@@ -1213,37 +1213,70 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
             try {
                 _isGenerating.value = true
                 _error.value = null
-                _generationProgress.value = 0f
-                _generationStage.value = "Preparing meal plan generation..."
+                _generationProgress.value = 0.5f
+                _generationStage.value = "Generating your meal plan..."
                 
-                // Short delay to show initial stage
-                kotlinx.coroutines.delay(300)
+                android.util.Log.d("MealPlannerViewModel", "Starting meal plan generation with calories=$calorieTarget, diet=$dietType, allergies=$allergies")
                 
-                _generationStage.value = "Fetching candidate recipes..."
-                _generationProgress.value = 0.2f
+                // Generate the plan
+                val plan = buildNutritionAwareMealPlan(calorieTarget, dietType, allergies)
+                android.util.Log.d("MealPlannerViewModel", "Plan generation completed. Plan size: ${plan.size}")
+                android.util.Log.d("MealPlannerViewModel", "Plan contents: ${plan.mapValues { it.value.size }}")
                 
-                // Build a nutrition-aware plan using OFF per-ingredient values
-                _generationStage.value = "Computing nutrition-aware plan..."
-                _generationProgress.value = 0.4f
-                val plan = withTimeoutOrNull(35000) {
-                    buildNutritionAwareMealPlan(calorieTarget, dietType, allergies)
-                } ?: throw MealPlanTimeoutException("Nutrition-aware generation timed out")
+                // Check if we got a valid plan
+                val hasContent = plan.values.any { it.isNotEmpty() }
+                android.util.Log.d("MealPlannerViewModel", "Plan has content: $hasContent")
                 
-                _generationStage.value = "Finalizing..."
-                _generationProgress.value = 0.7f
-                
-                _mealPlans.value = plan
-                
-                // Compute daily nutrition summaries with our existing aggregator
-                DayOfWeek.values().forEach { updateNutritionSummary(it) }
+                if (hasContent) {
+                    android.util.Log.d("MealPlannerViewModel", "Successfully generated plan with ${plan.values.sumOf { it.size }} meals")
+                    android.util.Log.d("MealPlannerViewModel", "Setting mealPlans state...")
+                    _mealPlans.value = plan
+                    android.util.Log.d("MealPlannerViewModel", "MealPlans state updated. Current value size: ${_mealPlans.value.size}")
+                    
+                    // Save locally and to server
+                    try { 
+                        LocalMealPlanStore.save(appContext, plan)
+                        android.util.Log.d("MealPlannerViewModel", "Saved plan locally")
+                    } catch (e: Exception) {
+                        android.util.Log.w("MealPlannerViewModel", "Failed to save locally: ${e.message}")
+                    }
+                    
+                    viewModelScope.launch {
+                        try { 
+                            mealPlanRepository.saveUserMealPlans(plan).collect { }
+                            android.util.Log.d("MealPlannerViewModel", "Saved plan to server")
+                        } catch (e: Exception) {
+                            android.util.Log.w("MealPlannerViewModel", "Failed to save to server: ${e.message}")
+                        }
+                    }
+                    
+                    // Update nutrition for all days
+                    android.util.Log.d("MealPlannerViewModel", "Updating nutrition summaries...")
+                    DayOfWeek.values().forEach { updateNutritionSummary(it) }
+                    android.util.Log.d("MealPlannerViewModel", "Nutrition summaries updated")
+                } else {
+                    android.util.Log.w("MealPlannerViewModel", "Generated plan was empty, using fallback")
+                    android.util.Log.d("MealPlannerViewModel", "Creating offline fallback plan...")
+                    val fallback = createOfflineMealPlan(calorieTarget, dietType)
+                    android.util.Log.d("MealPlannerViewModel", "Fallback plan created with ${fallback.values.sumOf { it.size }} meals")
+                    _mealPlans.value = fallback
+                    
+                    try { LocalMealPlanStore.save(appContext, fallback) } catch (_: Exception) {}
+                    viewModelScope.launch {
+                        try { mealPlanRepository.saveUserMealPlans(fallback).collect { } } catch (_: Exception) {}
+                    }
+                    DayOfWeek.values().forEach { updateNutritionSummary(it) }
+                }
                 
                 _generationProgress.value = 1f
-                _generationStage.value = "Done"
+                _generationStage.value = "Complete!"
+                android.util.Log.d("MealPlannerViewModel", "Meal plan generation finished successfully")
             } catch (e: Exception) {
-                _error.value = e.message ?: "Failed to generate meal plan"
-                android.util.Log.e("MealPlannerViewModel", "generateMealPlan failed: ${e.message}", e)
+                android.util.Log.e("MealPlannerViewModel", "Meal plan generation failed: ${e.message}", e)
+                _error.value = "Failed to generate meal plan: ${e.message}"
             } finally {
                 _isGenerating.value = false
+                kotlinx.coroutines.delay(1000) // Show "Complete!" for a moment
                 _generationStage.value = null
                 _generationProgress.value = 0f
             }
@@ -1255,212 +1288,214 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
         dietType: String,
         allergies: List<String>
     ): Map<DayOfWeek, List<MealPlanItem>> {
-        val nutritionRepo = com.thenewkenya.ingrediet.data.repository.NutritionRepository(appContext)
-        val pool = mutableListOf<com.thenewkenya.ingrediet.data.model.DetailedRecipe>()
-
-        // Fetch a broader pool of recipes based on diet and allergy exclusions
-        val baseQuery = buildString {
-            append(dietType)
-            allergies.forEach { append(" -$it") }
-        }.trim()
+        android.util.Log.d("MealPlannerViewModel", "Starting simple meal plan generation...")
+        android.util.Log.d("MealPlannerViewModel", "Parameters: calorieTarget=$calorieTarget, dietType='$dietType', allergies=$allergies")
+        
+        // Step 1: Get recipes - try random first, it's most reliable
+        val allRecipes = mutableListOf<com.thenewkenya.ingrediet.data.model.DetailedRecipe>()
+        
         try {
-            val results = repository.searchRecipes(if (baseQuery.isBlank()) null else baseQuery, limit = 40).first()
-            results.onSuccess { pool.addAll(it) }
-        } catch (_: Exception) { /* ignore */ }
-        if (pool.isEmpty()) {
-            // Fallback to random recipes
-            try {
-                repository.getRandomRecipes(40).first().onSuccess { pool.addAll(it) }
-            } catch (_: Exception) {}
-        }
-
-        // Filter by diet type and allergies at ingredient level
-        val filtered = pool.filter { recipe ->
-            respectsDiet(recipe, dietType) &&
-            respectsAllergies(recipe, allergies)
-        }
-        if (filtered.isEmpty()) return emptyMap()
-
-        // Compute per-recipe calories using OFF ingredient values
-        data class Scored(val recipe: com.thenewkenya.ingrediet.data.model.DetailedRecipe, val calories: Int)
-        val scored = mutableListOf<Scored>()
-        for (r in filtered) {
-            var sumCals = 0
-            for (ing in r.ingredients) {
-                val nut = nutritionRepo.getNutritionByName(ing.name) ?: continue
-                val grams = com.thenewkenya.ingrediet.feature.recipe.UnitConversion.toGrams(ing.quantity, ing.unit, ing.name)
-                val totals = com.thenewkenya.ingrediet.feature.recipe.NutritionMath.totalForWeight(nut.per100g, grams)
-                sumCals += totals.calories
-            }
-            if (sumCals > 0) scored.add(Scored(r, sumCals))
-        }
-        if (scored.isEmpty()) return emptyMap()
-
-        // Slot targets
-        val breakfastTarget = (calorieTarget * 0.25).toInt()
-        val lunchTarget = (calorieTarget * 0.35).toInt()
-        val dinnerTarget = (calorieTarget * 0.30).toInt()
-        val snackTarget = (calorieTarget * 0.10).toInt()
-
-        // Helper to pick closest recipe to a target, avoiding recent repeats
-        val recent = ArrayDeque<String>()
-        fun pickClosest(target: Int): Scored? {
-            return scored
-                .filter { it.recipe.id !in recent }
-                .minByOrNull { kotlin.math.abs(it.calories - target) }
-                ?.also {
-                    recent.addLast(it.recipe.id)
-                    if (recent.size > 12) recent.removeFirst()
+            android.util.Log.d("MealPlannerViewModel", "Fetching random recipes...")
+            val randomResult = repository.getRandomRecipes(50).first()
+            android.util.Log.d("MealPlannerViewModel", "Random result type: ${randomResult.javaClass.simpleName}")
+            randomResult.onSuccess { recipes ->
+                allRecipes.addAll(recipes)
+                android.util.Log.d("MealPlannerViewModel", "Got ${recipes.size} random recipes")
+                recipes.take(5).forEach { recipe ->
+                    android.util.Log.d("MealPlannerViewModel", "Sample recipe: ${recipe.name} (id=${recipe.id})")
                 }
+            }
+            randomResult.onFailure { error ->
+                android.util.Log.e("MealPlannerViewModel", "Random recipes failed: ${error.message}", error)
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MealPlannerViewModel", "Random recipes failed: ${e.message}")
+            android.util.Log.w("MealPlannerViewModel", "Exception details:", e)
         }
-
+        
+        // If we have no recipes, return empty plan (will trigger fallback)
+        if (allRecipes.isEmpty()) {
+            android.util.Log.w("MealPlannerViewModel", "No recipes available, returning empty plan")
+            return emptyMap()
+        }
+        
+        android.util.Log.d("MealPlannerViewModel", "Total recipes fetched: ${allRecipes.size}")
+        
+        // Step 2: Simple filtering - only exclude obvious mismatches
+        android.util.Log.d("MealPlannerViewModel", "Starting filtering with dietType='$dietType', allergies=$allergies")
+        val usableRecipes = allRecipes.filter { recipe ->
+            // Basic diet filtering - only strict exclusions
+            val dietOk = when (dietType.lowercase()) {
+                "vegan" -> {
+                    val nonVegan = listOf("chicken", "beef", "pork", "fish", "egg", "milk", "cheese", "butter")
+                    val isVeganOk = !recipe.name.lowercase().let { name -> nonVegan.any { name.contains(it) } }
+                    if (!isVeganOk) {
+                        android.util.Log.d("MealPlannerViewModel", "Filtered out non-vegan recipe: ${recipe.name}")
+                    }
+                    isVeganOk
+                }
+                "vegetarian" -> {
+                    val nonVeg = listOf("chicken", "beef", "pork", "fish", "meat")
+                    val isVegOk = !recipe.name.lowercase().let { name -> nonVeg.any { name.contains(it) } }
+                    if (!isVegOk) {
+                        android.util.Log.d("MealPlannerViewModel", "Filtered out non-vegetarian recipe: ${recipe.name}")
+                    }
+                    isVegOk
+                }
+                else -> {
+                    android.util.Log.d("MealPlannerViewModel", "Diet '$dietType' - allowing all recipes")
+                    true // Allow everything for other diets
+                }
+            }
+            
+            // Basic allergy filtering - only common allergens
+            val allergyOk = if (allergies.isEmpty()) {
+                android.util.Log.d("MealPlannerViewModel", "No allergies specified - allowing all recipes")
+                true
+            } else {
+                android.util.Log.d("MealPlannerViewModel", "Checking allergies for recipe: ${recipe.name}")
+                val recipeName = recipe.name.lowercase()
+                val hasAllergy = allergies.any { allergy ->
+                    when (allergy.lowercase()) {
+                        "nuts", "peanuts" -> recipeName.contains("nut") || recipeName.contains("peanut")
+                        "dairy" -> recipeName.contains("milk") || recipeName.contains("cheese")
+                        "gluten" -> recipeName.contains("wheat") || recipeName.contains("bread")
+                        else -> recipeName.contains(allergy.lowercase())
+                    }
+                }
+                if (hasAllergy) {
+                    android.util.Log.d("MealPlannerViewModel", "Filtered out recipe due to allergy: ${recipe.name}")
+                }
+                !hasAllergy
+            }
+            
+            val keep = dietOk && allergyOk
+            if (!keep) {
+                android.util.Log.d("MealPlannerViewModel", "Recipe ${recipe.name} filtered out: dietOk=$dietOk, allergyOk=$allergyOk")
+            }
+            dietOk && allergyOk
+        }
+        
+        val finalRecipes = if (usableRecipes.isNotEmpty()) usableRecipes else allRecipes
+        android.util.Log.d("MealPlannerViewModel", "Using ${finalRecipes.size} recipes after filtering")
+        android.util.Log.d("MealPlannerViewModel", "Filtered recipes count: usable=${usableRecipes.size}, final=${finalRecipes.size}")
+        
+        // Step 3: Build the plan - simple assignment
+        android.util.Log.d("MealPlannerViewModel", "Starting plan building...")
         val plan = mutableMapOf<DayOfWeek, List<MealPlanItem>>()
+        val shuffledRecipes = finalRecipes.shuffled()
+        android.util.Log.d("MealPlannerViewModel", "Shuffled ${shuffledRecipes.size} recipes")
+        var recipeIndex = 0
+        
+        // Calculate target calories per meal
+        val breakfastCals = (calorieTarget * 0.25).toInt()
+        val lunchCals = (calorieTarget * 0.35).toInt()
+        val dinnerCals = (calorieTarget * 0.30).toInt()
+        val snackCals = (calorieTarget * 0.10).toInt()
+        android.util.Log.d("MealPlannerViewModel", "Calorie targets: B=$breakfastCals, L=$lunchCals, D=$dinnerCals, S=$snackCals")
+        
         DayOfWeek.values().forEach { day ->
-            val dayItems = mutableListOf<MealPlanItem>()
-            val b = pickClosest(breakfastTarget)
-            val l = pickClosest(lunchTarget)
-            val d = pickClosest(dinnerTarget)
-            // Optional snack if available and useful
-            val s = pickClosest(snackTarget)
-
-            if (b != null) dayItems.add(
-                MealPlanItem(
-                    id = "${b.recipe.id}-B-$day",
-                    name = b.recipe.name,
-                    calories = b.calories,
-                    day = day,
-                    time = MealTime.Breakfast,
-                    description = b.recipe.description,
-                    recipeId = b.recipe.id,
-                    imageUrl = b.recipe.imageUrl
-                )
-            )
-            if (l != null) dayItems.add(
-                MealPlanItem(
-                    id = "${l.recipe.id}-L-$day",
-                    name = l.recipe.name,
-                    calories = l.calories,
-                    day = day,
-                    time = MealTime.Lunch,
-                    description = l.recipe.description,
-                    recipeId = l.recipe.id,
-                    imageUrl = l.recipe.imageUrl
-                )
-            )
-            if (d != null) dayItems.add(
-                MealPlanItem(
-                    id = "${d.recipe.id}-D-$day",
-                    name = d.recipe.name,
-                    calories = d.calories,
-                    day = day,
-                    time = MealTime.Dinner,
-                    description = d.recipe.description,
-                    recipeId = d.recipe.id,
-                    imageUrl = d.recipe.imageUrl
-                )
-            )
-            s?.let {
-                dayItems.add(
+            android.util.Log.d("MealPlannerViewModel", "Building meals for $day")
+            val dayMeals = mutableListOf<MealPlanItem>()
+            
+            // Get next recipe for each meal, cycling through if needed
+            fun getNextRecipe(): com.thenewkenya.ingrediet.data.model.DetailedRecipe? {
+                if (shuffledRecipes.isEmpty()) {
+                    android.util.Log.w("MealPlannerViewModel", "No shuffled recipes available for $day")
+                    return null
+                }
+                val recipe = shuffledRecipes[recipeIndex % shuffledRecipes.size]
+                android.util.Log.d("MealPlannerViewModel", "Selected recipe #$recipeIndex: ${recipe.name}")
+                recipeIndex++
+                return recipe
+            }
+            
+            // Breakfast
+            getNextRecipe()?.let { recipe ->
+                android.util.Log.d("MealPlannerViewModel", "Adding breakfast for $day: ${recipe.name}")
+                dayMeals.add(
                     MealPlanItem(
-                        id = "${it.recipe.id}-S-$day",
-                        name = it.recipe.name,
-                        calories = it.calories,
+                        id = "${recipe.id}-B-$day",
+                        name = recipe.name,
+                        calories = breakfastCals, // Use target calories for consistency
                         day = day,
-                        time = MealTime.Snacks,
-                        description = it.recipe.description,
-                        recipeId = it.recipe.id,
-                        imageUrl = it.recipe.imageUrl
+                        time = MealTime.Breakfast,
+                        description = recipe.description,
+                        recipeId = recipe.id,
+                        imageUrl = recipe.imageUrl
                     )
                 )
+            } ?: android.util.Log.w("MealPlannerViewModel", "No recipe available for breakfast on $day")
+            
+            // Lunch
+            getNextRecipe()?.let { recipe ->
+                android.util.Log.d("MealPlannerViewModel", "Adding lunch for $day: ${recipe.name}")
+                dayMeals.add(
+                    MealPlanItem(
+                        id = "${recipe.id}-L-$day",
+                        name = recipe.name,
+                        calories = lunchCals,
+                        day = day,
+                        time = MealTime.Lunch,
+                        description = recipe.description,
+                        recipeId = recipe.id,
+                        imageUrl = recipe.imageUrl
+                    )
+                )
+            } ?: android.util.Log.w("MealPlannerViewModel", "No recipe available for lunch on $day")
+            
+            // Dinner
+            getNextRecipe()?.let { recipe ->
+                android.util.Log.d("MealPlannerViewModel", "Adding dinner for $day: ${recipe.name}")
+                dayMeals.add(
+                    MealPlanItem(
+                        id = "${recipe.id}-D-$day",
+                        name = recipe.name,
+                        calories = dinnerCals,
+                        day = day,
+                        time = MealTime.Dinner,
+                        description = recipe.description,
+                        recipeId = recipe.id,
+                        imageUrl = recipe.imageUrl
+                    )
+                )
+            } ?: android.util.Log.w("MealPlannerViewModel", "No recipe available for dinner on $day")
+            
+            // Snack (optional)
+            if (finalRecipes.size > 21) { // Only add snacks if we have enough variety
+                android.util.Log.d("MealPlannerViewModel", "Adding snack for $day (enough recipes available)")
+                getNextRecipe()?.let { recipe ->
+                    android.util.Log.d("MealPlannerViewModel", "Adding snack for $day: ${recipe.name}")
+                    dayMeals.add(
+                        MealPlanItem(
+                            id = "${recipe.id}-S-$day",
+                            name = recipe.name,
+                            calories = snackCals,
+                            day = day,
+                            time = MealTime.Snacks,
+                            description = recipe.description,
+                            recipeId = recipe.id,
+                            imageUrl = recipe.imageUrl
+                        )
+                    )
+                }
+            } else {
+                android.util.Log.d("MealPlannerViewModel", "Skipping snack for $day (not enough recipe variety: ${finalRecipes.size})")
             }
-            plan[day] = dayItems
+            
+            android.util.Log.d("MealPlannerViewModel", "Day $day completed with ${dayMeals.size} meals")
+            plan[day] = dayMeals
         }
+        
+        val totalMeals = plan.values.sumOf { it.size }
+        android.util.Log.d("MealPlannerViewModel", "Generated plan with ${totalMeals} total meals across ${plan.size} days")
+        
+        // Log plan summary
+        plan.forEach { (day, meals) ->
+            android.util.Log.d("MealPlannerViewModel", "$day: ${meals.size} meals - ${meals.joinToString { "${it.time.name}:${it.name}" }}")
+        }
+        
         return plan
-    }
-
-    private fun respectsAllergies(recipe: com.thenewkenya.ingrediet.data.model.DetailedRecipe, allergies: List<String>): Boolean {
-        if (allergies.isEmpty()) return true
-
-        // Allergen keyword sets (word-boundary matched where meaningful)
-        val allergenKeywords: Map<String, Set<String>> = mapOf(
-            "gluten" to setOf(
-                "gluten","wheat","barley","rye","malt","semolina","spelt","farro","bulgur","couscous","seitan"
-            ),
-            "wheat" to setOf("wheat","semolina","spelt","farro","bulgur","couscous","seitan"),
-            "nuts" to setOf(
-                "nut","almond","walnut","pecan","cashew","hazelnut","pistachio","macadamia","brazil nut","pine nut"
-            ),
-            "peanut" to setOf("peanut","groundnut"),
-            "dairy" to setOf("milk","cheese","butter","yogurt","cream","ghee","whey","casein"),
-            "egg" to setOf("egg","albumen","mayonnaise"),
-            "soy" to setOf("soy","soya","soybean","tofu","edamame","tamari","miso"),
-            "fish" to setOf("fish","salmon","tuna","cod","trout","sardine","anchovy","haddock"),
-            "shellfish" to setOf("shrimp","prawn","crab","lobster","clam","mussel","oyster","scallop"),
-            "sesame" to setOf("sesame","tahini","benne")
-        )
-
-        fun containsAnyWord(text: String, words: Set<String>): Boolean {
-            val t = text.lowercase()
-            for (w in words) {
-                // Special case: avoid matching egg in "eggplant"
-                if (w == "egg") {
-                    val regex = Regex("\\begg(?!plant)\\b")
-                    if (regex.containsMatchIn(t)) return true
-                    continue
-                }
-                val escaped = Regex.escape(w)
-                val regex = Regex("\\b$escaped\\b")
-                if (regex.containsMatchIn(t)) return true
-            }
-            return false
-        }
-
-        // For each ingredient, check against requested allergies
-        for (ing in recipe.ingredients) {
-            val name = ing.name
-            for (requested in allergies.map { it.lowercase() }) {
-                val keywords = allergenKeywords[requested]
-                if (keywords != null) {
-                    if (containsAnyWord(name, keywords)) return false
-                } else {
-                    // Unknown allergy term: fall back to substring match
-                    if (name.lowercase().contains(requested)) return false
-                }
-            }
-        }
-        return true
-    }
-
-    private fun respectsDiet(recipe: com.thenewkenya.ingrediet.data.model.DetailedRecipe, dietType: String): Boolean {
-        val d = dietType.lowercase()
-        if (d.contains("vegan")) {
-            val banned = listOf("beef","chicken","pork","fish","seafood","egg","milk","cheese","yogurt","butter","honey")
-            return recipe.ingredients.none { ing -> banned.any { ing.name.lowercase().contains(it) } }
-        }
-        if (d.contains("vegetarian")) {
-            val banned = listOf("beef","chicken","pork","fish","seafood")
-            return recipe.ingredients.none { ing -> banned.any { ing.name.lowercase().contains(it) } }
-        }
-        if (d.contains("low-carb")) {
-            // Roughly exclude very high-carb staples
-            val avoid = listOf("sugar","rice","bread","pasta","flour","potato")
-            val count = recipe.ingredients.count { ing -> avoid.any { ing.name.lowercase().contains(it) } }
-            return count <= 1
-        }
-        if (d.contains("halal")) {
-            // Exclude clear non-halal items: pork and alcohol derivatives, gelatin, lard
-            val nonHalal = setOf(
-                "pork","bacon","ham","prosciutto","pepperoni","chorizo","salami","pancetta","speck","lard",
-                "gelatin","gelatine",
-                "wine","beer","ale","lager","stout","cider","brandy","rum","gin","vodka","whiskey","whisky","liqueur"
-            )
-            fun containsAny(text: String, words: Set<String>) = words.any { text.contains(it) }
-            return recipe.ingredients.none { ing -> containsAny(ing.name.lowercase(), nonHalal) } &&
-                   !(recipe.description?.lowercase()?.let { containsAny(it, nonHalal) } ?: false) &&
-                   !containsAny(recipe.name.lowercase(), nonHalal)
-        }
-        // Balanced / High-protein: allow all
-        return true
     }
 
     /**
@@ -1500,7 +1535,7 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
 
     /**
      * Loads only existing meal plans without auto-generating new ones.
-     * Used by the home screen to avoid showing meal plans that weren't explicitly generated.
+     * Used by the home screen to avoid showing meal plans that weren’t explicitly generated.
      */
     fun loadExistingMealPlansOnly() {
         viewModelScope.launch {
