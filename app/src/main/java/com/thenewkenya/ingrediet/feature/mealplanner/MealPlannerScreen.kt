@@ -278,7 +278,8 @@ fun MealPlannerScreen(
                                 if (recipeId != null) {
                                     navController.navigate("recipe/$recipeId")
                                 }
-                            }
+                            },
+                            onUpdateMeal = { updated -> viewModel.updateMeal(updated) }
                         )
                         // Hydration nudge between sections
                         Spacer(modifier = Modifier.height(8.dp))
@@ -454,7 +455,8 @@ fun DailyMealPlan(
     onAddMeal: (mealTime: String, name: String, description: String, calories: Int, recipeId: String?) -> Unit,
     colors: ColorScheme,
     typography: Typography,
-    onRecipeClick: (String?) -> Unit
+    onRecipeClick: (String?) -> Unit,
+    onUpdateMeal: (MealPlanItem) -> Unit
 ) {
     val mealTimes = listOf("Breakfast", "Lunch", "Dinner", "Snacks")
     
@@ -485,7 +487,8 @@ fun DailyMealPlan(
                     onAddMeal = onAddMeal,
                     colors = colors,
                     typography = typography,
-                    onRecipeClick = onRecipeClick
+                    onRecipeClick = onRecipeClick,
+                    onUpdateMeal = onUpdateMeal
                 )
             }
             
@@ -504,7 +507,8 @@ fun MealTimeCard(
     onAddMeal: (mealTime: String, name: String, description: String, calories: Int, recipeId: String?) -> Unit,
     colors: ColorScheme,
     typography: Typography,
-    onRecipeClick: (String?) -> Unit
+    onRecipeClick: (String?) -> Unit,
+    onUpdateMeal: (MealPlanItem) -> Unit
 ) {
     val mealTimeIcon = when(mealTime) {
         "Breakfast" -> Icons.Default.FreeBreakfast
@@ -567,11 +571,16 @@ fun MealTimeCard(
                 Column(
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(
-                        text = mealTime,
-                        style = typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-                        color = colors.onSurface
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = mealTime,
+                            style = typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                            color = colors.onSurface
+                        )
+                        if (meal != null && meal.recipeId == null) {
+                            Text("added by me", style = typography.labelSmall, color = colors.primary)
+                        }
+                    }
                     
                     if (meal != null) {
                         Spacer(modifier = Modifier.height(4.dp))
@@ -609,6 +618,19 @@ fun MealTimeCard(
                     }
                     
                     if (meal != null) {
+                        if (meal.recipeId == null) {
+                            // manual meal: show edit
+                            var showEdit by remember { mutableStateOf(false) }
+                            IconButton(onClick = { showEdit = true }) {
+                                Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit", tint = colors.primary)
+                            }
+                            if (showEdit) {
+                                EditMealBottomSheet(meal = meal, colors = colors, typography = typography, onDismiss = { showEdit = false }) { updated ->
+                                    onUpdateMeal(updated)
+                                    showEdit = false
+                                }
+                            }
+                        }
                         IconButton(onClick = { meal.id.let { onDeleteMeal(it) } }) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
@@ -1197,7 +1219,7 @@ private fun AddCustomMealBottomSheet(
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var caloriesText by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = { BottomSheetDefaults.DragHandle() }) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = { androidx.compose.material3.BottomSheetDefaults.DragHandle() }) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Add custom meal", style = typography.titleLarge.copy(fontWeight = FontWeight.Bold))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1214,6 +1236,46 @@ private fun AddCustomMealBottomSheet(
                     val cal = caloriesText.toIntOrNull() ?: 0
                     onAdd(selectedTime, name, description, cal)
                 }, enabled = name.isNotBlank() && (caloriesText.toIntOrNull() ?: 0) > 0, modifier = Modifier.weight(1f)) { Text("Add") }
+            }
+        }
+    }
+} 
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditMealBottomSheet(
+    meal: MealPlanItem,
+    colors: ColorScheme,
+    typography: Typography,
+    onDismiss: () -> Unit,
+    onSave: (MealPlanItem) -> Unit
+) {
+    var name by remember { mutableStateOf(meal.description ?: meal.name) }
+    var description by remember { mutableStateOf(meal.description ?: "") }
+    var caloriesText by remember { mutableStateOf(meal.calories.toString()) }
+    var time by remember { mutableStateOf(meal.time) }
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = { androidx.compose.material3.BottomSheetDefaults.DragHandle() }) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Edit meal", style = typography.titleLarge.copy(fontWeight = FontWeight.Bold))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(MealTime.Breakfast, MealTime.Lunch, MealTime.Dinner, MealTime.Snacks).forEach { t ->
+                    FilterChip(selected = time == t, onClick = { time = t }, label = { Text(t.name) })
+                }
+            }
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Meal name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description (optional)") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = caloriesText, onValueChange = { if (it.all { c -> c.isDigit() } || it.isEmpty()) caloriesText = it }, label = { Text("Calories") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
+                Button(onClick = {
+                    val updated = meal.copy(
+                        name = when(time){ MealTime.Breakfast->"Breakfast"; MealTime.Lunch->"Lunch"; MealTime.Dinner->"Dinner"; MealTime.Snacks->"Snacks" },
+                        time = time,
+                        description = description.ifEmpty { name },
+                        calories = caloriesText.toIntOrNull() ?: meal.calories
+                    )
+                    onSave(updated)
+                }, enabled = name.isNotBlank() && (caloriesText.toIntOrNull() ?: 0) > 0, modifier = Modifier.weight(1f)) { Text("Save") }
             }
         }
     }
