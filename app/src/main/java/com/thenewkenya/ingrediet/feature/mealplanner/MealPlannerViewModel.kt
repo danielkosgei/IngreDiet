@@ -29,6 +29,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CancellationException
 import com.thenewkenya.ingrediet.data.mealplan.MealPlanGenerator
+import java.time.LocalDateTime
+import java.util.UUID
 
 // Add the MealTime enum
 enum class MealTime {
@@ -56,6 +58,14 @@ data class NutritionSummary(
     val fat: Int      // grams
 )
 
+data class LoggedMeal(
+    val id: String = UUID.randomUUID().toString(),
+    val loggedAt: LocalDateTime = LocalDateTime.now(),
+    val labels: List<String>,
+    val portionGrams: Int,
+    val nutrition: NutritionSummary
+)
+
 // Add a custom exception class
 class MealPlanTimeoutException(message: String) : Exception(message)
 
@@ -76,6 +86,8 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
     
     private val _dailyNutrition = MutableStateFlow<Map<DayOfWeek, NutritionSummary>>(emptyMap())
     val dailyNutrition: StateFlow<Map<DayOfWeek, NutritionSummary>> = _dailyNutrition.asStateFlow()
+    private val _loggedMeals = MutableStateFlow<List<LoggedMeal>>(emptyList())
+    val loggedMeals: StateFlow<List<LoggedMeal>> = _loggedMeals.asStateFlow()
     
     // Loading and error states
     private val _isLoading = MutableStateFlow(false)
@@ -1166,6 +1178,77 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
         return Pair(text, fileName)
     }
 
+    fun logScannedMeal(nutrition: NutritionSummary, day: DayOfWeek = LocalDate.now().dayOfWeek) {
+        val current = _dailyNutrition.value.toMutableMap()
+        val existing = current[day]
+        val updated = if (existing != null) {
+            NutritionSummary(
+                calories = existing.calories + nutrition.calories,
+                protein = existing.protein + nutrition.protein,
+                carbs = existing.carbs + nutrition.carbs,
+                fat = existing.fat + nutrition.fat
+            )
+        } else nutrition
+        current[day] = updated
+        _dailyNutrition.value = current
+    }
+
+    fun addLoggedMeal(entry: LoggedMeal) {
+        _loggedMeals.value = _loggedMeals.value + entry
+    }
+
+    fun getLoggedMealsForDay(day: DayOfWeek): List<LoggedMeal> =
+        _loggedMeals.value.filter { it.loggedAt.toLocalDate().dayOfWeek == day }
+
+    fun updateLoggedMealPortion(id: String, newPortionGrams: Int) {
+        if (newPortionGrams <= 0) return
+        val currentList = _loggedMeals.value.toMutableList()
+        val index = currentList.indexOfFirst { it.id == id }
+        if (index == -1) return
+        val old = currentList[index]
+        val factor = (newPortionGrams.toFloat() / old.portionGrams.toFloat()).coerceAtLeast(0f)
+        val newNutrition = NutritionSummary(
+            calories = (old.nutrition.calories * factor).toInt(),
+            protein = (old.nutrition.protein * factor).toInt(),
+            carbs = (old.nutrition.carbs * factor).toInt(),
+            fat = (old.nutrition.fat * factor).toInt()
+        )
+        currentList[index] = old.copy(portionGrams = newPortionGrams, nutrition = newNutrition)
+        _loggedMeals.value = currentList
+
+        val day = old.loggedAt.toLocalDate().dayOfWeek
+        val current = _dailyNutrition.value.toMutableMap()
+        val existing = current[day] ?: NutritionSummary(0, 0, 0, 0)
+        val adjusted = NutritionSummary(
+            calories = (existing.calories - old.nutrition.calories + newNutrition.calories).coerceAtLeast(0),
+            protein = (existing.protein - old.nutrition.protein + newNutrition.protein).coerceAtLeast(0),
+            carbs = (existing.carbs - old.nutrition.carbs + newNutrition.carbs).coerceAtLeast(0),
+            fat = (existing.fat - old.nutrition.fat + newNutrition.fat).coerceAtLeast(0)
+        )
+        current[day] = adjusted
+        _dailyNutrition.value = current
+    }
+
+    fun deleteLoggedMeal(id: String) {
+        val currentList = _loggedMeals.value.toMutableList()
+        val index = currentList.indexOfFirst { it.id == id }
+        if (index == -1) return
+        val old = currentList.removeAt(index)
+        _loggedMeals.value = currentList
+
+        val day = old.loggedAt.toLocalDate().dayOfWeek
+        val current = _dailyNutrition.value.toMutableMap()
+        val existing = current[day] ?: NutritionSummary(0, 0, 0, 0)
+        val adjusted = NutritionSummary(
+            calories = (existing.calories - old.nutrition.calories).coerceAtLeast(0),
+            protein = (existing.protein - old.nutrition.protein).coerceAtLeast(0),
+            carbs = (existing.carbs - old.nutrition.carbs).coerceAtLeast(0),
+            fat = (existing.fat - old.nutrition.fat).coerceAtLeast(0)
+        )
+        current[day] = adjusted
+        _dailyNutrition.value = current
+    }
+
     /**
      * Generate a meal plan with specific parameters
      * Uses MealPlanGenerator directly to avoid flow issues
@@ -1181,164 +1264,248 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                 // Short delay to show initial stage
                 kotlinx.coroutines.delay(300)
                 
-                // Start caching recipes in parallel for faster results
-                _generationStage.value = "Finding recipes for your meal plan..."
+                _generationStage.value = "Fetching candidate recipes..."
                 _generationProgress.value = 0.2f
                 
-                // Launch concurrent API calls for faster recipe fetching
-                viewModelScope.launch {
-                    try {
-                        withTimeoutOrNull(10000) { // 10-second timeout for pre-caching
-                            // Create query strings with diet type and allergy exclusions
-                            var baseQuery = dietType
-                            allergies.forEach { baseQuery += " -$it" }
-                            
-                            // Pre-cache some recipes in parallel for UI responsiveness
-                            kotlinx.coroutines.coroutineScope {
-                                launch { repository.searchRecipes("breakfast $baseQuery", limit = 10).first() }
-                                launch { repository.searchRecipes("lunch $baseQuery", limit = 10).first() }
-                                launch { repository.searchRecipes("dinner $baseQuery", limit = 10).first() }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.w("MealPlannerViewModel", "Recipe pre-fetch interrupted: ${e.message}")
-                    }
-                }
-                
-                _generationStage.value = "Creating your personalized meal plan..."
+                // Build a nutrition-aware plan using OFF per-ingredient values
+                _generationStage.value = "Computing nutrition-aware plan..."
                 _generationProgress.value = 0.4f
+                val plan = withTimeoutOrNull(35000) {
+                    buildNutritionAwareMealPlan(calorieTarget, dietType, allergies)
+                } ?: throw MealPlanTimeoutException("Nutrition-aware generation timed out")
                 
-                // Direct call to MealPlanGenerator - no flow involved
-                val mealPlanResult = withTimeoutOrNull(25000) { // 25 second timeout
-                    MealPlanGenerator.generateMealPlan(
-                        calorieTarget = calorieTarget,
-                        days = 7,
-                        dietaryPreferences = listOf(dietType) + allergies
-                    )
-                }
+                _generationStage.value = "Finalizing..."
+                _generationProgress.value = 0.7f
                 
-                if (mealPlanResult == null) {
-                    Log.w("MealPlannerViewModel", "Meal plan generation timed out")
-                    throw MealPlanTimeoutException("Meal plan generation timed out")
-                }
-
-                // Process the result
-                _generationProgress.value = 0.6f
-                _generationStage.value = "Optimizing meal variety..."
+                _mealPlans.value = plan
                 
-                val mealPlanData = mealPlanResult.fold(
-                    onSuccess = { mealPlanMap ->
-                        // Transform repository meal plan data to our UI model
-                        val result = mutableMapOf<DayOfWeek, List<MealPlanItem>>()
-                        
-                        mealPlanMap.forEach { (dayStr, meals) ->
-                            val day = try {
-                                // Parse day string like "Day 1" to a DayOfWeek
-                                val dayNum = dayStr.substringAfter("Day ").toIntOrNull() ?: 1
-                                // Map day numbers to DayOfWeek values (1 = Monday, etc.)
-                                DayOfWeek.of((dayNum - 1) % 7 + 1)
-                            } catch (e: Exception) {
-                                // Default to Monday if parsing fails
-                                DayOfWeek.MONDAY
-                            }
-                            
-                            // Convert to MealPlanItem
-                            result[day] = meals.mapIndexed { index, meal ->
-                                // Assign different meal times based on the index
-                                val mealTime = when (index % 4) {
-                                    0 -> MealTime.Breakfast
-                                    1 -> MealTime.Lunch
-                                    2 -> MealTime.Dinner
-                                    else -> MealTime.Snacks
-                                }
-                                
-                                MealPlanItem(
-                                    id = meal.id,
-                                    name = when (mealTime) {
-                                        MealTime.Breakfast -> "Breakfast"
-                                        MealTime.Lunch -> "Lunch"
-                                        MealTime.Dinner -> "Dinner" 
-                                        MealTime.Snacks -> "Snacks"
-                                    },
-                                    calories = meal.nutritionFacts.calories,
-                                    day = day,
-                                    time = mealTime,
-                                    description = meal.description,
-                                    recipeId = meal.id,
-                                    imageUrl = meal.imageUrl ?: getDefaultMealImage(mealTime.toString())
-                                )
-                            }
-                        }
-                        
-                        Log.d("MealPlannerViewModel", "Successfully generated meal plan with ${result.size} days")
-                        result
-                    },
-                    onFailure = { error ->
-                        Log.e("MealPlannerViewModel", "Error generating meal plan: ${error.message}", error)
-                        throw error
-                    }
-                )
-                
-                // Prepare the final plan - either use the real data or fallback to offline
-                val finalPlan = if (mealPlanData.isNotEmpty()) {
-                    _generationStage.value = "Finalizing your meal plan..."
-                    _generationProgress.value = 0.8f
-                    createDiverseMealPlan(mealPlanData)
-                } else {
-                    // Use offline data as fallback
-                    Log.d("MealPlannerViewModel", "Using offline fallback data for meal plan")
-                    _generationStage.value = "Creating offline meal plan for you..."
-                    createOfflineMealPlan(calorieTarget, dietType)
-                }
-
-                _generationStage.value = "Calculating nutrition values..."
-                _generationProgress.value = 0.9f
-                kotlinx.coroutines.delay(300)
-                
-                // Calculate nutrition summaries
-                val nutritionSummaries = calculateNutritionSummaries(finalPlan)
+                // Compute daily nutrition summaries with our existing aggregator
+                DayOfWeek.values().forEach { updateNutritionSummary(it) }
                 
                 _generationProgress.value = 1f
-                
-                _mealPlans.value = finalPlan
-                _dailyNutrition.value = nutritionSummaries
-                
-                // Save the meal plan if user is authenticated
-                if (_isUserAuthenticated.value) {
-                    try {
-                        mealPlanRepository.saveUserMealPlans(finalPlan).collect { saveResult ->
-                            saveResult.onSuccess {
-                                Log.d("MealPlannerViewModel", "Successfully saved user meal plans")
-                            }
-                            saveResult.onFailure { error ->
-                                Log.e("MealPlannerViewModel", "Failed to save user meal plans", error)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e("MealPlannerViewModel", "Error saving user meal plans", e)
-                    }
-                }
-                
+                _generationStage.value = "Done"
             } catch (e: Exception) {
-                Log.e("MealPlannerViewModel", "Error generating meal plan", e)
-                _error.value = e.message ?: "An unexpected error occurred"
-                
-                // Use offline fallback
-                try {
-                    val fallbackPlan = createOfflineMealPlan(2000, "balanced") // Use default values 
-                    val fallbackNutrition = calculateNutritionSummaries(fallbackPlan)
-                    
-                    _mealPlans.value = fallbackPlan
-                    _dailyNutrition.value = fallbackNutrition
-                } catch (fallbackError: Exception) {
-                    Log.e("MealPlannerViewModel", "Failed to create fallback plan", fallbackError)
-                }
+                _error.value = e.message ?: "Failed to generate meal plan"
+                android.util.Log.e("MealPlannerViewModel", "generateMealPlan failed: ${e.message}", e)
             } finally {
                 _isGenerating.value = false
                 _generationStage.value = null
                 _generationProgress.value = 0f
             }
         }
+    }
+
+    private suspend fun buildNutritionAwareMealPlan(
+        calorieTarget: Int,
+        dietType: String,
+        allergies: List<String>
+    ): Map<DayOfWeek, List<MealPlanItem>> {
+        val nutritionRepo = com.thenewkenya.ingrediet.data.repository.NutritionRepository(appContext)
+        val pool = mutableListOf<com.thenewkenya.ingrediet.data.model.DetailedRecipe>()
+
+        // Fetch a broader pool of recipes based on diet and allergy exclusions
+        val baseQuery = buildString {
+            append(dietType)
+            allergies.forEach { append(" -$it") }
+        }.trim()
+        try {
+            val results = repository.searchRecipes(if (baseQuery.isBlank()) null else baseQuery, limit = 40).first()
+            results.onSuccess { pool.addAll(it) }
+        } catch (_: Exception) { /* ignore */ }
+        if (pool.isEmpty()) {
+            // Fallback to random recipes
+            try {
+                repository.getRandomRecipes(40).first().onSuccess { pool.addAll(it) }
+            } catch (_: Exception) {}
+        }
+
+        // Filter by diet type and allergies at ingredient level
+        val filtered = pool.filter { recipe ->
+            respectsDiet(recipe, dietType) &&
+            respectsAllergies(recipe, allergies)
+        }
+        if (filtered.isEmpty()) return emptyMap()
+
+        // Compute per-recipe calories using OFF ingredient values
+        data class Scored(val recipe: com.thenewkenya.ingrediet.data.model.DetailedRecipe, val calories: Int)
+        val scored = mutableListOf<Scored>()
+        for (r in filtered) {
+            var sumCals = 0
+            for (ing in r.ingredients) {
+                val nut = nutritionRepo.getNutritionByName(ing.name) ?: continue
+                val grams = com.thenewkenya.ingrediet.feature.recipe.UnitConversion.toGrams(ing.quantity, ing.unit, ing.name)
+                val totals = com.thenewkenya.ingrediet.feature.recipe.NutritionMath.totalForWeight(nut.per100g, grams)
+                sumCals += totals.calories
+            }
+            if (sumCals > 0) scored.add(Scored(r, sumCals))
+        }
+        if (scored.isEmpty()) return emptyMap()
+
+        // Slot targets
+        val breakfastTarget = (calorieTarget * 0.25).toInt()
+        val lunchTarget = (calorieTarget * 0.35).toInt()
+        val dinnerTarget = (calorieTarget * 0.30).toInt()
+        val snackTarget = (calorieTarget * 0.10).toInt()
+
+        // Helper to pick closest recipe to a target, avoiding recent repeats
+        val recent = ArrayDeque<String>()
+        fun pickClosest(target: Int): Scored? {
+            return scored
+                .filter { it.recipe.id !in recent }
+                .minByOrNull { kotlin.math.abs(it.calories - target) }
+                ?.also {
+                    recent.addLast(it.recipe.id)
+                    if (recent.size > 12) recent.removeFirst()
+                }
+        }
+
+        val plan = mutableMapOf<DayOfWeek, List<MealPlanItem>>()
+        DayOfWeek.values().forEach { day ->
+            val dayItems = mutableListOf<MealPlanItem>()
+            val b = pickClosest(breakfastTarget)
+            val l = pickClosest(lunchTarget)
+            val d = pickClosest(dinnerTarget)
+            // Optional snack if available and useful
+            val s = pickClosest(snackTarget)
+
+            if (b != null) dayItems.add(
+                MealPlanItem(
+                    id = "${b.recipe.id}-B-$day",
+                    name = b.recipe.name,
+                    calories = b.calories,
+                    day = day,
+                    time = MealTime.Breakfast,
+                    description = b.recipe.description,
+                    recipeId = b.recipe.id,
+                    imageUrl = b.recipe.imageUrl
+                )
+            )
+            if (l != null) dayItems.add(
+                MealPlanItem(
+                    id = "${l.recipe.id}-L-$day",
+                    name = l.recipe.name,
+                    calories = l.calories,
+                    day = day,
+                    time = MealTime.Lunch,
+                    description = l.recipe.description,
+                    recipeId = l.recipe.id,
+                    imageUrl = l.recipe.imageUrl
+                )
+            )
+            if (d != null) dayItems.add(
+                MealPlanItem(
+                    id = "${d.recipe.id}-D-$day",
+                    name = d.recipe.name,
+                    calories = d.calories,
+                    day = day,
+                    time = MealTime.Dinner,
+                    description = d.recipe.description,
+                    recipeId = d.recipe.id,
+                    imageUrl = d.recipe.imageUrl
+                )
+            )
+            s?.let {
+                dayItems.add(
+                    MealPlanItem(
+                        id = "${it.recipe.id}-S-$day",
+                        name = it.recipe.name,
+                        calories = it.calories,
+                        day = day,
+                        time = MealTime.Snacks,
+                        description = it.recipe.description,
+                        recipeId = it.recipe.id,
+                        imageUrl = it.recipe.imageUrl
+                    )
+                )
+            }
+            plan[day] = dayItems
+        }
+        return plan
+    }
+
+    private fun respectsAllergies(recipe: com.thenewkenya.ingrediet.data.model.DetailedRecipe, allergies: List<String>): Boolean {
+        if (allergies.isEmpty()) return true
+
+        // Allergen keyword sets (word-boundary matched where meaningful)
+        val allergenKeywords: Map<String, Set<String>> = mapOf(
+            "gluten" to setOf(
+                "gluten","wheat","barley","rye","malt","semolina","spelt","farro","bulgur","couscous","seitan"
+            ),
+            "wheat" to setOf("wheat","semolina","spelt","farro","bulgur","couscous","seitan"),
+            "nuts" to setOf(
+                "nut","almond","walnut","pecan","cashew","hazelnut","pistachio","macadamia","brazil nut","pine nut"
+            ),
+            "peanut" to setOf("peanut","groundnut"),
+            "dairy" to setOf("milk","cheese","butter","yogurt","cream","ghee","whey","casein"),
+            "egg" to setOf("egg","albumen","mayonnaise"),
+            "soy" to setOf("soy","soya","soybean","tofu","edamame","tamari","miso"),
+            "fish" to setOf("fish","salmon","tuna","cod","trout","sardine","anchovy","haddock"),
+            "shellfish" to setOf("shrimp","prawn","crab","lobster","clam","mussel","oyster","scallop"),
+            "sesame" to setOf("sesame","tahini","benne")
+        )
+
+        fun containsAnyWord(text: String, words: Set<String>): Boolean {
+            val t = text.lowercase()
+            for (w in words) {
+                // Special case: avoid matching egg in "eggplant"
+                if (w == "egg") {
+                    val regex = Regex("\\begg(?!plant)\\b")
+                    if (regex.containsMatchIn(t)) return true
+                    continue
+                }
+                val escaped = Regex.escape(w)
+                val regex = Regex("\\b$escaped\\b")
+                if (regex.containsMatchIn(t)) return true
+            }
+            return false
+        }
+
+        // For each ingredient, check against requested allergies
+        for (ing in recipe.ingredients) {
+            val name = ing.name
+            for (requested in allergies.map { it.lowercase() }) {
+                val keywords = allergenKeywords[requested]
+                if (keywords != null) {
+                    if (containsAnyWord(name, keywords)) return false
+                } else {
+                    // Unknown allergy term: fall back to substring match
+                    if (name.lowercase().contains(requested)) return false
+                }
+            }
+        }
+        return true
+    }
+
+    private fun respectsDiet(recipe: com.thenewkenya.ingrediet.data.model.DetailedRecipe, dietType: String): Boolean {
+        val d = dietType.lowercase()
+        if (d.contains("vegan")) {
+            val banned = listOf("beef","chicken","pork","fish","seafood","egg","milk","cheese","yogurt","butter","honey")
+            return recipe.ingredients.none { ing -> banned.any { ing.name.lowercase().contains(it) } }
+        }
+        if (d.contains("vegetarian")) {
+            val banned = listOf("beef","chicken","pork","fish","seafood")
+            return recipe.ingredients.none { ing -> banned.any { ing.name.lowercase().contains(it) } }
+        }
+        if (d.contains("low-carb")) {
+            // Roughly exclude very high-carb staples
+            val avoid = listOf("sugar","rice","bread","pasta","flour","potato")
+            val count = recipe.ingredients.count { ing -> avoid.any { ing.name.lowercase().contains(it) } }
+            return count <= 1
+        }
+        if (d.contains("halal")) {
+            // Exclude clear non-halal items: pork and alcohol derivatives, gelatin, lard
+            val nonHalal = setOf(
+                "pork","bacon","ham","prosciutto","pepperoni","chorizo","salami","pancetta","speck","lard",
+                "gelatin","gelatine",
+                "wine","beer","ale","lager","stout","cider","brandy","rum","gin","vodka","whiskey","whisky","liqueur"
+            )
+            fun containsAny(text: String, words: Set<String>) = words.any { text.contains(it) }
+            return recipe.ingredients.none { ing -> containsAny(ing.name.lowercase(), nonHalal) } &&
+                   !(recipe.description?.lowercase()?.let { containsAny(it, nonHalal) } ?: false) &&
+                   !containsAny(recipe.name.lowercase(), nonHalal)
+        }
+        // Balanced / High-protein: allow all
+        return true
     }
 
     /**
