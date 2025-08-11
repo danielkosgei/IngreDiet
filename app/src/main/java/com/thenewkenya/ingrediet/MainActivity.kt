@@ -134,15 +134,17 @@ class MainActivity : ComponentActivity() {
         preloadRecipes()
         
         setContent {
-            // Initialize theme preference and observe changes reactively
+            // Initialize theme preferences and observe changes reactively
             val themeMode by com.thenewkenya.ingrediet.feature.profile.ThemePreferences.currentThemeMode
+            val colorTheme by com.thenewkenya.ingrediet.feature.profile.ThemePreferences.currentColorTheme
             
-            // Initialize theme on first load
+            // Initialize themes on first load
             LaunchedEffect(Unit) {
                 com.thenewkenya.ingrediet.feature.profile.ThemePreferences.getThemeMode(this@MainActivity)
+                com.thenewkenya.ingrediet.feature.profile.ThemePreferences.getColorTheme(this@MainActivity)
             }
             
-            IngreDietTheme(themeMode = themeMode) {
+            IngreDietTheme(themeMode = themeMode, colorTheme = colorTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

@@ -26,7 +26,8 @@ val DarkBackgroundColor = Color(0xFF121212) // Dark background
 val DarkSurfaceColor = Color(0xFF1E1E1E) // Dark surface
 val DarkTextColor = Color(0xFFFFFFFF) // White text
 
-private val LightColorScheme = lightColorScheme(
+// === WELLNESS THEME COLOR SCHEMES ===
+private val WellnessLightColorScheme = lightColorScheme(
     primary = Primary,
     onPrimary = Color.White,
     primaryContainer = ButtonSecondaryLight,
@@ -50,11 +51,11 @@ private val LightColorScheme = lightColorScheme(
     scrim = OverlayLight,
     error = Error,
     onError = Color.White,
-    errorContainer = Color(0xFFFFF3F3),  // Light Alert Container
+    errorContainer = Color(0xFFFFF3F3),
     onErrorContainer = Error
 )
 
-private val DarkColorScheme = darkColorScheme(
+private val WellnessDarkColorScheme = darkColorScheme(
     primary = DarkPrimary,
     onPrimary = Color.White,
     primaryContainer = ButtonSecondaryDark,
@@ -78,24 +79,92 @@ private val DarkColorScheme = darkColorScheme(
     scrim = OverlayDark,
     error = Error,
     onError = Color.White,
-    errorContainer = Color(0xFF2C1F1F),  // Dark Alert Container
+    errorContainer = Color(0xFF2C1F1F),
     onErrorContainer = Error
 )
+
+// === PINK THEME COLOR SCHEMES ===
+private val PinkLightColorScheme = lightColorScheme(
+    primary = PinkPrimary,
+    onPrimary = Color.White,
+    primaryContainer = PinkButtonSecondaryLight,
+    onPrimaryContainer = PinkTextPrimary,
+    secondary = PinkSecondary,
+    onSecondary = Color.White,
+    secondaryContainer = PinkSurfaceLight,
+    onSecondaryContainer = PinkTextPrimary,
+    tertiary = PinkTertiary,
+    onTertiary = Color.White,
+    tertiaryContainer = PinkCardLight,
+    onTertiaryContainer = PinkTextPrimary,
+    background = PinkBackground,
+    onBackground = PinkTextPrimary,
+    surface = PinkSurface,
+    onSurface = PinkTextPrimary,
+    surfaceVariant = PinkNavBarColor,
+    onSurfaceVariant = PinkTextSecondary,
+    outline = PinkCardBorderLight,
+    outlineVariant = PinkDividerLight,
+    scrim = OverlayLight,
+    error = Error,
+    onError = Color.White,
+    errorContainer = Color(0xFFFDF2F8),
+    onErrorContainer = Error
+)
+
+private val PinkDarkColorScheme = darkColorScheme(
+    primary = PinkDarkPrimary,
+    onPrimary = Color.White,
+    primaryContainer = PinkButtonSecondaryDark,
+    onPrimaryContainer = PinkDarkTextPrimary,
+    secondary = PinkDarkSecondary,
+    onSecondary = Color.White,
+    secondaryContainer = PinkDarkSurfaceLight,
+    onSecondaryContainer = PinkDarkTextPrimary,
+    tertiary = PinkTertiary,
+    onTertiary = Color.White,
+    tertiaryContainer = PinkCardDark,
+    onTertiaryContainer = PinkDarkTextPrimary,
+    background = PinkDarkBackground,
+    onBackground = PinkDarkTextPrimary,
+    surface = PinkDarkSurface,
+    onSurface = PinkDarkTextPrimary,
+    surfaceVariant = PinkDarkNavBarColor,
+    onSurfaceVariant = PinkDarkTextSecondary,
+    outline = PinkCardBorderDark,
+    outlineVariant = PinkDividerDark,
+    scrim = OverlayDark,
+    error = Error,
+    onError = Color.White,
+    errorContainer = Color(0xFF2F1B2F),
+    onErrorContainer = Error
+)
+
+
 
 @Composable
 fun IngreDietTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
+    colorTheme: ThemeMode = ThemeMode.DEFAULT_THEME,
     content: @Composable () -> Unit
 ) {
-    val darkTheme = when (themeMode) {
+    val isDarkTheme = when (themeMode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
+        else -> isSystemInDarkTheme() // fallback for color themes
     }
     
-    val colorScheme = when {
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    val colorScheme = when (colorTheme) {
+        ThemeMode.DEFAULT_THEME -> {
+            if (isDarkTheme) WellnessDarkColorScheme else WellnessLightColorScheme
+        }
+        ThemeMode.PINK_THEME -> {
+            if (isDarkTheme) PinkDarkColorScheme else PinkLightColorScheme
+        }
+        else -> {
+            if (isDarkTheme) WellnessDarkColorScheme else WellnessLightColorScheme
+        }
     }
 
     MaterialTheme(

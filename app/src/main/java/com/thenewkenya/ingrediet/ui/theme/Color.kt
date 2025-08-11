@@ -2,6 +2,7 @@ package com.thenewkenya.ingrediet.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
+// === WELLNESS THEME (Original) ===
 // Primary Colors - Healthy & Fresh
 val Primary = Color(0xFF2EB086)      // Wellness Green
 val Secondary = Color(0xFFFF7043)     // Energetic Orange
@@ -46,6 +47,40 @@ val ButtonSecondaryDark = Color(0xFF21262D) // Deep Button
 val InputBorderDark = Color(0xFF383F47) // Rich Border
 val InputBackgroundDark = Color(0xFF21262D) // Deep Input
 val DividerDark = Color(0xFF30363D)   // Rich Divider
+
+// === PINK/PURPLE THEME ===
+// Light Pink/Purple Theme - Elegant and sophisticated
+val PinkPrimary = Color(0xFFAD1457)        // Deep Rose
+val PinkSecondary = Color(0xFF7B1FA2)       // Deep Purple
+val PinkTertiary = Color(0xFFE91E63)        // Vibrant Pink
+val PinkBackground = Color(0xFFFEF7FF)      // Very Light Purple Tint
+val PinkSurface = Color(0xFFFFFFFF)         // Pure White
+val PinkTextPrimary = Color(0xFF1A0E1A)     // Deep Purple-Black
+val PinkTextSecondary = Color(0xFF6A4C6A)   // Muted Purple
+val PinkSurfaceLight = Color(0xFFF9F5FF)    // Light Purple Tint
+val PinkNavBarColor = Color(0xFFFFFFFF)     // Pure White
+val PinkCardLight = Color(0xFFFFFFFF)       // Fresh White
+val PinkCardBorderLight = Color(0xFFF0E6F7) // Soft Purple Border
+val PinkButtonSecondaryLight = Color(0xFFF3E5F5) // Light Purple
+val PinkInputBorderLight = Color(0xFFE1BEE7) // Purple Border
+val PinkDividerLight = Color(0xFFF0E6F7)    // Soft Purple Divider
+
+// Dark Pink/Purple Theme - Rich and luxurious with blackout background
+val PinkDarkPrimary = Color(0xFFEC407A)     // Bright Pink
+val PinkDarkSecondary = Color(0xFFAB47BC)   // Medium Purple
+val PinkDarkBackground = Color(0xFF000000)  // True Blackout Black
+val PinkDarkSurface = Color(0xFF0D0D0D)     // Very Dark Surface
+val PinkDarkTextPrimary = Color(0xFFFCF5FF) // Light Purple-White
+val PinkDarkTextSecondary = Color(0xFFD1B3D1) // Soft Pink
+val PinkDarkSurfaceLight = Color(0xFF1A1A1A) // Elevated Dark Surface
+val PinkDarkNavBarColor = Color(0xFF000000) // Blackout Nav Bar
+val PinkCardDark = Color(0xFF0D0D0D)        // Very Dark Cards
+val PinkCardBorderDark = Color(0xFF2A2A2A)  // Dark Border
+val PinkButtonSecondaryDark = Color(0xFF1A1A1A) // Dark Button
+val PinkInputBorderDark = Color(0xFF333333)  // Dark Input Border
+val PinkDividerDark = Color(0xFF2A2A2A)     // Dark Divider
+
+
 
 // Status Colors - Nutritional Indicators
 val Success = Color(0xFF2EB086)  // Wellness Green
