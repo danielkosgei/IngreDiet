@@ -660,15 +660,29 @@ private fun HomeHeader(
                 }
                 
                 Column {
+                    val ctx = LocalContext.current
+                    val currentUserId = supabase.auth.currentUserOrNull()?.id
+                    val prefs = remember { ctx.getSharedPreferences("ingrediet_prefs", android.content.Context.MODE_PRIVATE) }
+                    var isReturning by remember(currentUserId) {
+                        mutableStateOf(currentUserId?.let { prefs.getBoolean("seen_user_$it", false) } ?: false)
+                    }
+                    LaunchedEffect(currentUserId) {
+                        if (currentUserId != null && !prefs.getBoolean("seen_user_$currentUserId", false)) {
+                            prefs.edit().putBoolean("seen_user_$currentUserId", true).apply()
+                            isReturning = false
+                        } else if (currentUserId != null) {
+                            isReturning = true
+                        }
+                    }
                     Text(
-                        text = "Hi $userName!",
+                        text = userName,
                         style = typography.titleLarge.copy(
                             fontWeight = FontWeight.Bold
                         ),
                         color = colors.onBackground
                     )
                     Text(
-                        text = "Your boards looks so good",
+                        text = if (isReturning) "Welcome back" else "Welcome",
                         style = typography.bodyLarge,
                         color = colors.onBackground.copy(alpha = 0.7f)
                     )
@@ -677,7 +691,7 @@ private fun HomeHeader(
             
             // Notification icon
             IconButton(
-                onClick = { /* Handle notifications */ },
+                onClick = { navController.navigate("inbox/notifications") },
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)

@@ -28,12 +28,14 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +46,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import androidx.compose.ui.platform.LocalContext
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +59,12 @@ fun NotificationsScreen(navController: NavController) {
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { NotificationUtils.ensureChannels(context) }
+    var notifPermissionGranted by remember { mutableStateOf(true) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notifPermissionGranted = granted
+    }
     
     // Main notification toggle
     var masterNotificationsEnabled by remember { mutableStateOf(true) }
@@ -61,6 +75,18 @@ fun NotificationsScreen(navController: NavController) {
     var shoppingListRemindersEnabled by remember { mutableStateOf(true) }
     var appUpdatesEnabled by remember { mutableStateOf(true) }
     var promotionsEnabled by remember { mutableStateOf(false) }
+
+    // Schedules state
+    var breakfastTime by remember { mutableStateOf(Pair(8, 0)) }
+    var lunchTime by remember { mutableStateOf(Pair(13, 0)) }
+    var dinnerTime by remember { mutableStateOf(Pair(19, 0)) }
+    var shoppingDay by remember { mutableStateOf(Calendar.SATURDAY) }
+    var shoppingTime by remember { mutableStateOf(Pair(17, 0)) }
+    var recipesDay by remember { mutableStateOf(Calendar.MONDAY) }
+    var recipesTime by remember { mutableStateOf(Pair(9, 0)) }
+    var goalsTime by remember { mutableStateOf(Pair(20, 30)) }
+    var hydrationEnabled by remember { mutableStateOf(true) }
+    val hydrationTimes = remember { listOf(Pair(9,0), Pair(12,0), Pair(15,0), Pair(18,0)) }
 
     Scaffold(
         topBar = {
@@ -109,6 +135,9 @@ fun NotificationsScreen(navController: NavController) {
                     isChecked = masterNotificationsEnabled,
                     onCheckedChange = { 
                         masterNotificationsEnabled = it
+                        if (it && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
                         // If master is disabled, disable all, otherwise leave them as is
                         if (!it) {
                             mealPlanRemindersEnabled = false
@@ -150,6 +179,27 @@ fun NotificationsScreen(navController: NavController) {
                         onCheckedChange = { mealPlanRemindersEnabled = it },
                         enabled = masterNotificationsEnabled
                     )
+
+                    if (mealPlanRemindersEnabled && masterNotificationsEnabled) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Breakfast: %02d:%02d".format(breakfastTime.first, breakfastTime.second), modifier = Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                NotificationScheduler.scheduleMealReminder(context, breakfastTime.first, breakfastTime.second, "Breakfast")
+                            }) { Text("Schedule") }
+                        }
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Lunch: %02d:%02d".format(lunchTime.first, lunchTime.second), modifier = Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                NotificationScheduler.scheduleMealReminder(context, lunchTime.first, lunchTime.second, "Lunch")
+                            }) { Text("Schedule") }
+                        }
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Dinner: %02d:%02d".format(dinnerTime.first, dinnerTime.second), modifier = Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                NotificationScheduler.scheduleMealReminder(context, dinnerTime.first, dinnerTime.second, "Dinner")
+                            }) { Text("Schedule") }
+                        }
+                    }
                     
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp),
@@ -165,6 +215,14 @@ fun NotificationsScreen(navController: NavController) {
                         onCheckedChange = { recipeRecommendationsEnabled = it },
                         enabled = masterNotificationsEnabled
                     )
+                    if (recipeRecommendationsEnabled && masterNotificationsEnabled) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Weekly on ${dayName(recipesDay)} at %02d:%02d".format(recipesTime.first, recipesTime.second), modifier = Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                NotificationScheduler.scheduleWeeklyRecipeSuggestion(context, recipesDay, recipesTime.first, recipesTime.second)
+                            }) { Text("Schedule") }
+                        }
+                    }
                     
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp),
@@ -180,6 +238,14 @@ fun NotificationsScreen(navController: NavController) {
                         onCheckedChange = { shoppingListRemindersEnabled = it },
                         enabled = masterNotificationsEnabled
                     )
+                    if (shoppingListRemindersEnabled && masterNotificationsEnabled) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("${dayName(shoppingDay)} at %02d:%02d".format(shoppingTime.first, shoppingTime.second), modifier = Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                NotificationScheduler.scheduleShoppingReminder(context, shoppingDay, shoppingTime.first, shoppingTime.second)
+                            }) { Text("Schedule") }
+                        }
+                    }
                     
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp),
@@ -210,6 +276,50 @@ fun NotificationsScreen(navController: NavController) {
                         onCheckedChange = { promotionsEnabled = it },
                         enabled = masterNotificationsEnabled
                     )
+                    // Goals
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp),
+                        thickness = 0.5.dp,
+                        color = colors.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    NotificationToggleItem(
+                        title = "Goals & Streaks",
+                        description = "Reminders to hit calorie/macro targets",
+                        icon = Icons.Outlined.Notifications,
+                        isChecked = masterNotificationsEnabled,
+                        onCheckedChange = { /* use master */ },
+                        enabled = masterNotificationsEnabled
+                    )
+                    if (masterNotificationsEnabled) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Daily at %02d:%02d".format(goalsTime.first, goalsTime.second), modifier = Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                NotificationScheduler.scheduleDailyGoalReminder(context, goalsTime.first, goalsTime.second)
+                            }) { Text("Schedule") }
+                        }
+                    }
+                    // Hydration
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp),
+                        thickness = 0.5.dp,
+                        color = colors.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    NotificationToggleItem(
+                        title = "Hydration",
+                        description = "Reminders to drink water",
+                        icon = Icons.Outlined.Notifications,
+                        isChecked = hydrationEnabled && masterNotificationsEnabled,
+                        onCheckedChange = { hydrationEnabled = it },
+                        enabled = masterNotificationsEnabled
+                    )
+                    if (hydrationEnabled && masterNotificationsEnabled) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Default times: ${hydrationTimes.joinToString { "%02d:%02d".format(it.first, it.second) }}", modifier = Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                hydrationTimes.forEach { (h,m) -> NotificationScheduler.scheduleHydrationReminder(context, h, m) }
+                            }) { Text("Schedule") }
+                        }
+                    }
                 }
             }
             
@@ -267,4 +377,15 @@ fun NotificationToggleItem(
             enabled = enabled
         )
     }
+} 
+
+private fun dayName(day: Int): String = when(day) {
+    Calendar.MONDAY -> "Monday"
+    Calendar.TUESDAY -> "Tuesday"
+    Calendar.WEDNESDAY -> "Wednesday"
+    Calendar.THURSDAY -> "Thursday"
+    Calendar.FRIDAY -> "Friday"
+    Calendar.SATURDAY -> "Saturday"
+    Calendar.SUNDAY -> "Sunday"
+    else -> ""
 } 

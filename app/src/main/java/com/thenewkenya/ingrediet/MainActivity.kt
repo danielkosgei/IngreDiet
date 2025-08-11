@@ -314,6 +314,7 @@ fun AppNavigation() {
                 composable("profile/appearance") { AppearanceScreen(navController) }
                 composable("profile/notifications") { NotificationsScreen(navController) }
                 composable("profile/privacy") { PrivacySecurityScreen(navController) }
+                composable("inbox/notifications") { com.thenewkenya.ingrediet.feature.notifications.NotificationsInboxScreen(navController) }
                 
                 // Diet & Nutrition routes
                 composable("profile/diet-preferences") { DietaryPreferencesScreen(navController) }
