@@ -184,7 +184,7 @@ fun PrivacySecurityScreen(navController: NavController) {
                         hasSwitch = false,
                         isChecked = false,
                         onCheckedChange = {},
-                        onClick = { /* Navigate to privacy policy */ }
+                        onClick = { navController.navigate("privacy_policy") }
                     )
                     
                     HorizontalDivider(

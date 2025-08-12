@@ -322,6 +322,7 @@ fun AppNavigation() {
                 composable("profile/appearance") { AppearanceScreen(navController) }
                 composable("profile/notifications") { NotificationsScreen(navController) }
                 composable("profile/privacy") { PrivacySecurityScreen(navController) }
+                composable("privacy_policy") { com.thenewkenya.ingrediet.feature.profile.PrivacyPolicyScreen(navController) }
                 composable("inbox/notifications") { com.thenewkenya.ingrediet.feature.notifications.NotificationsInboxScreen(navController) }
                 
                 // Diet & Nutrition routes
