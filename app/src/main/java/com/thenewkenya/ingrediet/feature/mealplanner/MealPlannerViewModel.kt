@@ -1283,6 +1283,107 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
         }
     }
 
+    /**
+     * Helper functions to categorize recipes by meal type
+     */
+    private fun isBreakfastRecipe(recipe: com.thenewkenya.ingrediet.data.model.DetailedRecipe): Boolean {
+        val name = recipe.name.lowercase()
+        val category = recipe.category.lowercase()
+        val tags = recipe.tags.map { it.lowercase() }
+        val allTags = tags + recipe.dietaryInfo.map { it.lowercase() }
+        
+        // Breakfast keywords in name
+        val breakfastKeywords = listOf(
+            "breakfast", "pancake", "waffle", "cereal", "oatmeal", "porridge", "toast",
+            "egg", "omelet", "omelette", "scrambled", "fried egg", "muffin", "croissant",
+            "bagel", "smoothie", "yogurt", "granola", "coffee", "tea", "juice"
+        )
+        
+        return category.contains("breakfast") ||
+                tags.any { it.contains("breakfast") } ||
+                breakfastKeywords.any { keyword -> name.contains(keyword) } ||
+                allTags.any { tag -> breakfastKeywords.any { keyword -> tag.contains(keyword) } }
+    }
+    
+    private fun isLunchRecipe(recipe: com.thenewkenya.ingrediet.data.model.DetailedRecipe): Boolean {
+        val name = recipe.name.lowercase()
+        val category = recipe.category.lowercase()
+        val tags = recipe.tags.map { it.lowercase() }
+        val allTags = tags + recipe.dietaryInfo.map { it.lowercase() }
+        
+        // Lunch keywords
+        val lunchKeywords = listOf(
+            "lunch", "sandwich", "salad", "wrap", "burger", "soup", "pasta", "pizza",
+            "rice", "noodle", "stir fry", "bowl", "quinoa", "grain", "light meal"
+        )
+        
+        return category.contains("lunch") ||
+                tags.any { it.contains("lunch") } ||
+                lunchKeywords.any { keyword -> name.contains(keyword) } ||
+                allTags.any { tag -> lunchKeywords.any { keyword -> tag.contains(keyword) } }
+    }
+    
+    private fun isDinnerRecipe(recipe: com.thenewkenya.ingrediet.data.model.DetailedRecipe): Boolean {
+        val name = recipe.name.lowercase()
+        val category = recipe.category.lowercase()
+        val tags = recipe.tags.map { it.lowercase() }
+        val allTags = tags + recipe.dietaryInfo.map { it.lowercase() }
+        
+        // Dinner keywords
+        val dinnerKeywords = listOf(
+            "dinner", "main course", "roast", "steak", "chicken", "beef", "pork", "fish",
+            "seafood", "curry", "stew", "casserole", "lasagna", "grilled", "baked",
+            "braised", "seared", "hearty", "main dish"
+        )
+        
+        return category.contains("dinner") || category.contains("main") ||
+                tags.any { it.contains("dinner") || it.contains("main") } ||
+                dinnerKeywords.any { keyword -> name.contains(keyword) } ||
+                allTags.any { tag -> dinnerKeywords.any { keyword -> tag.contains(keyword) } }
+    }
+    
+    private fun isSnackRecipe(recipe: com.thenewkenya.ingrediet.data.model.DetailedRecipe): Boolean {
+        val name = recipe.name.lowercase()
+        val category = recipe.category.lowercase()
+        val tags = recipe.tags.map { it.lowercase() }
+        val allTags = tags + recipe.dietaryInfo.map { it.lowercase() }
+        
+        // Snack keywords
+        val snackKeywords = listOf(
+            "snack", "appetizer", "finger food", "dip", "chips", "nuts", "trail mix",
+            "energy bar", "protein bar", "smoothie bowl", "fruit", "vegetable sticks",
+            "crackers", "popcorn", "small bite"
+        )
+        
+        return category.contains("snack") || category.contains("appetizer") ||
+                tags.any { it.contains("snack") || it.contains("appetizer") } ||
+                snackKeywords.any { keyword -> name.contains(keyword) } ||
+                allTags.any { tag -> snackKeywords.any { keyword -> tag.contains(keyword) } }
+    }
+    
+    /**
+     * Get next recipe for a specific meal type with fallback
+     */
+    private fun getNextRecipeForMealType(
+        mealTypeRecipes: List<com.thenewkenya.ingrediet.data.model.DetailedRecipe>,
+        index: Int,
+        fallbackRecipes: List<com.thenewkenya.ingrediet.data.model.DetailedRecipe>,
+        mealType: String
+    ): com.thenewkenya.ingrediet.data.model.DetailedRecipe? {
+        return if (mealTypeRecipes.isNotEmpty()) {
+            val recipe = mealTypeRecipes[index % mealTypeRecipes.size]
+            android.util.Log.d("MealPlannerViewModel", "Selected $mealType recipe: ${recipe.name} (category: ${recipe.category})")
+            recipe
+        } else if (fallbackRecipes.isNotEmpty()) {
+            val fallbackRecipe = fallbackRecipes.random()
+            android.util.Log.d("MealPlannerViewModel", "Using fallback recipe for $mealType: ${fallbackRecipe.name}")
+            fallbackRecipe
+        } else {
+            android.util.Log.w("MealPlannerViewModel", "No recipes available for $mealType")
+            null
+        }
+    }
+
     private suspend fun buildNutritionAwareMealPlan(
         calorieTarget: Int,
         dietType: String,
@@ -1383,9 +1484,8 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
         // Step 3: Build the plan - simple assignment
         android.util.Log.d("MealPlannerViewModel", "Starting plan building...")
         val plan = mutableMapOf<DayOfWeek, List<MealPlanItem>>()
-        val shuffledRecipes = finalRecipes.shuffled()
-        android.util.Log.d("MealPlannerViewModel", "Shuffled ${shuffledRecipes.size} recipes")
-        var recipeIndex = 0
+        val shuffledRecipes = finalRecipes.shuffled() // Fallback recipes
+        android.util.Log.d("MealPlannerViewModel", "Shuffled ${shuffledRecipes.size} total recipes for fallback")
         
         // Calculate target calories per meal
         val breakfastCals = (calorieTarget * 0.25).toInt()
@@ -1394,24 +1494,32 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
         val snackCals = (calorieTarget * 0.10).toInt()
         android.util.Log.d("MealPlannerViewModel", "Calorie targets: B=$breakfastCals, L=$lunchCals, D=$dinnerCals, S=$snackCals")
         
+        // Categorize recipes by meal type
+        val breakfastRecipes = finalRecipes.filter { isBreakfastRecipe(it) }
+        val lunchRecipes = finalRecipes.filter { isLunchRecipe(it) }
+        val dinnerRecipes = finalRecipes.filter { isDinnerRecipe(it) }
+        val snackRecipes = finalRecipes.filter { isSnackRecipe(it) }
+        
+        android.util.Log.d("MealPlannerViewModel", "Categorized recipes: Breakfast=${breakfastRecipes.size}, Lunch=${lunchRecipes.size}, Dinner=${dinnerRecipes.size}, Snacks=${snackRecipes.size}")
+        
+        // Shuffle each category for variety
+        val shuffledBreakfast = breakfastRecipes.shuffled()
+        val shuffledLunch = lunchRecipes.shuffled()
+        val shuffledDinner = dinnerRecipes.shuffled()
+        val shuffledSnacks = snackRecipes.shuffled()
+        
+        // Keep track of indices for each meal type
+        var breakfastIndex = 0
+        var lunchIndex = 0
+        var dinnerIndex = 0
+        var snackIndex = 0
+        
         DayOfWeek.values().forEach { day ->
             android.util.Log.d("MealPlannerViewModel", "Building meals for $day")
             val dayMeals = mutableListOf<MealPlanItem>()
             
-            // Get next recipe for each meal, cycling through if needed
-            fun getNextRecipe(): com.thenewkenya.ingrediet.data.model.DetailedRecipe? {
-                if (shuffledRecipes.isEmpty()) {
-                    android.util.Log.w("MealPlannerViewModel", "No shuffled recipes available for $day")
-                    return null
-                }
-                val recipe = shuffledRecipes[recipeIndex % shuffledRecipes.size]
-                android.util.Log.d("MealPlannerViewModel", "Selected recipe #$recipeIndex: ${recipe.name}")
-                recipeIndex++
-                return recipe
-            }
-            
-            // Breakfast
-            getNextRecipe()?.let { recipe ->
+            // Breakfast - use breakfast-specific recipes
+            getNextRecipeForMealType(shuffledBreakfast, breakfastIndex, shuffledRecipes, "breakfast")?.let { recipe ->
                 android.util.Log.d("MealPlannerViewModel", "Adding breakfast for $day: ${recipe.name}")
                 dayMeals.add(
                     MealPlanItem(
@@ -1425,10 +1533,11 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                         imageUrl = recipe.imageUrl
                     )
                 )
+                breakfastIndex++
             } ?: android.util.Log.w("MealPlannerViewModel", "No recipe available for breakfast on $day")
             
-            // Lunch
-            getNextRecipe()?.let { recipe ->
+            // Lunch - use lunch-specific recipes
+            getNextRecipeForMealType(shuffledLunch, lunchIndex, shuffledRecipes, "lunch")?.let { recipe ->
                 android.util.Log.d("MealPlannerViewModel", "Adding lunch for $day: ${recipe.name}")
                 dayMeals.add(
                     MealPlanItem(
@@ -1442,10 +1551,11 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                         imageUrl = recipe.imageUrl
                     )
                 )
+                lunchIndex++
             } ?: android.util.Log.w("MealPlannerViewModel", "No recipe available for lunch on $day")
             
-            // Dinner
-            getNextRecipe()?.let { recipe ->
+            // Dinner - use dinner-specific recipes
+            getNextRecipeForMealType(shuffledDinner, dinnerIndex, shuffledRecipes, "dinner")?.let { recipe ->
                 android.util.Log.d("MealPlannerViewModel", "Adding dinner for $day: ${recipe.name}")
                 dayMeals.add(
                     MealPlanItem(
@@ -1459,12 +1569,13 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                         imageUrl = recipe.imageUrl
                     )
                 )
+                dinnerIndex++
             } ?: android.util.Log.w("MealPlannerViewModel", "No recipe available for dinner on $day")
             
-            // Snack (optional)
-            if (finalRecipes.size > 21) { // Only add snacks if we have enough variety
-                android.util.Log.d("MealPlannerViewModel", "Adding snack for $day (enough recipes available)")
-                getNextRecipe()?.let { recipe ->
+            // Snack (optional) - use snack-specific recipes
+            if (shuffledSnacks.isNotEmpty() || finalRecipes.size > 21) { // Add snacks if we have snack recipes or enough variety
+                android.util.Log.d("MealPlannerViewModel", "Adding snack for $day")
+                getNextRecipeForMealType(shuffledSnacks, snackIndex, shuffledRecipes, "snack")?.let { recipe ->
                     android.util.Log.d("MealPlannerViewModel", "Adding snack for $day: ${recipe.name}")
                     dayMeals.add(
                         MealPlanItem(
@@ -1478,9 +1589,10 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                             imageUrl = recipe.imageUrl
                         )
                     )
+                    snackIndex++
                 }
             } else {
-                android.util.Log.d("MealPlannerViewModel", "Skipping snack for $day (not enough recipe variety: ${finalRecipes.size})")
+                android.util.Log.d("MealPlannerViewModel", "Skipping snack for $day (no snack recipes available)")
             }
             
             android.util.Log.d("MealPlannerViewModel", "Day $day completed with ${dayMeals.size} meals")
