@@ -83,8 +83,7 @@ fun PrivacySecurityScreen(navController: NavController) {
     
     // State for toggle settings
     var biometricLoginEnabled by remember { mutableStateOf(false) }
-    var dataSharingEnabled by remember { mutableStateOf(true) }
-    var anonymizedDataEnabled by remember { mutableStateOf(true) }
+    var analyticsEnabled by remember { mutableStateOf(true) }
     
     // Toast state
     var showSuccessToast by remember { mutableStateOf(false) }
@@ -193,30 +192,14 @@ fun PrivacySecurityScreen(navController: NavController) {
                         color = colors.outlineVariant.copy(alpha = 0.5f)
                     )
                     
-                    // Data sharing toggle
+                    // Analytics and data sharing toggle (merged)
                     PrivacySecurityItem(
-                        title = "Data Sharing",
-                        description = "Allow app to share anonymized data",
+                        title = "Analytics & Data Sharing",
+                        description = "Help improve the app by sharing anonymous usage data and analytics",
                         icon = Icons.Outlined.DataObject,
                         hasSwitch = true,
-                        isChecked = dataSharingEnabled,
-                        onCheckedChange = { dataSharingEnabled = it }
-                    )
-                    
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp),
-                        thickness = 0.5.dp,
-                        color = colors.outlineVariant.copy(alpha = 0.5f)
-                    )
-                    
-                    // Anonymized data toggle
-                    PrivacySecurityItem(
-                        title = "Analytics",
-                        description = "Help improve the app with anonymous usage data",
-                        icon = Icons.Outlined.Security,
-                        hasSwitch = true,
-                        isChecked = anonymizedDataEnabled,
-                        onCheckedChange = { anonymizedDataEnabled = it }
+                        isChecked = analyticsEnabled,
+                        onCheckedChange = { analyticsEnabled = it }
                     )
                 }
             }
