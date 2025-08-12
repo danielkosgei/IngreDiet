@@ -113,7 +113,6 @@ fun RegisterScreen(navController: NavController) {
     var passwordValue by remember { mutableStateOf("") }
     var confirmPasswordValue by remember { mutableStateOf("") }
     var passwordVisibility by remember { mutableStateOf(false) }
-    var confirmPasswordVisibility by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var errorType by remember { mutableStateOf<LoginError?>(null) }
     val context = LocalContext.current
@@ -380,12 +379,12 @@ fun RegisterScreen(navController: NavController) {
                         style = typography.bodyMedium
                     )
                 },
-                visualTransformation = if (confirmPasswordVisibility) VisualTransformation.None else PasswordVisualTransformation(),
+                visualTransformation = if (passwordVisibility) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
-                    IconButton(onClick = { confirmPasswordVisibility = !confirmPasswordVisibility }) {
+                    IconButton(onClick = { passwordVisibility = !passwordVisibility }) {
                         Icon(
-                            imageVector = if (confirmPasswordVisibility) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                            contentDescription = if (confirmPasswordVisibility) "Hide password" else "Show password"
+                            imageVector = if (passwordVisibility) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = if (passwordVisibility) "Hide password" else "Show password"
                         )
                     }
                 },

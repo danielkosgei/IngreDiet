@@ -298,6 +298,7 @@ fun AppNavigation() {
             ) {
                 composable("login") { LoginScreen(navController) }
                 composable("register") { RegisterScreen(navController) }
+                composable("forgot_password") { com.thenewkenya.ingrediet.feature.authentication.ForgotPasswordScreen(navController) }
                 composable("home") { HomeScreenContent(navController) }
                 composable("loading") { LoadingScreen() }
                 composable("splash") { SplashScreen() }

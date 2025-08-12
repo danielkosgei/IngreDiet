@@ -223,39 +223,7 @@ fun LoginScreen(navController: NavController) {
             ) {
                 TextButton(
                     onClick = {
-                        if (!isOnline) {
-                            errorMessage = "No internet connection"
-                            errorType = LoginError.NETWORK_ERROR
-                            return@TextButton
-                        }
-                        
-                        if (emailValue.isEmpty()) {
-                            errorMessage = "Please enter your email address"
-                            errorType = LoginError.EMPTY_FIELDS
-                            return@TextButton
-                        }
-                        
-                        coroutineScope.launch {
-                            authState = AuthState.Loading
-                            authManager.resetPassword(emailValue).collect { response ->
-                                when (response) {
-                                    is AuthResponse.Success -> {
-                                        Toast.makeText(
-                                            context,
-                                            "Password reset email sent. Please check your inbox.",
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                        authState = AuthState.Success
-                                    }
-                                    is AuthResponse.Error -> {
-                                        authState = AuthState.Error(response.message)
-                                        errorMessage = response.message
-                                        errorType = LoginError.UNKNOWN_ERROR
-                                    }
-                                    else -> {}
-                                }
-                            }
-                        }
+                        navController.navigate("forgot_password")
                     },
                     modifier = Modifier.padding(vertical = 0.dp)
                 ) {
