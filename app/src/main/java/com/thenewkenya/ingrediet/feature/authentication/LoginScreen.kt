@@ -37,6 +37,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -383,8 +385,13 @@ fun LoginScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Google Sign In Button
-            OutlinedButton(
+            // Social Sign In Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Google Sign In Button
+                OutlinedButton(
                 onClick = {
                     isGoogleSignInLoading = true
                     coroutineScope.launch {
@@ -409,7 +416,7 @@ fun LoginScreen(navController: NavController) {
                     }
                 },
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .weight(1f)
                     .height(48.dp),
                 enabled = !isGoogleSignInLoading,
                 shape = RoundedCornerShape(8.dp),
@@ -437,12 +444,48 @@ fun LoginScreen(navController: NavController) {
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Continue with Google",
+                            text = "Google",
                             style = typography.titleSmall,
                             fontWeight = FontWeight.Medium
                         )
                     }
                 }
+            }
+            
+            // Apple Sign In Button
+            OutlinedButton(
+                onClick = {
+                    // Coming soon functionality
+                    android.widget.Toast.makeText(context, "Coming soon", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = colors.surface,
+                    contentColor = colors.onSurface
+                ),
+                border = BorderStroke(1.dp, colors.outline)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Apple logo
+                    AppleLogo(
+                        modifier = Modifier.size(20.dp),
+                        color = colors.onSurface
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Apple",
+                        style = typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -472,3 +515,5 @@ fun LoginScreen(navController: NavController) {
         }
     }
 }
+
+

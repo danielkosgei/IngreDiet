@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.util.Log
+import android.util.Patterns
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -35,6 +36,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,6 +65,7 @@ import com.thenewkenya.ingrediet.R
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.AuthResponse
 import com.thenewkenya.ingrediet.data.network.AuthState
+import com.thenewkenya.ingrediet.data.network.UserPreferencesManager
 import io.github.jan.supabase.auth.exception.AuthErrorCode
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
@@ -118,8 +125,79 @@ fun RegisterScreen(navController: NavController) {
     var passwordStrength by remember { mutableStateOf<PasswordStrength?>(null) }
     // Password match state
     var passwordsMatch by remember { mutableStateOf<Boolean?>(null) }
-
-    LaunchedEffect(emailValue, passwordValue, confirmPasswordValue) {
+    // Analytics consent state
+    var analyticsConsentChecked by remember { mutableStateOf(false) } // Default to unchecked
+    
+    // Real-time validation states
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    var confirmPasswordError by remember { mutableStateOf<String?>(null) }
+    
+    // Validation functions
+    fun validateEmail(email: String): String? {
+        return when {
+            email.isEmpty() -> null // Don't show error for empty field initially
+            !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() -> "Invalid email format"
+            else -> null
+        }
+    }
+    
+    fun validatePassword(password: String): String? {
+        return when {
+            password.isEmpty() -> null // Don't show error for empty field initially
+            password.length < 8 -> "Password must be at least 8 characters"
+            !password.any { it.isUpperCase() } -> "Password must contain an uppercase letter"
+            !password.any { it.isLowerCase() } -> "Password must contain a lowercase letter"
+            !password.any { it.isDigit() } -> "Password must contain a number"
+            !password.any { !it.isLetterOrDigit() } -> "Password must contain a special character"
+            else -> null
+        }
+    }
+    
+    fun validateConfirmPassword(password: String, confirmPassword: String): String? {
+        return when {
+            confirmPassword.isEmpty() -> null // Don't show error for empty field initially
+            confirmPassword != password -> "Passwords do not match"
+            else -> null
+        }
+    }
+    
+    // Real-time validation
+    LaunchedEffect(emailValue) {
+        if (emailValue.isNotEmpty()) {
+            emailError = validateEmail(emailValue)
+        } else {
+            emailError = null
+        }
+        errorMessage = null
+        errorType = null
+    }
+    
+    LaunchedEffect(passwordValue) {
+        if (passwordValue.isNotEmpty()) {
+            passwordError = validatePassword(passwordValue)
+            passwordStrength = calculatePasswordStrength(passwordValue)
+            // Re-validate confirm password when password changes
+            if (confirmPasswordValue.isNotEmpty()) {
+                passwordsMatch = confirmPasswordValue == passwordValue
+                confirmPasswordError = validateConfirmPassword(passwordValue, confirmPasswordValue)
+            }
+        } else {
+            passwordError = null
+            passwordStrength = null
+        }
+        errorMessage = null
+        errorType = null
+    }
+    
+    LaunchedEffect(confirmPasswordValue) {
+        if (confirmPasswordValue.isNotEmpty()) {
+            passwordsMatch = confirmPasswordValue == passwordValue
+            confirmPasswordError = validateConfirmPassword(passwordValue, confirmPasswordValue)
+        } else {
+            passwordsMatch = null
+            confirmPasswordError = null
+        }
         errorMessage = null
         errorType = null
     }
@@ -190,26 +268,29 @@ fun RegisterScreen(navController: NavController) {
                 colors = TextFieldDefaults.colors(
                     unfocusedContainerColor = colors.background,
                     focusedContainerColor = colors.background,
-                    unfocusedIndicatorColor = colors.outline,
-                    focusedIndicatorColor = colors.primary,
+                    unfocusedIndicatorColor = if (emailError != null) colors.error else colors.outline,
+                    focusedIndicatorColor = if (emailError != null) colors.error else colors.primary,
                     unfocusedLabelColor = colors.onSurfaceVariant,
-                    focusedLabelColor = colors.primary
+                    focusedLabelColor = if (emailError != null) colors.error else colors.primary
                 ),
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                isError = emailError != null
             )
+            
+            // Email error message
+            emailError?.let { error ->
+                Text(
+                    text = error,
+                    color = colors.error,
+                    style = typography.bodySmall,
+                    modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                )
+            }
 
             TextField(
                 value = passwordValue,
-                onValueChange = { 
-                    passwordValue = it
-                    // Calculate password strength
-                    passwordStrength = calculatePasswordStrength(it)
-                    // Update password match status if confirm password is not empty
-                    if (confirmPasswordValue.isNotEmpty()) {
-                        passwordsMatch = confirmPasswordValue == it
-                    }
-                },
+                onValueChange = { passwordValue = it },
                 label = {
                     Text(
                         text = "Password",
@@ -228,14 +309,25 @@ fun RegisterScreen(navController: NavController) {
                 colors = TextFieldDefaults.colors(
                     unfocusedContainerColor = colors.background,
                     focusedContainerColor = colors.background,
-                    unfocusedIndicatorColor = colors.outline,
-                    focusedIndicatorColor = colors.primary,
+                    unfocusedIndicatorColor = if (passwordError != null) colors.error else colors.outline,
+                    focusedIndicatorColor = if (passwordError != null) colors.error else colors.primary,
                     unfocusedLabelColor = colors.onSurfaceVariant,
-                    focusedLabelColor = colors.primary
+                    focusedLabelColor = if (passwordError != null) colors.error else colors.primary
                 ),
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                isError = passwordError != null
             )
+            
+            // Password error message
+            passwordError?.let { error ->
+                Text(
+                    text = error,
+                    color = colors.error,
+                    style = typography.bodySmall,
+                    modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                )
+            }
 
             // Password Strength Indicator
             if (passwordValue.isNotEmpty()) {
@@ -281,11 +373,7 @@ fun RegisterScreen(navController: NavController) {
 
             TextField(
                 value = confirmPasswordValue,
-                onValueChange = { 
-                    confirmPasswordValue = it
-                    // Check if passwords match
-                    passwordsMatch = if (it.isEmpty()) null else it == passwordValue
-                },
+                onValueChange = { confirmPasswordValue = it },
                 label = {
                     Text(
                         text = "Confirm Password",
@@ -304,14 +392,25 @@ fun RegisterScreen(navController: NavController) {
                 colors = TextFieldDefaults.colors(
                     unfocusedContainerColor = colors.background,
                     focusedContainerColor = colors.background,
-                    unfocusedIndicatorColor = colors.outline,
-                    focusedIndicatorColor = colors.primary,
+                    unfocusedIndicatorColor = if (confirmPasswordError != null) colors.error else colors.outline,
+                    focusedIndicatorColor = if (confirmPasswordError != null) colors.error else colors.primary,
                     unfocusedLabelColor = colors.onSurfaceVariant,
-                    focusedLabelColor = colors.primary
+                    focusedLabelColor = if (confirmPasswordError != null) colors.error else colors.primary
                 ),
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                isError = confirmPasswordError != null
             )
+            
+            // Confirm password error message
+            confirmPasswordError?.let { error ->
+                Text(
+                    text = error,
+                    color = colors.error,
+                    style = typography.bodySmall,
+                    modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                )
+            }
 
             // Password match indicator
             if (confirmPasswordValue.isNotEmpty()) {
@@ -336,6 +435,42 @@ fun RegisterScreen(navController: NavController) {
                         style = MaterialTheme.typography.bodySmall,
                         color = matchColor,
                         fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Analytics Consent Section
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = analyticsConsentChecked,
+                    onCheckedChange = { analyticsConsentChecked = it }
+                )
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Help improve IngreDiet",
+                        style = typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                        color = colors.onSurface
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Text(
+                        text = "Share anonymous usage data to help improve the app.",
+                        style = typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        lineHeight = typography.bodySmall.lineHeight * 1.2
                     )
                 }
             }
@@ -385,6 +520,12 @@ fun RegisterScreen(navController: NavController) {
                                         is AuthResponse.Success -> {
                                             Log.d("RegisterDebug", "Signup successful")
                                             authState = AuthState.Success
+                                            
+                                            // Save analytics consent preference
+                                            val prefsManager = UserPreferencesManager(context)
+                                            prefsManager.setAnalyticsConsent(analyticsConsentChecked)
+                                            Log.d("RegisterDebug", "Analytics consent saved: $analyticsConsentChecked")
+                                            
                                             Log.d("RegisterDebug", "Navigating to home")
                                             navController.navigate("home") {
                                                 popUpTo("login") { inclusive = true }
@@ -475,8 +616,13 @@ fun RegisterScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Google Sign In Button
-            OutlinedButton(
+            // Social Sign In Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Google Sign In Button
+                OutlinedButton(
                 onClick = {
                     if (!isOnline) {
                         errorMessage = "No internet connection"
@@ -490,6 +636,10 @@ fun RegisterScreen(navController: NavController) {
                             val response = authManager.loginGoogleuser()
                             when (response) {
                                 is AuthResponse.Success -> {
+                                    // Save analytics consent preference for Google signup too
+                                    val prefsManager = UserPreferencesManager(context)
+                                    prefsManager.setAnalyticsConsent(analyticsConsentChecked)
+                                    
                                     navController.navigate("home") {
                                         popUpTo("login") { inclusive = true }
                                     }
@@ -503,12 +653,12 @@ fun RegisterScreen(navController: NavController) {
                             errorMessage = e.message ?: "An error occurred"
                             errorType = LoginError.UNKNOWN_ERROR
                         }
-                        isGoogleSignInLoading = false
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
+                                            isGoogleSignInLoading = false
+                }
+            },
+            modifier = Modifier
+                .weight(1f)
+                .height(48.dp),
                 enabled = !isGoogleSignInLoading,
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
@@ -535,12 +685,48 @@ fun RegisterScreen(navController: NavController) {
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Continue with Google",
+                            text = "Google",
                             style = typography.titleSmall,
                             fontWeight = FontWeight.Medium
                         )
                     }
                 }
+            }
+            
+            // Apple Sign In Button
+            OutlinedButton(
+                onClick = {
+                    // Coming soon functionality
+                    android.widget.Toast.makeText(context, "Coming soon", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = colors.surface,
+                    contentColor = colors.onSurface
+                ),
+                border = BorderStroke(1.dp, colors.outline)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Apple logo
+                    AppleLogo(
+                        modifier = Modifier.size(20.dp),
+                        color = colors.onSurface
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Apple",
+                        style = typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -569,3 +755,5 @@ fun RegisterScreen(navController: NavController) {
         }
     }
 }
+
+

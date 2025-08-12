@@ -71,6 +71,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.util.Log
+import androidx.compose.runtime.LaunchedEffect
+import com.thenewkenya.ingrediet.data.network.UserPreferencesManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +86,15 @@ fun PrivacySecurityScreen(navController: NavController) {
     // State for toggle settings
     var biometricLoginEnabled by remember { mutableStateOf(false) }
     var analyticsEnabled by remember { mutableStateOf(true) }
+    
+    // User preferences manager
+    val prefsManager = remember { UserPreferencesManager(context) }
+    
+    // Load saved preferences
+    LaunchedEffect(Unit) {
+        analyticsEnabled = prefsManager.getAnalyticsConsent()
+        biometricLoginEnabled = prefsManager.getBiometricEnabled()
+    }
     
     // Toast state
     var showSuccessToast by remember { mutableStateOf(false) }
@@ -149,7 +160,12 @@ fun PrivacySecurityScreen(navController: NavController) {
                         icon = Icons.Outlined.Fingerprint,
                         hasSwitch = true,
                         isChecked = biometricLoginEnabled,
-                        onCheckedChange = { biometricLoginEnabled = it }
+                        onCheckedChange = { 
+                            biometricLoginEnabled = it
+                            coroutineScope.launch {
+                                prefsManager.setBiometricEnabled(it)
+                            }
+                        }
                     )
                 }
             }
@@ -199,7 +215,12 @@ fun PrivacySecurityScreen(navController: NavController) {
                         icon = Icons.Outlined.DataObject,
                         hasSwitch = true,
                         isChecked = analyticsEnabled,
-                        onCheckedChange = { analyticsEnabled = it }
+                        onCheckedChange = { 
+                            analyticsEnabled = it
+                            coroutineScope.launch {
+                                prefsManager.setAnalyticsConsent(it)
+                            }
+                        }
                     )
                 }
             }
