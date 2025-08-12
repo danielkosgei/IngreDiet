@@ -84,6 +84,8 @@ private val WellnessDarkColorScheme = darkColorScheme(
 )
 
 // === PINK THEME COLOR SCHEMES ===
+// Note: Pink theme colors are not defined in Color.kt, so these are commented out
+/*
 private val PinkLightColorScheme = lightColorScheme(
     primary = PinkPrimary,
     onPrimary = Color.White,
@@ -139,33 +141,22 @@ private val PinkDarkColorScheme = darkColorScheme(
     errorContainer = Color(0xFF2F1B2F),
     onErrorContainer = Error
 )
+*/
 
 
 
 @Composable
 fun IngreDietTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
-    colorTheme: ThemeMode = ThemeMode.DEFAULT_THEME,
     content: @Composable () -> Unit
 ) {
     val isDarkTheme = when (themeMode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
-        else -> isSystemInDarkTheme() // fallback for color themes
     }
     
-    val colorScheme = when (colorTheme) {
-        ThemeMode.DEFAULT_THEME -> {
-            if (isDarkTheme) WellnessDarkColorScheme else WellnessLightColorScheme
-        }
-        ThemeMode.PINK_THEME -> {
-            if (isDarkTheme) PinkDarkColorScheme else PinkLightColorScheme
-        }
-        else -> {
-            if (isDarkTheme) WellnessDarkColorScheme else WellnessLightColorScheme
-        }
-    }
+    val colorScheme = if (isDarkTheme) WellnessDarkColorScheme else WellnessLightColorScheme
 
     MaterialTheme(
         colorScheme = colorScheme,
