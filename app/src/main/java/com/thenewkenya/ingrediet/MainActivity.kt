@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
@@ -63,6 +64,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -86,6 +88,9 @@ import com.thenewkenya.ingrediet.data.network.LocalSupabase
 import com.thenewkenya.ingrediet.data.network.SessionManager
 import com.thenewkenya.ingrediet.data.network.RecipeCacheService
 import com.thenewkenya.ingrediet.data.network.supabase
+import com.thenewkenya.ingrediet.data.network.AppLockManager
+import com.thenewkenya.ingrediet.data.network.BiometricAuthManager
+import com.thenewkenya.ingrediet.data.network.UserPreferencesManager
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
 import com.thenewkenya.ingrediet.feature.navigation.LoadingScreen
 import com.thenewkenya.ingrediet.feature.authentication.LoginScreen
@@ -109,6 +114,7 @@ import com.thenewkenya.ingrediet.feature.profile.NutritionGoalsScreen
 import com.thenewkenya.ingrediet.feature.profile.AppearanceScreen
 import com.thenewkenya.ingrediet.feature.profile.NotificationsScreen
 import com.thenewkenya.ingrediet.feature.profile.PrivacySecurityScreen
+import com.thenewkenya.ingrediet.feature.security.AppLockScreen
 import com.thenewkenya.ingrediet.ui.theme.IngreDietTheme
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
@@ -117,7 +123,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Enable edge-to-edge display
@@ -129,9 +135,15 @@ class MainActivity : ComponentActivity() {
         val sessionManager = SessionManager(applicationContext)
         val authManager = AuthManager(applicationContext)
         val recipeCacheService = RecipeCacheService(applicationContext)
+        val userPreferencesManager = UserPreferencesManager(applicationContext)
+        val biometricAuthManager = BiometricAuthManager(applicationContext)
+        val appLockManager = AppLockManager(applicationContext, userPreferencesManager, biometricAuthManager)
         
         // Preload a few recipes in the background
         preloadRecipes()
+        
+        // Register app lock manager as lifecycle observer
+        lifecycle.addObserver(appLockManager)
         
         setContent {
             // Initialize theme preferences and observe changes reactively
@@ -143,6 +155,15 @@ class MainActivity : ComponentActivity() {
             }
             
             IngreDietTheme(themeMode = themeMode) {
+                // Observe app lock state
+                val showAppLockScreen by appLockManager.showAppLockScreen.collectAsState()
+                val isAppLocked by appLockManager.isAppLocked.collectAsState()
+                
+                // Check app lock on first load
+                LaunchedEffect(Unit) {
+                    appLockManager.checkAppLockOnStart()
+                }
+                
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -153,7 +174,36 @@ class MainActivity : ComponentActivity() {
                         LocalAuthManager provides authManager,
                         LocalRecipeCacheService provides recipeCacheService
                     ) {
-                        AppNavigation()
+                        if (showAppLockScreen) {
+                            AppLockScreen(
+                                appLockManager = appLockManager,
+                                biometricAuthManager = biometricAuthManager,
+                                onUnlocked = { /* App will be unlocked via state */ },
+                                onReloginRequested = {
+                                    // Sign out user and disable app lock temporarily
+                                    GlobalScope.launch {
+                                        try {
+                                            // Disable app lock first
+                                            userPreferencesManager.setBiometricEnabled(false)
+                                            
+                                            // Sign out user
+                                            supabase.auth.signOut()
+                                            
+                                            // Unlock the app so user can access login screen
+                                            appLockManager.unlockApp()
+                                            
+                                            Log.d("MainActivity", "User signed out due to fingerprint access issues")
+                                        } catch (e: Exception) {
+                                            Log.e("MainActivity", "Error during emergency logout", e)
+                                            // Even if logout fails, unlock the app so user can try to resolve
+                                            appLockManager.unlockApp()
+                                        }
+                                    }
+                                }
+                            )
+                        } else {
+                            AppNavigation()
+                        }
                     }
                 }
             }

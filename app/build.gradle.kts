@@ -82,6 +82,9 @@ dependencies {
     // Google
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services.auth)
+    
+    // Biometric Authentication
+    implementation(libs.androidx.biometric)
 
     // Supabase
     implementation(platform(libs.supabase.bom))

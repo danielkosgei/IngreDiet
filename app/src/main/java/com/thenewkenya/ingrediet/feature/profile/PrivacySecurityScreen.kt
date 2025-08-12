@@ -37,8 +37,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,7 +74,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.util.Log
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.fragment.app.FragmentActivity
+import androidx.activity.ComponentActivity
 import com.thenewkenya.ingrediet.data.network.UserPreferencesManager
+import com.thenewkenya.ingrediet.data.network.BiometricAuthManager
+import com.thenewkenya.ingrediet.data.network.BiometricAvailability
+import com.thenewkenya.ingrediet.data.network.BiometricAuthResult
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,10 +98,47 @@ fun PrivacySecurityScreen(navController: NavController) {
     // User preferences manager
     val prefsManager = remember { UserPreferencesManager(context) }
     
+    // Biometric auth manager
+    val biometricAuthManager = remember { BiometricAuthManager(context) }
+    val biometricAvailability = remember { biometricAuthManager.isBiometricAvailable() }
+    
+    // State for biometric functionality
+    var showBiometricUnavailableMessage by remember { mutableStateOf(false) }
+    
     // Load saved preferences
     LaunchedEffect(Unit) {
         analyticsEnabled = prefsManager.getAnalyticsConsent()
         biometricLoginEnabled = prefsManager.getBiometricEnabled()
+    }
+    
+    // Listen for biometric authentication results
+    val biometricAuthResult by biometricAuthManager.authResults.collectAsState(initial = null)
+    
+    LaunchedEffect(biometricAuthResult) {
+        when (biometricAuthResult) {
+            is BiometricAuthResult.Success -> {
+                Log.d("BiometricAuth", "Authentication successful")
+                // Biometric is already enabled, user successfully authenticated
+            }
+            is BiometricAuthResult.Failed -> {
+                Log.d("BiometricAuth", "Authentication failed")
+                // Reset toggle if authentication failed
+                biometricLoginEnabled = false
+                coroutineScope.launch {
+                    prefsManager.setBiometricEnabled(false)
+                }
+            }
+            is BiometricAuthResult.Error -> {
+                val errorResult = biometricAuthResult as BiometricAuthResult.Error
+                Log.d("BiometricAuth", "Authentication error: ${errorResult.message}")
+                // Reset toggle if there was an error
+                biometricLoginEnabled = false
+                coroutineScope.launch {
+                    prefsManager.setBiometricEnabled(false)
+                }
+            }
+            null -> { /* Initial state */ }
+        }
     }
     
     // Toast state
@@ -153,17 +198,51 @@ fun PrivacySecurityScreen(navController: NavController) {
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Biometric login toggle
+                    // App lock toggle
                     PrivacySecurityItem(
-                        title = "Biometric Login",
-                        description = "Use fingerprint to login",
+                        title = "App Lock",
+                        description = if (biometricAvailability == BiometricAvailability.AVAILABLE) {
+                            "Lock app with fingerprint when opened"
+                        } else {
+                            biometricAuthManager.getAvailabilityMessage(biometricAvailability)
+                        },
                         icon = Icons.Outlined.Fingerprint,
                         hasSwitch = true,
                         isChecked = biometricLoginEnabled,
-                        onCheckedChange = { 
-                            biometricLoginEnabled = it
-                            coroutineScope.launch {
-                                prefsManager.setBiometricEnabled(it)
+                        isEnabled = biometricAvailability == BiometricAvailability.AVAILABLE,
+                        onCheckedChange = { isEnabled ->
+                            if (biometricAvailability != BiometricAvailability.AVAILABLE) {
+                                showBiometricUnavailableMessage = true
+                                return@PrivacySecurityItem
+                            }
+                            
+                            if (isEnabled) {
+                                // When enabling biometric login, require authentication first
+                                val authenticationStarted = biometricAuthManager.authenticateWithContext(
+                                    context = context,
+                                    title = "Enable App Lock",
+                                    subtitle = "Authenticate to enable app lock protection"
+                                )
+                                
+                                if (authenticationStarted) {
+                                    // Wait for authentication result before updating state
+                                    // The LaunchedEffect above will handle the result
+                                    biometricLoginEnabled = true
+                                    coroutineScope.launch {
+                                        prefsManager.setBiometricEnabled(true)
+                                    }
+                                } else {
+                                    Log.e("BiometricAuth", "Failed to start biometric authentication")
+                                    // Fallback: disable biometric and show error
+                                    biometricLoginEnabled = false
+                                    showBiometricUnavailableMessage = true
+                                }
+                            } else {
+                                // When disabling, just turn it off
+                                biometricLoginEnabled = false
+                                coroutineScope.launch {
+                                    prefsManager.setBiometricEnabled(false)
+                                }
                             }
                         }
                     )
@@ -309,6 +388,44 @@ fun PrivacySecurityScreen(navController: NavController) {
             },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+        
+        // Biometric unavailable dialog
+        if (showBiometricUnavailableMessage) {
+            AlertDialog(
+                onDismissRequest = { showBiometricUnavailableMessage = false },
+                title = {
+                    Text(
+                        text = "Fingerprint Authentication Unavailable",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                },
+                text = {
+                    Text(
+                        text = biometricAuthManager.getAvailabilityMessage(biometricAvailability),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = { showBiometricUnavailableMessage = false }
+                    ) {
+                        Text("OK")
+                    }
+                },
+                dismissButton = if (biometricAvailability == BiometricAvailability.NONE_ENROLLED) {
+                    {
+                        TextButton(
+                            onClick = { 
+                                showBiometricUnavailableMessage = false
+                                // TODO: Could open device settings for biometric setup
+                            }
+                        ) {
+                            Text("Settings")
+                        }
+                    }
+                } else null
+            )
+        }
         }
     }
 }
@@ -321,7 +438,8 @@ fun PrivacySecurityItem(
     hasSwitch: Boolean,
     isChecked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    isEnabled: Boolean = true
 ) {
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -335,7 +453,7 @@ fun PrivacySecurityItem(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = colors.primary,
+            tint = if (isEnabled) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.4f),
             modifier = Modifier.size(24.dp)
         )
         
@@ -346,27 +464,32 @@ fun PrivacySecurityItem(
         ) {
             Text(
                 text = title,
-                style = typography.bodyLarge
+                style = typography.bodyLarge,
+                color = if (isEnabled) colors.onSurface else colors.onSurfaceVariant.copy(alpha = 0.4f)
             )
             
             Text(
                 text = description,
                 style = typography.bodySmall,
-                color = colors.onSurfaceVariant.copy(alpha = 0.7f)
+                color = if (isEnabled) colors.onSurfaceVariant.copy(alpha = 0.7f) else colors.onSurfaceVariant.copy(alpha = 0.4f)
             )
         }
         
         if (hasSwitch) {
             Switch(
                 checked = isChecked,
-                onCheckedChange = onCheckedChange
+                onCheckedChange = if (isEnabled) onCheckedChange else { _ -> },
+                enabled = isEnabled
             )
         } else {
-            IconButton(onClick = onClick) {
+            IconButton(
+                onClick = onClick,
+                enabled = isEnabled
+            ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = "Navigate",
-                    tint = colors.onSurfaceVariant
+                    tint = if (isEnabled) colors.onSurfaceVariant else colors.onSurfaceVariant.copy(alpha = 0.4f)
                 )
             }
         }

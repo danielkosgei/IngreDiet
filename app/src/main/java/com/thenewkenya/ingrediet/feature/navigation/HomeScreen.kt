@@ -244,8 +244,9 @@ fun HomeScreenContent(navController: NavController) {
 
     // Recipes state
     var recipes by remember { mutableStateOf<List<RecipeRepository.RecipeListItem>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
+    var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var hasInitiallyLoaded by remember { mutableStateOf(false) }
 
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -372,6 +373,7 @@ fun HomeScreenContent(navController: NavController) {
         if (searchQuery.isNotEmpty()) {
             isLoading = true
             errorMessage = null
+            hasInitiallyLoaded = true
             
             try {
                 // Use coroutineScope.launch to collect the flow properly
@@ -768,10 +770,7 @@ private fun HomeHeader(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
-                    .shadow(
-                        elevation = 4.dp,
-                        shape = RoundedCornerShape(16.dp)
-                    ),
+                    .padding(horizontal = 24.dp),
                 placeholder = { 
                     Text(
                         "Search recipes...",
@@ -802,13 +801,13 @@ private fun HomeHeader(
                         }
                     }
                 },
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = colors.surface,
                     unfocusedContainerColor = colors.surface,
                     disabledContainerColor = colors.surface,
                     focusedIndicatorColor = colors.primary,
-                    unfocusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = colors.outline.copy(alpha = 0.5f),
                     focusedTextColor = colors.onSurface,
                     unfocusedTextColor = colors.onSurface,
                     focusedLeadingIconColor = colors.primary,
