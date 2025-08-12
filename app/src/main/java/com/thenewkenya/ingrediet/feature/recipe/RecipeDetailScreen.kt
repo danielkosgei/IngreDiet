@@ -76,6 +76,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -1007,7 +1009,7 @@ private fun IngredientItem(
     onLongPress: () -> Unit = {},
     onAddToShoppingList: () -> Unit = {}
 ) {
-    // Add state for showing ingredient details dialog
+    // Add state for showing ingredient details bottom sheet
     var showIngredientDetails by remember { mutableStateOf(false) }
     
     // Add animating color transition
@@ -1110,9 +1112,9 @@ private fun IngredientItem(
         }
     }
     
-    // Show ingredient details dialog when clicked
+    // Show ingredient details bottom sheet when clicked
     if (showIngredientDetails) {
-        IngredientDetailsDialog(
+        IngredientDetailsBottomSheet(
             ingredient = ingredient,
             onDismiss = { showIngredientDetails = false }
         )
@@ -1121,102 +1123,51 @@ private fun IngredientItem(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun IngredientDetailsDialog(
+private fun IngredientDetailsBottomSheet(
     ingredient: IngredientItem,
     onDismiss: () -> Unit
 ) {
+    val bottomSheetState = rememberModalBottomSheetState()
     val scrollState = rememberScrollState()
     
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = bottomSheetState
+    ) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 500.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
+                .verticalScroll(scrollState)
+                .padding(16.dp)
+                .padding(bottom = 24.dp), // Extra padding for bottom gesture area
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
+            // Header with ingredient name
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Ingredient image (OFF override when available)
-                val context = LocalContext.current
-                var offImageUrl by remember { mutableStateOf<String?>(null) }
-                LaunchedEffect(ingredient.name) {
-                    // Preload OFF image URL if available
-                    val repo = com.thenewkenya.ingrediet.data.repository.NutritionRepository(context)
-                    val nutrition = repo.getNutritionByName(ingredient.name)
-                    offImageUrl = nutrition?.imageUrl
-                }
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(offImageUrl ?: (ingredient.imageUrl ?: ""))
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = ingredient.name,
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-                
-                // Gradient overlay for better text visibility
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Black.copy(alpha = 0.1f),
-                                    Color.Black.copy(alpha = 0.6f)
-                                ),
-                                startY = 0f,
-                                endY = 200f * LocalDensity.current.density
-                            )
-                        )
-                )
-                
-                // Close button
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .size(32.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                            shape = CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                
-                // Ingredient name at the bottom
                 Text(
                     text = ingredient.name,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(16.dp)
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
                 )
+                
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
-            
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
                 // Nutritional info
                 InfoSection(
                     title = "Nutritional Information",
@@ -1372,7 +1323,6 @@ private fun IngredientDetailsDialog(
                         }
                     }
                 )
-            }
         }
     }
 }
