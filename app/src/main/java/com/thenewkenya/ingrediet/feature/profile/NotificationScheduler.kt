@@ -47,6 +47,47 @@ object NotificationScheduler {
             }
         }
     }
+    
+    /**
+     * Test function to immediately trigger a notification for testing
+     */
+    fun testNotification(context: Context, type: String = "hydration") {
+        Log.d(TAG, "Testing notification: $type")
+        val intent = Intent(context, NotificationReceiver::class.java).apply {
+            putExtra("type", type)
+            if (type == "meal") {
+                putExtra("meal", "Test Meal")
+            }
+        }
+        // Send immediately
+        NotificationReceiver().onReceive(context, intent)
+    }
+    
+    /**
+     * Schedule all default notifications automatically
+     */
+    fun scheduleAllDefaults(context: Context) {
+        Log.d(TAG, "Scheduling all default notifications")
+        
+        // Schedule meal reminders
+        scheduleMealReminder(context, 8, 0, "Breakfast")
+        scheduleMealReminder(context, 13, 0, "Lunch") 
+        scheduleMealReminder(context, 19, 0, "Dinner")
+        
+        // Schedule hydration reminders (every 3 hours during day)
+        listOf(9, 12, 15, 18).forEach { hour ->
+            scheduleHydrationReminder(context, hour, 0)
+        }
+        
+        // Schedule weekly shopping reminder (Saturday 5 PM)
+        scheduleShoppingReminder(context, Calendar.SATURDAY, 17, 0)
+        
+        // Schedule daily goals reminder (8:30 PM)
+        scheduleDailyGoalReminder(context, 20, 30)
+        
+        // Schedule weekly recipe suggestion (Monday 9 AM)
+        scheduleWeeklyRecipeSuggestion(context, Calendar.MONDAY, 9, 0)
+    }
 
     fun scheduleMealReminder(context: Context, hour: Int, minute: Int, mealName: String) {
         val cal = Calendar.getInstance().apply {

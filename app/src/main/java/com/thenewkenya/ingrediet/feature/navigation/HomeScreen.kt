@@ -135,6 +135,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
 import androidx.navigation.compose.rememberNavController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -199,6 +205,37 @@ fun HomeScreenContent(navController: NavController) {
     val coroutineScope = rememberCoroutineScope()
     val user = supabase.auth.currentUserOrNull()
     val focusManager = LocalFocusManager.current
+
+    // Notification permission handling
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            // Auto-schedule default notifications when permission granted
+            com.thenewkenya.ingrediet.feature.profile.NotificationScheduler.scheduleAllDefaults(context)
+        }
+    }
+
+    // Request notification permission on first home screen visit
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context, 
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            
+            if (!hasPermission) {
+                // Request permission for notifications
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                // Permission already granted, schedule notifications if not already done
+                com.thenewkenya.ingrediet.feature.profile.NotificationScheduler.scheduleAllDefaults(context)
+            }
+        } else {
+            // On older Android versions, no permission needed - just schedule
+            com.thenewkenya.ingrediet.feature.profile.NotificationScheduler.scheduleAllDefaults(context)
+        }
+    }
 
     var isSigningOut by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
