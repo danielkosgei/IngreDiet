@@ -1,7 +1,6 @@
 package com.thenewkenya.ingrediet.feature.profile
 
 import android.util.Log
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -29,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -96,11 +96,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.thenewkenya.ingrediet.data.network.ImageUploadManager
+import com.thenewkenya.ingrediet.data.network.ImageUploadManagerSimple
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -139,7 +146,7 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
 
     LaunchedEffect(uiState) {
         if (uiState is ProfileUiState.Error && (uiState as ProfileUiState.Error).message == "Account deleted") {
-            Toast.makeText(context, "Account successfully deleted", Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, "Account successfully deleted", android.widget.Toast.LENGTH_SHORT).show()
             navController.navigate("login") {
                 popUpTo("home") { inclusive = true }
             }
@@ -214,7 +221,7 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
                             } catch (e: Exception) {
                                 Log.e("ProfileScreen", "Error signing out", e)
                                 isSigningOut = false
-                                Toast.makeText(context, "Failed to sign out. Please try again.", Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, "Failed to sign out. Please try again.", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
@@ -313,7 +320,7 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
                             } catch (e: Exception) {
                                 Log.e("ProfileScreen", "Error deleting account", e)
                                 isDeleting = false
-                                Toast.makeText(context, "Failed to delete account. Please try again.", Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, "Failed to delete account. Please try again.", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
@@ -463,8 +470,95 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
                     var editedLastName by remember { mutableStateOf(currentProfile.lastName) }
                     var editedEmail by remember { mutableStateOf(currentProfile.email) }
                     
+                    // Health fields
+                    var editedAge by remember { mutableStateOf(currentProfile.age?.toString() ?: "") }
+                    var editedHeight by remember { mutableStateOf(currentProfile.height?.toString() ?: "") }
+                    var editedWeight by remember { mutableStateOf(currentProfile.weight?.toString() ?: "") }
+                    var editedSex by remember { mutableStateOf(currentProfile.sex) }
+                    var editedActivityLevel by remember { mutableStateOf(currentProfile.activityLevel) }
+                    
                     // For displaying Google user's name
                     var displayName by remember { mutableStateOf<String?>(null) }
+                    
+                    // Image upload handling
+                    val coroutineScope = rememberCoroutineScope()
+                    val imageUploadManager = remember { ImageUploadManager() }
+                    val imageUploadManagerSimple = remember { ImageUploadManagerSimple() }
+                    var isUploadingImage by remember { mutableStateOf(false) }
+                    var imageRefreshKey by remember { mutableStateOf(0) } // Force image refresh
+                    
+                    // Image picker launcher
+                    val imagePickerLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.GetContent()
+                    ) { uri ->
+                        uri?.let { selectedUri ->
+                            val userId = currentUser?.id
+                            if (userId != null) {
+                                coroutineScope.launch {
+                                    isUploadingImage = true
+                                    
+                                    // Try the folder-based approach first, fallback to simple approach
+                                    imageUploadManager.uploadProfileImage(context, selectedUri, userId).collect { result ->
+                                        result.fold(
+                                            onSuccess = { imageUrl ->
+                                                if (imageUrl != "Loading...") {
+                                                    // Update profile with new image URL
+                                                    val updatedProfile = currentProfile.copy(profileImageUrl = imageUrl)
+                                                    viewModel.updateProfile(updatedProfile)
+                                                    profileImageUrl = imageUrl
+                                                    isUploadingImage = false
+                                                    imageRefreshKey++ // Force image refresh
+                                                    Log.d("ProfileScreen", "Profile image updated: $imageUrl")
+                                                    
+                                                    // Show success message
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        "Profile picture updated!",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            },
+                                            onFailure = { error ->
+                                                Log.w("ProfileScreen", "Folder-based upload failed, trying simple approach: ${error.message}")
+                                                
+                                                // Fallback to simple upload approach
+                                                imageUploadManagerSimple.uploadProfileImage(context, selectedUri, userId).collect { fallbackResult ->
+                                                    fallbackResult.fold(
+                                                        onSuccess = { imageUrl ->
+                                                            if (imageUrl != "Loading...") {
+                                                                val updatedProfile = currentProfile.copy(profileImageUrl = imageUrl)
+                                                                viewModel.updateProfile(updatedProfile)
+                                                                profileImageUrl = imageUrl
+                                                                isUploadingImage = false
+                                                                imageRefreshKey++ // Force image refresh
+                                                                Log.d("ProfileScreen", "Profile image updated (fallback): $imageUrl")
+                                                                
+                                                                // Show success message
+                                                                android.widget.Toast.makeText(
+                                                                    context,
+                                                                    "Profile picture updated!",
+                                                                    android.widget.Toast.LENGTH_SHORT
+                                                                ).show()
+                                                            }
+                                                        },
+                                                        onFailure = { fallbackError ->
+                                                            Log.e("ProfileScreen", "Both upload methods failed: ${fallbackError.message}")
+                                                            isUploadingImage = false
+                                                            android.widget.Toast.makeText(
+                                                                context,
+                                                                "Failed to upload image: ${fallbackError.message}",
+                                                                android.widget.Toast.LENGTH_SHORT
+                                                            ).show()
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                     
                     LaunchedEffect(currentUser) {
                         try {
@@ -531,13 +625,18 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
                                         .size(100.dp)
                                         .clip(CircleShape)
                                         .background(colors.surfaceVariant)
-                                        .clickable { /* Handle image change */ },
+                                        .clickable { 
+                                            if (!isUploadingImage) {
+                                                imagePickerLauncher.launch("image/*")
+                                            }
+                                        },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    if (profileImageUrl != null) {
+                                    if (profileImageUrl != null || currentProfile.profileImageUrl.isNotEmpty()) {
+                                        val imageUrl = profileImageUrl ?: currentProfile.profileImageUrl
                                         AsyncImage(
                                             model = ImageRequest.Builder(LocalContext.current)
-                                                .data(profileImageUrl)
+                                                .data("$imageUrl?refresh=$imageRefreshKey")
                                                 .crossfade(true)
                                                 .build(),
                                             contentDescription = "Profile picture",
@@ -553,19 +652,27 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
                                         )
                                     }
                                     
-                                    // Camera icon overlay for changing image
+                                    // Camera icon overlay for changing image or loading indicator
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .background(Color.Black.copy(alpha = 0.3f)),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Camera,
-                                            contentDescription = "Change profile picture",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(32.dp)
-                                        )
+                                        if (isUploadingImage) {
+                                            CircularProgressIndicator(
+                                                color = Color.White,
+                                                modifier = Modifier.size(32.dp),
+                                                strokeWidth = 3.dp
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.Camera,
+                                                contentDescription = "Change profile picture",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(32.dp)
+                                            )
+                                        }
                                     }
                                 }
                                 
@@ -636,6 +743,80 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
                                                 }
                                             }
                                         )
+                                        
+                                        // Health Information Section
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        
+                                        Text(
+                                            text = "Health Information",
+                                            style = typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                        )
+                                        
+                                        // Age field
+                                        OutlinedTextField(
+                                            value = editedAge,
+                                            onValueChange = { if (it.all { char -> char.isDigit() } && it.length <= 3) editedAge = it },
+                                            label = { Text("Age") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            singleLine = true,
+                                            suffix = { Text("years") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                        )
+                                        
+                                        // Height field
+                                        OutlinedTextField(
+                                            value = editedHeight,
+                                            onValueChange = { if (it.matches(Regex("^\\d*\\.?\\d*$")) && it.length <= 6) editedHeight = it },
+                                            label = { Text("Height") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            singleLine = true,
+                                            suffix = { Text("cm") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                                        )
+                                        
+                                        // Weight field
+                                        OutlinedTextField(
+                                            value = editedWeight,
+                                            onValueChange = { if (it.matches(Regex("^\\d*\\.?\\d*$")) && it.length <= 6) editedWeight = it },
+                                            label = { Text("Weight") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            singleLine = true,
+                                            suffix = { Text("kg") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                                        )
+                                        
+                                        // BMI Display
+                                        if (editedHeight.isNotBlank() && editedWeight.isNotBlank()) {
+                                            val heightValue = editedHeight.toFloatOrNull()
+                                            val weightValue = editedWeight.toFloatOrNull()
+                                            
+                                            if (heightValue != null && weightValue != null && heightValue > 0) {
+                                                val bmi = weightValue / ((heightValue / 100) * (heightValue / 100))
+                                                val bmiCategory = when {
+                                                    bmi < 18.5 -> "Underweight"
+                                                    bmi < 25.0 -> "Normal weight"
+                                                    bmi < 30.0 -> "Overweight"
+                                                    else -> "Obese"
+                                                }
+                                                
+                                                Card(
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = colors.primaryContainer.copy(alpha = 0.3f)
+                                                    )
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier.padding(12.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = "BMI: %.1f (%s)".format(bmi, bmiCategory),
+                                                            style = typography.bodyMedium,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = colors.onSurface
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                                 
@@ -647,7 +828,12 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
                                         val updatedProfile = currentProfile.copy(
                                             firstName = editedFirstName,
                                             lastName = editedLastName,
-                                            email = editedEmail
+                                            email = editedEmail,
+                                            age = editedAge.toIntOrNull(),
+                                            height = editedHeight.toFloatOrNull(),
+                                            weight = editedWeight.toFloatOrNull(),
+                                            sex = editedSex,
+                                            activityLevel = editedActivityLevel
                                         )
                                         viewModel.updateProfile(updatedProfile)
                                         navController.navigateUp()
@@ -683,10 +869,11 @@ fun ProfileScreen(navController: NavController, isEditMode: Boolean = false) {
                                         .background(colors.surfaceVariant),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    if (profileImageUrl != null) {
+                                    if (profileImageUrl != null || currentProfile.profileImageUrl.isNotEmpty()) {
+                                        val imageUrl = profileImageUrl ?: currentProfile.profileImageUrl
                                         AsyncImage(
                                             model = ImageRequest.Builder(LocalContext.current)
-                                                .data(profileImageUrl)
+                                                .data("$imageUrl?refresh=$imageRefreshKey")
                                                 .crossfade(true)
                                                 .build(),
                                             contentDescription = "Profile picture",

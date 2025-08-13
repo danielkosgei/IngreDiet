@@ -525,8 +525,8 @@ fun RegisterScreen(navController: NavController) {
                                             prefsManager.setAnalyticsConsent(analyticsConsentChecked)
                                             Log.d("RegisterDebug", "Analytics consent saved: $analyticsConsentChecked")
                                             
-                                            Log.d("RegisterDebug", "Navigating to home")
-                                            navController.navigate("home") {
+                                            Log.d("RegisterDebug", "Navigating to onboarding")
+                                            navController.navigate("onboarding") {
                                                 popUpTo("login") { inclusive = true }
                                             }
                                         }
@@ -639,7 +639,7 @@ fun RegisterScreen(navController: NavController) {
                                     val prefsManager = UserPreferencesManager(context)
                                     prefsManager.setAnalyticsConsent(analyticsConsentChecked)
                                     
-                                    navController.navigate("home") {
+                                    navController.navigate("onboarding") {
                                         popUpTo("login") { inclusive = true }
                                     }
                                 }

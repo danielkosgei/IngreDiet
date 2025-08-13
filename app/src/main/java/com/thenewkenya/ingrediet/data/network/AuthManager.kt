@@ -65,6 +65,35 @@ class AuthManager(private val context: Context) {
             if (userId != null) {
                 sessionManager.saveUserId(userId)
                 Log.d("AuthManager", "User ID saved after signup: $userId")
+                
+                // Create initial profile in database
+                try {
+                    val profileData = mapOf(
+                        "id" to userId,
+                        "email" to emailValue,
+                        "first_name" to "",
+                        "last_name" to "",
+                        "dietary_preferences" to emptyList<String>(),
+                        "allergies" to emptyList<String>(),
+                        "weight_goal" to "",
+                        "calorie_target" to 0,
+                        "profile_image_url" to "",
+                        "age" to null,
+                        "height" to null,
+                        "weight" to null,
+                        "sex" to "",
+                        "activity_level" to "",
+                        "health_goals" to emptyList<String>(),
+                        "health_conditions" to emptyList<String>(),
+                        "is_onboarding_completed" to false
+                    )
+
+                    supabase.from("profiles").insert(profileData)
+                    Log.d("AuthManager", "Initial profile created for user: $userId")
+                } catch (profileError: Exception) {
+                    Log.w("AuthManager", "Failed to create initial profile: ${profileError.message}")
+                    // Don't fail the signup if profile creation fails
+                }
             } else {
                 Log.w("AuthManager", "No user ID available after signup")
             }

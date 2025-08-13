@@ -138,6 +138,11 @@ val LocalRecipeDetailViewModel = compositionLocalOf<RecipeDetailViewModel> {
     error("No RecipeDetailViewModel provided")
 }
 
+// CompositionLocal for NavController
+val LocalNavController = compositionLocalOf<NavController> {
+    error("No NavController provided")
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecipeDetailScreen(
@@ -173,7 +178,10 @@ fun RecipeDetailScreen(
         }
     }
 
-    CompositionLocalProvider(LocalRecipeDetailViewModel provides viewModel) {
+    CompositionLocalProvider(
+        LocalRecipeDetailViewModel provides viewModel,
+        LocalNavController provides navController
+    ) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -1775,8 +1783,12 @@ private fun InstructionItem(
 
 @Composable
 private fun FloatingActionButtons(recipe: DetailedRecipe) {
+    val navController = LocalNavController.current
+    
     ExtendedFloatingActionButton(
-        onClick = { /* TODO: Start cooking mode */ },
+        onClick = { 
+            navController.navigate("cooking_mode/${recipe.id}")
+        },
         containerColor = Primary,
         icon = {
             Icon(

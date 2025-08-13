@@ -222,18 +222,26 @@ class CreateRecipeViewModel(
                                 val userIngredients = _ingredients.value.map { it.lowercase() }
                                 
                                 val filteredDbRecipes = dbRecipes.filter { recipe ->
-                                    val recipeIngredients = recipe.ingredients.map { it.name.lowercase() }
+                                    val recipeIngredients = recipe.ingredients.map { it.name.lowercase().trim() }
                                     
-                                    // Check if recipe contains any of the user's ingredients
+                                    // Check if recipe contains ANY of the user's ingredients with strict matching
                                     userIngredients.any { userIngredient ->
+                                        val cleanUserIngredient = userIngredient.lowercase().trim()
+                                        
                                         recipeIngredients.any { recipeIngredient ->
-                                            recipeIngredient.contains(userIngredient) ||
-                                            userIngredient.contains(recipeIngredient) ||
-                                            // Special handling for common Kenyan ingredients
-                                            (userIngredient == "meat" && (recipeIngredient.contains("beef") || recipeIngredient.contains("goat"))) ||
-                                            (userIngredient == "beef" && recipeIngredient.contains("meat")) ||
-                                            (userIngredient == "vegetable" && recipeIngredient.contains("kale")) ||
-                                            (userIngredient == "flour" && recipeIngredient.contains("maize"))
+                                            // Exact matches or ingredient contains user input
+                                            recipeIngredient == cleanUserIngredient ||
+                                            recipeIngredient.contains(cleanUserIngredient) ||
+                                            // Only very specific meat equivalencies
+                                            (cleanUserIngredient == "beef" && (recipeIngredient.contains("beef") || recipeIngredient == "meat")) ||
+                                            (cleanUserIngredient == "chicken" && recipeIngredient.contains("chicken")) ||
+                                            (cleanUserIngredient == "fish" && recipeIngredient.contains("fish")) ||
+                                            // Common cooking ingredients
+                                            (cleanUserIngredient == "tomato" && (recipeIngredient.contains("tomato") || recipeIngredient.contains("tomatoes"))) ||
+                                            (cleanUserIngredient == "onion" && (recipeIngredient.contains("onion") || recipeIngredient.contains("onions"))) ||
+                                            (cleanUserIngredient == "garlic" && recipeIngredient.contains("garlic")) ||
+                                            // Flour types
+                                            (cleanUserIngredient == "flour" && (recipeIngredient.contains("flour") || recipeIngredient.contains("maize flour")))
                                         }
                                     }
                                 }
@@ -250,22 +258,7 @@ class CreateRecipeViewModel(
                     Log.e(TAG, "Error searching database: ${e.message}")
                 }
                 
-                // Also search Kenyan recipes specifically since they're definitely in the database
-                try {
-                    val kenyanRecipeService = com.thenewkenya.ingrediet.data.network.api.KenyanFoodsService()
-                    val ingredientQuery = _ingredients.value.joinToString(" ")
-                    
-                    val kenyanRecipes = kenyanRecipeService.searchKenyanRecipes(ingredientQuery)
-                    
-                    // Add Kenyan recipes to the results
-                    allRecipes.addAll(kenyanRecipes.map { recipe ->
-                        recipe.copy(cuisineType = "Kenyan")
-                    })
-                    
-                    Log.d(TAG, "Kenyan recipes search added ${kenyanRecipes.size} recipes")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error searching Kenyan recipes: ${e.message}")
-                }
+
                 
                 // Apply user preference filtering
                 val filteredRecipes = filterRecipesByUserPreferences(allRecipes)

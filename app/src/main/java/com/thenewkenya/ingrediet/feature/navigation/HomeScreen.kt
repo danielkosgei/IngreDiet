@@ -208,9 +208,29 @@ fun HomeScreenContent(navController: NavController) {
     val context = LocalContext.current
     val authManager = remember { AuthManager(context) }
     val recipeRepository = remember { RecipeRepository(context) }
+    val profileRepository = remember { ProfileRepository() }
     val coroutineScope = rememberCoroutineScope()
     val user = supabase.auth.currentUserOrNull()
     val focusManager = LocalFocusManager.current
+    
+    // Load user profile data for profile image and name
+    var userProfile by remember { mutableStateOf<Profile?>(null) }
+    
+    LaunchedEffect(user?.id) {
+        if (user != null) {
+            profileRepository.getProfile().collect { result ->
+                result.fold(
+                    onSuccess = { profile ->
+                        userProfile = profile
+                        Log.d("HomeScreen", "Profile loaded: ${profile.firstName} ${profile.lastName}, image: ${profile.profileImageUrl}")
+                    },
+                    onFailure = { error ->
+                        Log.e("HomeScreen", "Failed to load profile: ${error.message}")
+                    }
+                )
+            }
+        }
+    }
 
     // Notification permission handling
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -470,8 +490,14 @@ fun HomeScreenContent(navController: NavController) {
             // Sticky header
             HomeHeader(
                 navController = navController,
-                userName = user?.email?.substringBefore('@') ?: "Guest",
-                userPhotoUrl = getUserPhotoUrl(user),
+                userName = when {
+                    userProfile?.firstName?.isNotEmpty() == true || userProfile?.lastName?.isNotEmpty() == true -> 
+                        "${userProfile?.firstName ?: ""} ${userProfile?.lastName ?: ""}".trim()
+                    user?.email?.substringBefore('@')?.isNotEmpty() == true -> 
+                        user.email!!.substringBefore('@')
+                    else -> "Guest"
+                },
+                userPhotoUrl = userProfile?.profileImageUrl?.ifEmpty { getUserPhotoUrl(user) } ?: getUserPhotoUrl(user),
                 searchQuery = searchQuery,
                 onSearchQueryChange = { searchQuery = it },
                 focusManager = focusManager,
@@ -1526,8 +1552,25 @@ private fun RecipeOfTheDaySection(
                 return@LaunchedEffect
             }
             
+            // If no valid cache, fetch new recipe with timeout
+            Log.d("RecipeOfTheDay", "Starting recipe fetch...")
+            
+            // Add a timeout mechanism
+            val timeoutJob = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                kotlinx.coroutines.delay(10000) // 10 second timeout
+                if (isLoading) {
+                    Log.w("RecipeOfTheDay", "Profile loading timed out, using fallback")
+                    getRandomRecipeOfTheDay(recipeRepository, context) { recipe ->
+                        recipeOfTheDay = recipe
+                        isLoading = false
+                        hasLoaded = true
+                    }
+                }
+            }
+            
             // If no valid cache, fetch new recipe
             profileRepository.getProfile().collect { profileResult ->
+                timeoutJob.cancel() // Cancel timeout if we get a result
                 profileResult.fold(
                     onSuccess = { profile ->
                         // Get recipes that match user preferences
@@ -1875,7 +1918,7 @@ private suspend fun getNewPersonalizedRecipe(
 }
 
 /**
- * Check if a recipe is compatible with user's dietary preferences and allergies
+ * Check if a recipe is compatible with user's dietary preferences, allergies, and health goals
  */
 private fun isRecipeCompatibleWithProfile(recipe: com.thenewkenya.ingrediet.data.model.DetailedRecipe, profile: Profile): Boolean {
     val recipeName = recipe.name.lowercase()
@@ -1901,6 +1944,36 @@ private fun isRecipeCompatibleWithProfile(recipe: com.thenewkenya.ingrediet.data
         }
     }
     
+    // Check health conditions for recipe compatibility
+    for (condition in profile.healthConditions) {
+        when (condition.lowercase()) {
+            "diabetes" -> {
+                // Avoid high-sugar recipes for diabetic users
+                if (recipeTags.any { it.contains("dessert") || it.contains("sweet") || it.contains("sugar") } ||
+                    recipeName.contains("cake") || recipeName.contains("cookie") || recipeName.contains("candy")) {
+                    Log.d("RecipeOfTheDay", "Recipe ${recipe.name} excluded due to diabetes - high sugar content")
+                    return false
+                }
+            }
+            "hypertension", "high blood pressure" -> {
+                // Avoid high-sodium recipes for users with hypertension
+                if (recipeIngredients.any { it.contains("salt") || it.contains("sodium") || it.contains("pickle") } ||
+                    recipeTags.any { it.contains("salty") || it.contains("processed") }) {
+                    Log.d("RecipeOfTheDay", "Recipe ${recipe.name} excluded due to hypertension - high sodium content")
+                    return false
+                }
+            }
+            "heart disease" -> {
+                // Prefer heart-healthy recipes
+                if (recipeIngredients.any { it.contains("fried") || it.contains("butter") } ||
+                    recipeTags.any { it.contains("fried") || it.contains("fatty") }) {
+                    Log.d("RecipeOfTheDay", "Recipe ${recipe.name} excluded due to heart disease - high fat content")
+                    return false
+                }
+            }
+        }
+    }
+    
     // Check dietary preferences - if user has specific dietary preferences, try to match them
     if (profile.dietaryPreferences.isNotEmpty()) {
         val hasMatchingPreference = profile.dietaryPreferences.any { preference ->
@@ -1916,6 +1989,59 @@ private fun isRecipeCompatibleWithProfile(recipe: com.thenewkenya.ingrediet.data
         // If user has specific preferences but recipe doesn't match any, lower priority but don't exclude
         if (!hasMatchingPreference) {
             Log.d("RecipeOfTheDay", "Recipe ${recipe.name} doesn't match preferences but allowed")
+        }
+    }
+    
+    // Health goal-based recommendations
+    if (profile.healthGoals.isNotEmpty()) {
+        val hasHealthMatch = profile.healthGoals.any { goal ->
+            when (goal.lowercase()) {
+                "weight loss" -> {
+                    // Prefer low-calorie recipes for weight loss
+                    recipe.nutritionFacts.calories < 400 ||
+                    recipeTags.any { it.contains("low-calorie") || it.contains("light") || it.contains("salad") }
+                }
+                "muscle gain", "muscle building" -> {
+                    // Prefer high-protein recipes for muscle building
+                    recipe.nutritionFacts.protein > 20 ||
+                    recipeIngredients.any { it.contains("chicken") || it.contains("fish") || it.contains("egg") || it.contains("beans") } ||
+                    recipeTags.any { it.contains("protein") || it.contains("muscle") }
+                }
+                "heart health" -> {
+                    // Prefer heart-healthy recipes
+                    recipeTags.any { it.contains("heart-healthy") || it.contains("omega") } ||
+                    recipeIngredients.any { it.contains("salmon") || it.contains("avocado") || it.contains("olive oil") }
+                }
+                "better digestion" -> {
+                    // Prefer fiber-rich and probiotic recipes
+                    recipeTags.any { it.contains("fiber") || it.contains("probiotic") } ||
+                    recipeIngredients.any { it.contains("yogurt") || it.contains("vegetables") || it.contains("whole grain") }
+                }
+                else -> false
+            }
+        }
+        
+        if (hasHealthMatch) {
+            Log.d("RecipeOfTheDay", "Recipe ${recipe.name} prioritized for health goals")
+        }
+    }
+    
+    // BMI-based calorie recommendations
+    val bmi = profile.bmi
+    if (bmi != null) {
+        when {
+            bmi < 18.5 -> {
+                // Underweight - prefer higher calorie recipes
+                if (recipe.nutritionFacts.calories < 300) {
+                    Log.d("RecipeOfTheDay", "Recipe ${recipe.name} deprioritized for underweight user - too low calorie")
+                }
+            }
+            bmi > 25.0 -> {
+                // Overweight - prefer lower calorie recipes
+                if (recipe.nutritionFacts.calories > 600) {
+                    Log.d("RecipeOfTheDay", "Recipe ${recipe.name} deprioritized for overweight user - too high calorie")
+                }
+            }
         }
     }
     

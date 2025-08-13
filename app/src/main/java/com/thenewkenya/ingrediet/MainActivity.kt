@@ -349,6 +349,7 @@ fun AppNavigation() {
                 composable("login") { LoginScreen(navController) }
                 composable("register") { RegisterScreen(navController) }
                 composable("forgot_password") { com.thenewkenya.ingrediet.feature.authentication.ForgotPasswordScreen(navController) }
+                composable("onboarding") { com.thenewkenya.ingrediet.feature.onboarding.OnboardingScreen(navController) }
                 composable("home") { HomeScreenContent(navController) }
                 composable("loading") { LoadingScreen() }
                 composable("splash") { SplashScreen() }
@@ -401,6 +402,43 @@ fun AppNavigation() {
                         recipeId = recipeId,
                         viewModel = viewModel
                     )
+                }
+                
+                // Cooking mode route with parameter
+                composable(
+                    route = "cooking_mode/{recipeId}",
+                    arguments = listOf(
+                        navArgument("recipeId") { type = NavType.StringType }
+                    )
+                ) { backStackEntry ->
+                    val recipeId = backStackEntry.arguments?.getString("recipeId") ?: ""
+                    val context = LocalContext.current
+                    val viewModel = viewModel<com.thenewkenya.ingrediet.feature.recipe.RecipeDetailViewModel>(
+                        factory = com.thenewkenya.ingrediet.feature.recipe.RecipeDetailViewModelFactory(context)
+                    )
+                    
+                    // Get the recipe from the viewModel
+                    val recipe by viewModel.recipe.collectAsState()
+                    
+                    recipe?.let { recipeData ->
+                        com.thenewkenya.ingrediet.feature.recipe.CookingModeScreen(
+                            navController = navController,
+                            recipe = recipeData
+                        )
+                    } ?: run {
+                        // Loading state while recipe loads
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    
+                    // Load recipe when composable is created
+                    LaunchedEffect(recipeId) {
+                        viewModel.loadRecipe(recipeId)
+                    }
                 }
             }
         }
