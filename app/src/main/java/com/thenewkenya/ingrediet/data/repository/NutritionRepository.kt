@@ -104,6 +104,9 @@ class NutritionRepository(context: Context) {
                 return@withContext nutrition
             }
             null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Don't log cancellation as an error - it's expected when user navigates away
+            throw e // Re-throw to properly cancel the operation
         } catch (e: Exception) {
             Log.e("NutritionRepository", "Error fetching nutrition for $name: ${e.message}", e)
             null

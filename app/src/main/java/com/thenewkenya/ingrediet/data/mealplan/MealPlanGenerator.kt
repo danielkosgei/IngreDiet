@@ -75,31 +75,51 @@ class MealPlanGenerator {
             dietaryPreferences: List<String>
         ): List<DetailedRecipe> = withContext(Dispatchers.IO) {
             try {
-                // Build query based on dietary preferences if provided
-                val dietType = if (dietaryPreferences.isNotEmpty()) {
-                    dietaryPreferences.first().lowercase()
-                } else {
-                    "balanced" 
+                // Separate diet type from allergies
+                val knownDietTypes = listOf("vegetarian", "vegan", "low-carb", "high-protein", "keto", "paleo", "mediterranean")
+                val dietType = dietaryPreferences.find { pref -> 
+                    knownDietTypes.contains(pref.lowercase().replace("-", "").replace(" ", ""))
+                }?.lowercase()?.replace("-", "")?.replace(" ", "") ?: "balanced"
+                
+                val allergies = dietaryPreferences.filter { pref -> 
+                    !knownDietTypes.contains(pref.lowercase().replace("-", "").replace(" ", ""))
                 }
                 
-                Log.d(TAG, "Fetching recipes with diet type: $dietType")
+                Log.d(TAG, "Fetching recipes with diet type: $dietType, allergies to avoid: $allergies")
                 
-                // Direct Supabase query to get recipes
+                // Start with a larger pool of recipes
                 val recipeDtos = try {
                     if (dietType != "balanced") {
-                        supabase.from("recipes")
+                        // Try with diet filtering first, but be more lenient
+                        val dietFiltered = supabase.from("recipes")
                             .select {
                                 filter {
-                                    ilike("tags", "%$dietType%")
+                                    or {
+                                        ilike("tags", "%$dietType%")
+                                        ilike("cuisine_type", "%$dietType%")
+                                        ilike("description", "%$dietType%")
+                                    }
                                 }
-                                limit(count.toLong() * 2) // Get more than we need for variety
+                                limit(count.toLong() * 3) // Get even more for filtering
                             }
                             .decodeList<RecipeDto>()
+                        
+                        // If diet filtering returns too few results, fallback to all recipes
+                        if (dietFiltered.size < count) {
+                            Log.d(TAG, "Diet filtering returned only ${dietFiltered.size} recipes, fetching more...")
+                            supabase.from("recipes")
+                                .select {
+                                    limit(count.toLong() * 4) // Get many more for allergy filtering
+                                }
+                                .decodeList<RecipeDto>()
+                        } else {
+                            dietFiltered
+                        }
                     } else {
-                        // Just get random recipes if no specific diet
+                        // Get random recipes
                         supabase.from("recipes")
                             .select {
-                                limit(count.toLong() * 2)
+                                limit(count.toLong() * 4) // Get many more for allergy filtering
                             }
                             .decodeList<RecipeDto>()
                     }
@@ -108,15 +128,50 @@ class MealPlanGenerator {
                     // Try fallback without filtering
                     supabase.from("recipes")
                         .select {
-                            limit(count.toLong() * 2)
+                            limit(count.toLong() * 4)
                         }
                         .decodeList<RecipeDto>()
                 }
                 
+                // Filter out recipes containing allergens
+                val filteredRecipes = if (allergies.isNotEmpty()) {
+                    Log.d(TAG, "Filtering out recipes with allergies: $allergies")
+                    recipeDtos.filter { recipe ->
+                        val recipeText = "${recipe.name} ${recipe.description} ${recipe.ingredients ?: ""} ${recipe.tags ?: ""}".lowercase()
+                        
+                        // Check if recipe contains any allergens
+                        val containsAllergen = allergies.any { allergen ->
+                            when (allergen.lowercase()) {
+                                "gluten" -> recipeText.contains("wheat") || recipeText.contains("flour") || 
+                                           recipeText.contains("bread") || recipeText.contains("pasta") ||
+                                           recipeText.contains("gluten")
+                                "nuts" -> recipeText.contains("nuts") || recipeText.contains("almonds") || 
+                                         recipeText.contains("peanuts") || recipeText.contains("cashews") ||
+                                         recipeText.contains("walnuts") || recipeText.contains("pecans")
+                                "dairy" -> recipeText.contains("milk") || recipeText.contains("cheese") || 
+                                          recipeText.contains("butter") || recipeText.contains("cream") ||
+                                          recipeText.contains("yogurt") || recipeText.contains("dairy")
+                                "eggs" -> recipeText.contains("egg") || recipeText.contains("eggs")
+                                "shellfish" -> recipeText.contains("shrimp") || recipeText.contains("crab") || 
+                                              recipeText.contains("lobster") || recipeText.contains("shellfish")
+                                "fish" -> recipeText.contains("fish") || recipeText.contains("salmon") || 
+                                         recipeText.contains("tuna") || recipeText.contains("cod")
+                                "soy" -> recipeText.contains("soy") || recipeText.contains("tofu")
+                                else -> recipeText.contains(allergen.lowercase())
+                            }
+                        }
+                        !containsAllergen // Keep recipes that don't contain allergens
+                    }
+                } else {
+                    recipeDtos
+                }
+                
+                Log.d(TAG, "After allergy filtering: ${filteredRecipes.size} recipes available (from ${recipeDtos.size} original)")
+                
                 // Convert to DetailedRecipe objects
-                val recipes = recipeDtos
+                val recipes = filteredRecipes
                     .shuffled() // Randomize order
-                    .take(count.coerceAtMost(recipeDtos.size)) // Take as many as we have up to count
+                    .take(count.coerceAtMost(filteredRecipes.size)) // Take as many as we have up to count
                     .mapNotNull { dto ->
                         try {
                             dto.toDetailedRecipe()

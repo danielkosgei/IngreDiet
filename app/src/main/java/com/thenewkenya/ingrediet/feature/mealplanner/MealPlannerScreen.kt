@@ -63,6 +63,14 @@ fun MealPlannerScreen(
     val generationProgress by viewModel.generationProgress.collectAsState()
     val generationStage by viewModel.generationStage.collectAsState()
     
+    // Show error messages to user
+    error?.let { errorMessage ->
+        LaunchedEffect(errorMessage) {
+            Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+            // Don't clear error immediately - let user see it in UI too
+        }
+    }
+    
     // Debug logging for state changes
     LaunchedEffect(mealPlans) {
         android.util.Log.d("MealPlannerScreen", "MealPlans state changed: ${mealPlans.size} days")
@@ -165,6 +173,92 @@ fun MealPlannerScreen(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
+                // Status card for generation and errors
+                if (isGenerating || error != null) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (error != null) colors.errorContainer else colors.primaryContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            if (isGenerating) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        color = colors.primary,
+                                        strokeWidth = 3.dp
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "Generating Meal Plan",
+                                            style = typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = colors.onPrimaryContainer
+                                        )
+                                        generationStage?.let { stage ->
+                                            Text(
+                                                text = stage,
+                                                style = typography.bodyMedium,
+                                                color = colors.onPrimaryContainer.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                }
+                                
+                                if (generationProgress > 0f) {
+                                    LinearProgressIndicator(
+                                        progress = { generationProgress },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 8.dp),
+                                        color = colors.primary
+                                    )
+                                }
+                            }
+                            
+                            error?.let { errorMessage ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Error,
+                                        contentDescription = "Error",
+                                        tint = colors.error,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Column(
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(
+                                            text = "Generation Failed",
+                                            style = typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = colors.onErrorContainer
+                                        )
+                                        Text(
+                                            text = errorMessage,
+                                            style = typography.bodyMedium,
+                                            color = colors.onErrorContainer.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = { viewModel.clearError() }
+                                    ) {
+                                        Text("Dismiss")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
                 // Weekly calendar
                 CalendarView(
                     dates = calendarDates,
@@ -1115,22 +1209,127 @@ fun NutritionSummaryDialog(
             )
 
             if (selectedDayNutrition != null) {
-                // Interactive macro bar chart
-                MacroBarChart(
-                    values = listOf(
-                        Triple("Protein", selectedDayNutrition.protein.toFloat(), Color(0xFF4CAF50)),
-                        Triple("Carbs", selectedDayNutrition.carbs.toFloat(), Color(0xFFFFC107)),
-                        Triple("Fat", selectedDayNutrition.fat.toFloat(), Color(0xFFE91E63))
-                    ),
-                    colors = colors,
-                    typography = typography
-                )
-                // Interactive macro pie chart
-                MacroPieChart(
-                    protein = selectedDayNutrition.protein.toFloat(),
-                    carbs = selectedDayNutrition.carbs.toFloat(),
-                    fat = selectedDayNutrition.fat.toFloat()
-                )
+                // Enhanced daily nutrition summary
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = colors.surface),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Total calories for the day
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Total Calories",
+                                style = typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                color = colors.onSurface
+                            )
+                            Text(
+                                text = "${selectedDayNutrition.calories}",
+                                style = typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+                                color = colors.primary
+                            )
+                        }
+                        
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = colors.outline.copy(alpha = 0.2f)
+                        )
+                        
+                        // Calculate total calories for percentages
+                        val totalCals = (selectedDayNutrition.protein * 4.0f) + (selectedDayNutrition.carbs * 4.0f) + (selectedDayNutrition.fat * 9.0f)
+                        
+                        // Macronutrients breakdown
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "Macronutrients",
+                                style = typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.onSurface
+                            )
+                            
+                            DailyNutritionRow(
+                                name = "Protein",
+                                amount = "${selectedDayNutrition.protein}g",
+                                calories = selectedDayNutrition.protein * 4,
+                                percentage = if (totalCals > 0) ((selectedDayNutrition.protein * 4.0f) / totalCals * 100).toInt() else 0,
+                                color = Color(0xFF4CAF50),
+                                colors = colors,
+                                typography = typography
+                            )
+                            
+                            DailyNutritionRow(
+                                name = "Carbohydrates",
+                                amount = "${selectedDayNutrition.carbs}g",
+                                calories = selectedDayNutrition.carbs * 4,
+                                percentage = if (totalCals > 0) ((selectedDayNutrition.carbs * 4.0f) / totalCals * 100).toInt() else 0,
+                                color = Color(0xFFFFC107),
+                                colors = colors,
+                                typography = typography
+                            )
+                            
+                            DailyNutritionRow(
+                                name = "Fat",
+                                amount = "${selectedDayNutrition.fat}g",
+                                calories = selectedDayNutrition.fat * 9,
+                                percentage = if (totalCals > 0) ((selectedDayNutrition.fat * 9.0f) / totalCals * 100).toInt() else 0,
+                                color = Color(0xFFE91E63),
+                                colors = colors,
+                                typography = typography
+                            )
+                        }
+                        
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = colors.outline.copy(alpha = 0.2f)
+                        )
+                        
+                        // Visual macro distribution
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Calorie Distribution",
+                                style = typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.onSurface
+                            )
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                val proteinPercent = if (totalCals > 0) ((selectedDayNutrition.protein * 4.0f) / totalCals * 100).toInt() else 0
+                                val carbsPercent = if (totalCals > 0) ((selectedDayNutrition.carbs * 4.0f) / totalCals * 100).toInt() else 0
+                                val fatPercent = if (totalCals > 0) ((selectedDayNutrition.fat * 9.0f) / totalCals * 100).toInt() else 0
+                                
+                                MacroCircle(
+                                    name = "Protein",
+                                    percentage = proteinPercent,
+                                    color = Color(0xFF4CAF50)
+                                )
+                                MacroCircle(
+                                    name = "Carbs",
+                                    percentage = carbsPercent,
+                                    color = Color(0xFFFFC107)
+                                )
+                                MacroCircle(
+                                    name = "Fat",
+                                    percentage = fatPercent,
+                                    color = Color(0xFFE91E63)
+                                )
+                            }
+                        }
+                    }
+                }
             } else {
                 Text(
                     text = "No meals planned for this day.",
@@ -1362,5 +1561,90 @@ private fun EditMealBottomSheet(
                 }, enabled = name.isNotBlank() && (caloriesText.toIntOrNull() ?: 0) > 0, modifier = Modifier.weight(1f)) { Text("Save") }
             }
         }
+    }
+}
+
+@Composable
+private fun DailyNutritionRow(
+    name: String,
+    amount: String,
+    calories: Int,
+    percentage: Int,
+    color: Color,
+    colors: androidx.compose.material3.ColorScheme,
+    typography: androidx.compose.material3.Typography
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(16.dp)
+                    .background(color, CircleShape)
+            )
+            Column {
+                Text(
+                    text = name,
+                    style = typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                    color = colors.onSurface
+                )
+                Text(
+                    text = "$calories calories",
+                    style = typography.bodySmall,
+                    color = colors.onSurface.copy(alpha = 0.7f)
+                )
+            }
+        }
+        Column(
+            horizontalAlignment = Alignment.End
+        ) {
+            Text(
+                text = amount,
+                style = typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.onSurface
+            )
+            Text(
+                text = "$percentage%",
+                style = typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                color = color
+            )
+        }
+    }
+}
+
+@Composable
+private fun MacroCircle(
+    name: String,
+    percentage: Int,
+    color: Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .background(color.copy(alpha = 0.1f), CircleShape)
+                .border(3.dp, color, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "$percentage%",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = color
+            )
+        }
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+        )
     }
 } 

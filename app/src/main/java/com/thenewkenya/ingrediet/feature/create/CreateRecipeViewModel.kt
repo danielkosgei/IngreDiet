@@ -213,9 +213,9 @@ class CreateRecipeViewModel(
                     Log.w(TAG, "Edge function failed: ${e.message}")
                 }
                 
-                // Always search the local database to get real recipes from your database
+                // Always search the local database to get real recipes from your database with reasonable limit
                 try {
-                    recipeRepository.searchRecipesFromDatabase("").collect { result ->
+                    recipeRepository.searchRecipesFromDatabase("", limit = 100).collect { result ->
                         result.fold(
                             onSuccess = { dbRecipes ->
                                 // Filter database recipes that contain the requested ingredients
@@ -301,12 +301,27 @@ class CreateRecipeViewModel(
             // Check for allergies - exclude recipes with allergens
             val hasAllergens = profile.allergies.any { allergy ->
                 val allergyLower = allergy.lowercase()
+                val recipeText = "$recipeName $recipeDescription ${recipeIngredients.joinToString(" ")}"
                 
-                // Check in ingredients
-                recipeIngredients.any { it.contains(allergyLower) } ||
-                // Check in recipe name and description
-                recipeName.contains(allergyLower) || 
-                recipeDescription.contains(allergyLower)
+                // Enhanced allergy checking with specific patterns
+                when (allergyLower) {
+                    "gluten" -> recipeText.contains("wheat") || recipeText.contains("flour") || 
+                               recipeText.contains("bread") || recipeText.contains("pasta") ||
+                               recipeText.contains("gluten")
+                    "nuts" -> recipeText.contains("nuts") || recipeText.contains("almonds") || 
+                             recipeText.contains("peanuts") || recipeText.contains("cashews") ||
+                             recipeText.contains("walnuts") || recipeText.contains("pecans")
+                    "dairy" -> recipeText.contains("milk") || recipeText.contains("cheese") || 
+                              recipeText.contains("butter") || recipeText.contains("cream") ||
+                              recipeText.contains("yogurt") || recipeText.contains("dairy")
+                    "eggs" -> recipeText.contains("egg") || recipeText.contains("eggs")
+                    "shellfish" -> recipeText.contains("shrimp") || recipeText.contains("crab") || 
+                                  recipeText.contains("lobster") || recipeText.contains("shellfish")
+                    "fish" -> recipeText.contains("fish") || recipeText.contains("salmon") || 
+                             recipeText.contains("tuna") || recipeText.contains("cod")
+                    "soy" -> recipeText.contains("soy") || recipeText.contains("tofu")
+                    else -> recipeText.contains(allergyLower)
+                }
             }
             
             if (hasAllergens) {

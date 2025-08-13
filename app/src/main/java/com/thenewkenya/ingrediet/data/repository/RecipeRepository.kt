@@ -264,6 +264,9 @@ class RecipeRepository(private val context: Context) {
                             totalSugar = (totalSugar ?: 0f) + sugar
                         }
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Don't log cancellation as an error - re-throw to cancel properly
+                    throw e
                 } catch (e: Exception) {
                     Log.e("RecipeRepository", "Error calculating nutrition for ingredient ${ingredient.name}: ${e.message}")
                 }
@@ -306,17 +309,20 @@ class RecipeRepository(private val context: Context) {
             
             val searchResults = try {
                 if (query.isBlank()) {
-                    // If query is blank, get random recipes
+                    // If query is blank, get random recipes with a reasonable limit
                     supabase.from("recipes")
-                        .select()
+                        .select() {
+                            limit(limit.toLong().coerceAtLeast(50L)) // At least 50 for variety, but respect the limit parameter
+                        }
                         .decodeList<RecipeDto>()
                 } else {
-                    // Otherwise do a search query
+                    // Otherwise do a search query with limit
                     supabase.from("recipes")
                         .select() {
                             filter {
                                 ilike("name", "%$query%")
                             }
+                            limit(limit.toLong())
                         }
                         .decodeList<RecipeDto>()
                 }

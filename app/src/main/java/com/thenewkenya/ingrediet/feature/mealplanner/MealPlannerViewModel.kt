@@ -76,6 +76,13 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating: StateFlow<Boolean> = _isGenerating.asStateFlow()
     
+    // Flag to prevent clearing meal plans immediately after generation
+    private var justGenerated = false
+    
+    fun clearError() {
+        _error.value = null
+    }
+    
     private val _dailyNutrition = MutableStateFlow<Map<DayOfWeek, NutritionSummary>>(emptyMap())
     val dailyNutrition: StateFlow<Map<DayOfWeek, NutritionSummary>> = _dailyNutrition.asStateFlow()
     
@@ -636,14 +643,22 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                     val recipe = recipeRepo.getRecipeDetails(recipeId).first().getOrNull() ?: continue
                     val (carbFactor, proteinFactor, fatFactor) = cookingFactors(recipe.name, recipe.description)
                     for (ing in recipe.ingredients) {
-                        val nut = nutritionRepo.getNutritionByName(ing.name) ?: continue
-                        val grams = com.thenewkenya.ingrediet.feature.recipe.UnitConversion.toGrams(ing.quantity, ing.unit, ing.name)
-                        val totals = com.thenewkenya.ingrediet.feature.recipe.NutritionMath.totalForWeight(nut.per100g, grams)
-                        // Apply cooking method factors
-                        totalCalories += totals.calories
-                        totalProtein += totals.protein * proteinFactor
-                        totalCarbs += totals.carbs * carbFactor
-                        totalFat += totals.fat * fatFactor
+                        try {
+                            val nut = nutritionRepo.getNutritionByName(ing.name) ?: continue
+                            val grams = com.thenewkenya.ingrediet.feature.recipe.UnitConversion.toGrams(ing.quantity, ing.unit, ing.name)
+                            val totals = com.thenewkenya.ingrediet.feature.recipe.NutritionMath.totalForWeight(nut.per100g, grams)
+                            // Apply cooking method factors
+                            totalCalories += totals.calories
+                            totalProtein += totals.protein * proteinFactor
+                            totalCarbs += totals.carbs * carbFactor
+                            totalFat += totals.fat * fatFactor
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            // Operation cancelled - stop processing and propagate
+                            throw e
+                        } catch (e: Exception) {
+                            // Continue with other ingredients if one fails
+                            Log.w("MealPlannerViewModel", "Failed to get nutrition for ${ing.name}: ${e.message}")
+                        }
                     }
                 }
 
@@ -1213,8 +1228,11 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
             try {
                 _isGenerating.value = true
                 _error.value = null
+                justGenerated = false // Reset flag at start of generation
                 _generationProgress.value = 0.5f
                 _generationStage.value = "Generating your meal plan..."
+                
+                // Add timeout to prevent indefinite generation for main logic only
                 
                 android.util.Log.d("MealPlannerViewModel", "Starting meal plan generation with calories=$calorieTarget, diet=$dietType, allergies=$allergies")
                 
@@ -1231,9 +1249,10 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                     android.util.Log.d("MealPlannerViewModel", "Successfully generated plan with ${plan.values.sumOf { it.size }} meals")
                     android.util.Log.d("MealPlannerViewModel", "Setting mealPlans state...")
                     _mealPlans.value = plan
+                    justGenerated = true // Set flag to prevent immediate clearing
                     android.util.Log.d("MealPlannerViewModel", "MealPlans state updated. Current value size: ${_mealPlans.value.size}")
                     
-                    // Save locally and to server
+                    // Save locally and to server with proper error handling
                     try { 
                         LocalMealPlanStore.save(appContext, plan)
                         android.util.Log.d("MealPlannerViewModel", "Saved plan locally")
@@ -1241,13 +1260,22 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                         android.util.Log.w("MealPlannerViewModel", "Failed to save locally: ${e.message}")
                     }
                     
-                    viewModelScope.launch {
-                        try { 
-                            mealPlanRepository.saveUserMealPlans(plan).collect { }
-                            android.util.Log.d("MealPlannerViewModel", "Saved plan to server")
-                        } catch (e: Exception) {
-                            android.util.Log.w("MealPlannerViewModel", "Failed to save to server: ${e.message}")
+                    // Save to server and wait for completion
+                    try { 
+                        mealPlanRepository.saveUserMealPlans(plan).collect { result ->
+                            result.fold(
+                                onSuccess = {
+                                    android.util.Log.d("MealPlannerViewModel", "Successfully saved meal plan to server")
+                                },
+                                onFailure = { error ->
+                                    android.util.Log.w("MealPlannerViewModel", "Failed to save to server: ${error.message}")
+                                    // Even if server save fails, keep the generated plan in memory
+                                }
+                            )
                         }
+                    } catch (e: Exception) {
+                        android.util.Log.w("MealPlannerViewModel", "Error during server save: ${e.message}")
+                        // Don't fail the entire generation if save fails
                     }
                     
                     // Update nutrition for all days
@@ -1255,9 +1283,11 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                     DayOfWeek.values().forEach { updateNutritionSummary(it) }
                     android.util.Log.d("MealPlannerViewModel", "Nutrition summaries updated")
                 } else {
-                    android.util.Log.w("MealPlannerViewModel", "Generated plan was empty, using fallback")
-                    android.util.Log.d("MealPlannerViewModel", "Creating offline fallback plan...")
-                    val fallback = createOfflineMealPlan(calorieTarget, dietType)
+                                    android.util.Log.w("MealPlannerViewModel", "Generated plan was empty, using fallback")
+                // Note: Don't set error here since fallback plan will work
+                _generationStage.value = "Using offline meal plan..."
+                android.util.Log.d("MealPlannerViewModel", "Creating offline fallback plan...")
+                val fallback = createOfflineMealPlan(calorieTarget, dietType)
                     android.util.Log.d("MealPlannerViewModel", "Fallback plan created with ${fallback.values.sumOf { it.size }} meals")
                     _mealPlans.value = fallback
                     
@@ -1273,12 +1303,22 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                 android.util.Log.d("MealPlannerViewModel", "Meal plan generation finished successfully")
             } catch (e: Exception) {
                 android.util.Log.e("MealPlannerViewModel", "Meal plan generation failed: ${e.message}", e)
-                _error.value = "Failed to generate meal plan: ${e.message}"
+                _error.value = when {
+                    e.message?.contains("network") == true -> "Network error. Please check your connection and try again."
+                    e.message?.contains("timeout") == true -> "Request timed out. Please try again."
+                    e.message?.contains("authentication") == true -> "Authentication error. Please log in again."
+                    else -> "Failed to generate meal plan. Please try again."
+                }
             } finally {
                 _isGenerating.value = false
                 kotlinx.coroutines.delay(1000) // Show "Complete!" for a moment
                 _generationStage.value = null
                 _generationProgress.value = 0f
+                
+                // Reset the justGenerated flag after a delay to allow loading
+                kotlinx.coroutines.delay(5000) // Wait 5 seconds
+                justGenerated = false
+                Log.d("MealPlannerViewModel", "Reset justGenerated flag")
             }
         }
     }
@@ -1688,17 +1728,26 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                                             }
                                             _isLoading.value = false
                                         }
-                                } else {
-                                    // No meal plans - just set empty state instead of generating
-                                    _mealPlans.value = emptyMap()
-                                    _dailyNutrition.value = emptyMap()
-                                    _isLoading.value = false
-                                }
+                                                } else {
+                    // No meal plans found - but only clear if we're not currently generating or just generated
+                    if (!_isGenerating.value && !justGenerated) {
+                        Log.d("MealPlannerViewModel", "No meal plans found and not generating - setting empty state")
+                        _mealPlans.value = emptyMap()
+                        _dailyNutrition.value = emptyMap()
+                    } else {
+                        Log.d("MealPlannerViewModel", "No meal plans found but generation in progress or just completed - keeping current state")
+                    }
+                    _isLoading.value = false
+                }
                             }
                     } catch (e: Exception) {
                         Log.e("MealPlannerViewModel", "Error in meal plan flow handling", e)
-                        _mealPlans.value = emptyMap()
-                        _dailyNutrition.value = emptyMap()
+                        // Only clear state if we're not generating or just generated
+                        if (!_isGenerating.value && !justGenerated) {
+                            _mealPlans.value = emptyMap()
+                            _dailyNutrition.value = emptyMap()
+                            _error.value = "Failed to load meal plans: ${e.message}"
+                        }
                         _isLoading.value = false
                     }
                 } else {
@@ -1709,9 +1758,12 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                 }
             } catch (e: Exception) {
                 Log.e("MealPlannerViewModel", "Error in loadExistingMealPlansOnly", e)
-                _error.value = e.message
-                _mealPlans.value = emptyMap()
-                _dailyNutrition.value = emptyMap()
+                // Only clear state if we're not generating or just generated
+                if (!_isGenerating.value && !justGenerated) {
+                    _error.value = "Failed to load meal plans: ${e.message}"
+                    _mealPlans.value = emptyMap()
+                    _dailyNutrition.value = emptyMap()
+                }
                 _isLoading.value = false
             }
         }

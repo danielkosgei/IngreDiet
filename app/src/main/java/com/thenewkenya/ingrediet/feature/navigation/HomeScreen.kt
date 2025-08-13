@@ -1864,6 +1864,10 @@ private suspend fun getPersonalizedRecipeOfTheDay(
             getNewPersonalizedRecipe(recipeRepository, context, profile, lastRecipeId, onResult)
         }
         
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        // Composition cancelled - this is normal, don't log as error
+        Log.d("RecipeOfTheDay", "Recipe of the day cancelled (user navigated away)")
+        onResult(null)
     } catch (e: Exception) {
         Log.e("RecipeOfTheDay", "Error getting personalized recipe", e)
         onResult(null)

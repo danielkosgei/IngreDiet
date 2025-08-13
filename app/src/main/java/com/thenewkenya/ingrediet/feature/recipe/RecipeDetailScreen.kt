@@ -1032,113 +1032,316 @@ private fun NutritionSection(recipe: DetailedRecipe) {
         // Nutrition Facts
         Text(
             text = "Nutrition Facts",
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         if (isLoading) {
-            // Skeleton placeholders (no zero values shown)
-            Column(modifier = Modifier.fillMaxWidth()) {
+            // Enhanced loading state
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp)
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(96.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        strokeWidth = 3.dp
                     )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(96.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(96.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(96.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Calculating nutrition...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
                 }
             }
         } else {
-            // Nutrition Grid
-            Row(
+            // Comprehensive nutrition facts card
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
             ) {
-                NutritionCard(
-                    title = "Calories",
-                    value = cals.toString(),
-                    unit = "kcal",
-                    modifier = Modifier.weight(1f)
-                )
-                NutritionCard(
-                    title = "Protein",
-                    value = "${prot.toInt()}",
-                    unit = "g",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                NutritionCard(
-                    title = "Carbs",
-                    value = "${carbs.toInt()}",
-                    unit = "g",
-                    modifier = Modifier.weight(1f)
-                )
-                NutritionCard(
-                    title = "Fat",
-                    value = "${fat.toInt()}",
-                    unit = "g",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Header with servings info
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Per Serving",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "${recipe.servings ?: 1} ${if (recipe.servings == 1) "serving" else "servings"}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                    
+                    HorizontalDivider(
+                        thickness = 2.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                    )
 
-        // Additional nutrition info if available
-        if (!isLoading) fiber?.let { fiberVal ->
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val fiberStr = fiberVal.toInt().toString()
-                NutritionCard(
-                    title = "Fiber",
-                    value = fiberStr,
-                    unit = "g",
-                    modifier = Modifier.weight(1f)
-                )
-                sugar?.let { sVal ->
-                    val sugarStr = sVal.toInt().toString()
-                    NutritionCard(title = "Sugar", value = sugarStr, unit = "g", modifier = Modifier.weight(1f))
+                    // Prominent calories display
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Calories",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "$cals",
+                            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                    )
+
+                    // Macronutrients with daily value percentages
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Calculate daily value percentages (based on 2000 calorie diet)
+                        val proteinDV = ((prot * 4) / 2000 * 100).toInt() // 4 cal per gram
+                        val carbsDV = ((carbs * 4) / 2000 * 100).toInt() // 4 cal per gram  
+                        val fatDV = ((fat * 9) / 2000 * 100).toInt() // 9 cal per gram
+                        
+                        EnhancedNutritionRow(
+                            name = "Total Fat",
+                            amount = "${fat.toInt()}g",
+                            dailyValue = fatDV,
+                            color = Color(0xFFE91E63)
+                        )
+                        
+                        EnhancedNutritionRow(
+                            name = "Total Carbohydrates",
+                            amount = "${carbs.toInt()}g",
+                            dailyValue = carbsDV,
+                            color = Color(0xFFFFC107)
+                        )
+                        
+                        // Fiber as sub-item if available
+                        fiber?.let { fiberVal ->
+                            val fiberDV = (fiberVal / 25 * 100).toInt() // 25g recommended daily
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Dietary Fiber",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "${fiberVal.toInt()}g",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${fiberDV}%",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                        color = Color(0xFF4CAF50)
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Sugar as sub-item if available
+                        sugar?.let { sugarVal ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Total Sugars",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                )
+                                Text(
+                                    text = "${sugarVal.toInt()}g",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                        
+                        EnhancedNutritionRow(
+                            name = "Protein",
+                            amount = "${prot.toInt()}g",
+                            dailyValue = proteinDV,
+                            color = Color(0xFF4CAF50)
+                        )
+                    }
+                    
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                    )
+                    
+                    // Calorie breakdown
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Calorie Breakdown",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        
+                        val totalCals = (prot * 4) + (carbs * 4) + (fat * 9)
+                        if (totalCals > 0) {
+                            val proteinPercent = ((prot * 4) / totalCals * 100).toInt()
+                            val carbsPercent = ((carbs * 4) / totalCals * 100).toInt()
+                            val fatPercent = ((fat * 9) / totalCals * 100).toInt()
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                MacroPercentage(
+                                    name = "Protein",
+                                    percentage = proteinPercent,
+                                    color = Color(0xFF4CAF50)
+                                )
+                                MacroPercentage(
+                                    name = "Carbs",
+                                    percentage = carbsPercent,
+                                    color = Color(0xFFFFC107)
+                                )
+                                MacroPercentage(
+                                    name = "Fat",
+                                    percentage = fatPercent,
+                                    color = Color(0xFFE91E63)
+                                )
+                            }
+                        }
+                    }
+                    
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                    )
+                    
+                    // Daily Value disclaimer
+                    Text(
+                        text = "* Percent Daily Values are based on a 2,000 calorie diet. Your daily values may be higher or lower depending on your calorie needs.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun EnhancedNutritionRow(
+    name: String,
+    amount: String,
+    dailyValue: Int,
+    color: Color
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(color, CircleShape)
+            )
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = amount,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "${dailyValue}%",
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                color = if (dailyValue >= 20) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun MacroPercentage(
+    name: String,
+    percentage: Int,
+    color: Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .background(color.copy(alpha = 0.1f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "$percentage%",
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                color = color
+            )
+        }
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+        )
     }
 }
 
