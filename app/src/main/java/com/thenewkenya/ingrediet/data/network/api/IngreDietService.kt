@@ -584,6 +584,7 @@ class IngreDietService(private val context: Context) {
         val servings: Int? = 4,
         val difficulty: String? = "Medium",
         val ingredients: List<IngredientDto>? = emptyList(),
+        @Serializable(with = FlexibleInstructionsSerializer::class)
         val instructions: List<String>? = emptyList(),
         val nutrition: NutritionDto? = null,
         val tags: List<String>? = emptyList(),
@@ -1397,6 +1398,48 @@ object FlexibleIDSerializer : KSerializer<String> {
                 }
             }
             else -> decoder.decodeString()
+        }
+    }
+}
+
+/**
+ * Custom serializer for instructions that can be either strings or objects with step/description
+ */
+object FlexibleInstructionsSerializer : KSerializer<List<String>?> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("FlexibleInstructions", PrimitiveKind.STRING)
+    
+    override fun serialize(encoder: Encoder, value: List<String>?) {
+        encoder.encodeString(value?.joinToString("|") ?: "")
+    }
+    
+    override fun deserialize(decoder: Decoder): List<String>? {
+        return when (decoder) {
+            is JsonDecoder -> {
+                val element = decoder.decodeJsonElement()
+                when {
+                    element is JsonArray -> {
+                        element.mapNotNull { item ->
+                            when {
+                                item is JsonPrimitive && item.isString -> item.content
+                                item is JsonObject -> {
+                                    // Handle instruction objects like {"step":1,"description":"Sauté..."}
+                                    val description = item["description"]?.jsonPrimitive?.content
+                                    val instruction = item["instruction"]?.jsonPrimitive?.content
+                                    val text = item["text"]?.jsonPrimitive?.content
+                                    val stepText = item["step_text"]?.jsonPrimitive?.content
+                                    description ?: instruction ?: text ?: stepText ?: "Step"
+                                }
+                                else -> item.toString()
+                            }
+                        }
+                    }
+                    else -> emptyList()
+                }
+            }
+            else -> {
+                val stringValue = decoder.decodeString()
+                if (stringValue.isBlank()) emptyList() else stringValue.split("|")
+            }
         }
     }
 } 
