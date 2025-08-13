@@ -374,8 +374,11 @@ class RecipeRepository(private val context: Context) {
                 }
             }
             
-            // Emit immediately to avoid downstream first() cancellations aborting our work
-            emit(Result.success(result))
+            // Populate ingredients and calculate nutrition for all recipes
+            val recipesWithNutrition = populateIngredientsForRecipes(result)
+            
+            // Emit the results with proper nutrition data
+            emit(Result.success(recipesWithNutrition))
         } catch (e: Exception) {
             // Treat abort/cancellation as normal without emitting
             if (e is kotlinx.coroutines.CancellationException ||

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
@@ -58,11 +59,13 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LunchDining
 import androidx.compose.material.icons.filled.LocalDining
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.RestaurantMenu
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -151,6 +154,8 @@ import com.thenewkenya.ingrediet.R
 import com.thenewkenya.ingrediet.data.network.AuthManager
 import com.thenewkenya.ingrediet.data.network.supabase
 import com.thenewkenya.ingrediet.data.repository.RecipeRepository
+import com.thenewkenya.ingrediet.data.repository.ProfileRepository
+import com.thenewkenya.ingrediet.data.model.Profile
 import com.thenewkenya.ingrediet.feature.mealplanner.MealPlannerViewModel
 import com.thenewkenya.ingrediet.feature.shopping.ShoppingListViewModel
 import com.thenewkenya.ingrediet.feature.shopping.ShoppingItem
@@ -176,6 +181,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.text.input.ImeAction
@@ -456,38 +462,48 @@ fun HomeScreenContent(navController: NavController) {
 
     // Provide the navController to the composition
     CompositionLocalProvider(LocalNavController provides navController) {
-        Box(
+        Column(
             modifier = Modifier
                 .background(BackgroundColor)
                 .fillMaxSize()
         ) {
+            // Sticky header
+            HomeHeader(
+                navController = navController,
+                userName = user?.email?.substringBefore('@') ?: "Guest",
+                userPhotoUrl = getUserPhotoUrl(user),
+                searchQuery = searchQuery,
+                onSearchQueryChange = { searchQuery = it },
+                focusManager = focusManager,
+                colors = colors,
+                typography = typography,
+                recipes = recipes,
+                filteredSuggestions = filteredSuggestions,
+                onUpdateFilteredSuggestions = { query -> 
+                    filterSuggestions(query, recipes)
+                }
+            )
+            
+            // Scrollable content
             LazyColumn(
                 modifier = Modifier
                     .background(BackgroundColor)
-                    .fillMaxSize(),
+                    .fillMaxSize()
+                    .weight(1f),
                 contentPadding = PaddingValues(
-                    top = 24.dp,
+                    top = 0.dp,
                     start = 0.dp,
                     end = 0.dp,
                     bottom = 16.dp
                 )
             ) {
-                // Header section
+                // Recipe of the Day section
                 item {
-                    HomeHeader(
+                    RecipeOfTheDaySection(
                         navController = navController,
-                        userName = user?.email?.substringBefore('@') ?: "Guest",
-                        userPhotoUrl = getUserPhotoUrl(user),
-                        searchQuery = searchQuery,
-                        onSearchQueryChange = { searchQuery = it },
-                        focusManager = focusManager,
                         colors = colors,
                         typography = typography,
-                        recipes = recipes,
-                        filteredSuggestions = filteredSuggestions,
-                        onUpdateFilteredSuggestions = { query -> 
-                            filterSuggestions(query, recipes)
-                        }
+                        recipeRepository = recipeRepository
                     )
                 }
 
@@ -646,22 +662,138 @@ private fun HomeHeader(
     }
     
     var showSuggestions by remember { mutableStateOf(false) }
+    var isSearchExpanded by remember { mutableStateOf(false) }
     
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = colors.background,
+        shadowElevation = if (isSearchExpanded) 2.dp else 0.dp
     ) {
-        // Profile section with updated design
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 24.dp, vertical = 16.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            if (isSearchExpanded) {
+                // Search bar replaces profile info
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Search field takes most space
+                    val localSearchQuery = remember(searchQuery) { mutableStateOf(searchQuery) }
+                    val scope = rememberCoroutineScope()
+                    
+                    OutlinedTextField(
+                        value = localSearchQuery.value,
+                        onValueChange = { newValue ->
+                            localSearchQuery.value = newValue
+                            showSuggestions = newValue.isNotEmpty()
+                            onUpdateFilteredSuggestions(newValue)
+                            scope.launch {
+                                onSearchQueryChange(newValue)
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        placeholder = { 
+                            Text(
+                                "Search recipes...",
+                                color = colors.onSurface.copy(alpha = 0.6f)
+                            )
+                        },
+                        leadingIcon = { 
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = colors.primary
+                            )
+                        },
+                        trailingIcon = {
+                            if (localSearchQuery.value.isNotEmpty()) {
+                                IconButton(onClick = { 
+                                    localSearchQuery.value = ""
+                                    showSuggestions = false
+                                    scope.launch {
+                                        onSearchQueryChange("")
+                                    }
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Clear,
+                                        contentDescription = "Clear search",
+                                        tint = colors.onSurface.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = colors.surface,
+                            unfocusedContainerColor = colors.surface,
+                            focusedIndicatorColor = colors.primary,
+                            unfocusedIndicatorColor = colors.outline.copy(alpha = 0.5f),
+                            cursorColor = colors.primary
+                        ),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(
+                            onSearch = {
+                                focusManager.clearFocus()
+                                showSuggestions = false
+                            }
+                        )
+                    )
+                    
+                    // Close search icon - Rounded rectangle style with error color
+                    IconButton(
+                        onClick = { 
+                            isSearchExpanded = false
+                            onSearchQueryChange("")
+                            showSuggestions = false
+                        },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.errorContainer.copy(alpha = 0.3f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close search",
+                            tint = colors.error,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    
+                    // Notification icon - Circular style with different color
+                    IconButton(
+                        onClick = { navController.navigate("inbox/notifications") },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(colors.tertiaryContainer.copy(alpha = 0.4f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Notifications,
+                            contentDescription = "Notifications",
+                            tint = colors.tertiary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+            } else {
+                // Profile section with updated design
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                 if (userPhotoUrl != null) {
                     // User avatar
                     Box(
@@ -728,119 +860,56 @@ private fun HomeHeader(
                 }
             }
             
-            // Notification icon
-            IconButton(
-                onClick = { navController.navigate("inbox/notifications") },
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(colors.surfaceVariant)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Notifications,
-                    contentDescription = "Notifications",
-                    tint = colors.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-        
-        // Search bar below profile section
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Use remember for the local search query to avoid recomposition issues
-        val localSearchQuery = remember(searchQuery) { mutableStateOf(searchQuery) }
-        val scope = rememberCoroutineScope()
-        
-        Column {
-            OutlinedTextField(
-                value = localSearchQuery.value,
-                onValueChange = { newValue ->
-                    localSearchQuery.value = newValue
-                    showSuggestions = newValue.isNotEmpty()
-                    // Update filtered suggestions
-                    onUpdateFilteredSuggestions(newValue)
-                    // Log for debugging
-                    Log.d("SearchDebug", "Text changed to: $newValue")
-                    // Use scope.launch to avoid composition cancellation issues
-                    scope.launch {
-                        onSearchQueryChange(newValue)
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 24.dp),
-                placeholder = { 
-                    Text(
-                        "Search recipes...",
-                        color = colors.onSurface.copy(alpha = 0.6f)
-                    )
-                },
-                leadingIcon = { 
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = colors.primary
-                    )
-                },
-                trailingIcon = {
-                    if (localSearchQuery.value.isNotEmpty()) {
-                        IconButton(onClick = { 
-                            localSearchQuery.value = ""
-                            showSuggestions = false
-                            scope.launch {
-                                onSearchQueryChange("")
-                            }
-                        }) {
+                            Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                        // Search icon - Rounded rectangle style
+                        IconButton(
+                            onClick = { 
+                                isSearchExpanded = true
+                            },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.primaryContainer.copy(alpha = 0.3f))
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Clear search",
-                                tint = colors.onSurface.copy(alpha = 0.6f)
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = colors.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        
+                        // Notification icon - Circular style with different color
+                        IconButton(
+                            onClick = { navController.navigate("inbox/notifications") },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(colors.tertiaryContainer.copy(alpha = 0.4f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Notifications,
+                                contentDescription = "Notifications",
+                                tint = colors.tertiary,
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }
-                },
-                shape = RoundedCornerShape(12.dp),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = colors.surface,
-                    unfocusedContainerColor = colors.surface,
-                    disabledContainerColor = colors.surface,
-                    focusedIndicatorColor = colors.primary,
-                    unfocusedIndicatorColor = colors.outline.copy(alpha = 0.5f),
-                    focusedTextColor = colors.onSurface,
-                    unfocusedTextColor = colors.onSurface,
-                    focusedLeadingIconColor = colors.primary,
-                    unfocusedLeadingIconColor = colors.primary.copy(alpha = 0.7f),
-                    cursorColor = colors.primary
-                ),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Search
-                ),
-                keyboardActions = KeyboardActions(
-                    onSearch = {
-                        focusManager.clearFocus()
-                        showSuggestions = false
-                        if (localSearchQuery.value.isNotEmpty()) {
-                            scope.launch {
-                                onSearchQueryChange(localSearchQuery.value)
-                            }
-                        }
-                    }
-                )
-            )
-            
-            // Search suggestions
+        }
+        
+        // Search suggestions (only show when search is expanded)
+        if (isSearchExpanded) {
             AnimatedVisibility(
-                visible = showSuggestions && localSearchQuery.value.isNotEmpty(),
+                visible = showSuggestions && searchQuery.isNotEmpty(),
                 enter = fadeIn() + expandVertically(),
                 exit = fadeOut() + shrinkVertically()
             ) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp),
+                        .padding(top = 8.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = colors.surfaceVariant
@@ -862,15 +931,6 @@ private fun HomeHeader(
                                     color = colors.onSurfaceVariant.copy(alpha = 0.7f),
                                     textAlign = TextAlign.Center
                                 )
-                                
-                                Spacer(modifier = Modifier.height(8.dp))
-                                
-                                Text(
-                                    text = "You can also search by tags like \"Vegan\" or \"Low Carb\"",
-                                    style = typography.labelSmall,
-                                    color = colors.primary.copy(alpha = 0.7f),
-                                    textAlign = TextAlign.Center
-                                )
                             }
                         } else {
                             // Show filtered suggestions
@@ -882,11 +942,8 @@ private fun HomeHeader(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
-                                                localSearchQuery.value = suggestion
+                                                onSearchQueryChange(suggestion)
                                                 showSuggestions = false
-                                                scope.launch {
-                                                    onSearchQueryChange(suggestion)
-                                                }
                                                 focusManager.clearFocus()
                                             }
                                             .padding(horizontal = 8.dp, vertical = 12.dp),
@@ -909,6 +966,8 @@ private fun HomeHeader(
                             }
                         }
                     }
+                }
+            }
                 }
             }
         }
@@ -1413,3 +1472,480 @@ private fun ShoppingListSkeleton(textSecondary: Color) {
         }
     }
 }
+
+@Composable
+private fun RecipeOfTheDaySection(
+    navController: NavController,
+    colors: androidx.compose.material3.ColorScheme,
+    typography: androidx.compose.material3.Typography,
+    recipeRepository: RecipeRepository
+) {
+    val context = LocalContext.current
+    val profileRepository = remember { ProfileRepository() }
+    var recipeOfTheDay by remember { mutableStateOf<RecipeRepository.RecipeListItem?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var hasLoaded by remember { mutableStateOf(false) }
+    
+    // Check if we have a cached recipe for today first
+    val today = remember { 
+        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date()) 
+    }
+    
+    // Only fetch if we haven't loaded today's recipe yet
+    LaunchedEffect(today) {
+        if (hasLoaded) return@LaunchedEffect
+        
+        try {
+            // Check cache first
+            val prefs = context.getSharedPreferences("recipe_of_day", Context.MODE_PRIVATE)
+            val cachedDate = prefs.getString("last_recipe_date", "")
+            val cachedRecipeId = prefs.getString("last_recipe_id", "")
+            val cachedRecipeName = prefs.getString("cached_recipe_name", "")
+            val cachedRecipeCategory = prefs.getString("cached_recipe_category", "")
+            val cachedRecipeCalories = prefs.getInt("cached_recipe_calories", 0)
+            val cachedRecipeTime = prefs.getInt("cached_recipe_time", 0)
+            val cachedRecipeImageUrl = prefs.getString("cached_recipe_image_url", "")
+            val cachedRecipeDescription = prefs.getString("cached_recipe_description", "")
+            
+            if (cachedDate == today && cachedRecipeId?.isNotEmpty() == true && cachedRecipeName?.isNotEmpty() == true) {
+                // Use cached recipe
+                recipeOfTheDay = RecipeRepository.RecipeListItem(
+                    id = cachedRecipeId,
+                    name = cachedRecipeName,
+                    description = cachedRecipeDescription ?: "",
+                    imageUrl = cachedRecipeImageUrl ?: "",
+                    time = cachedRecipeTime,
+                    calories = cachedRecipeCalories,
+                    recipeId = cachedRecipeId,
+                    category = cachedRecipeCategory ?: "",
+                    dietaryInfo = emptyList()
+                )
+                isLoading = false
+                hasLoaded = true
+                Log.d("RecipeOfTheDay", "Using cached recipe: $cachedRecipeName")
+                return@LaunchedEffect
+            }
+            
+            // If no valid cache, fetch new recipe
+            profileRepository.getProfile().collect { profileResult ->
+                profileResult.fold(
+                    onSuccess = { profile ->
+                        // Get recipes that match user preferences
+                        getPersonalizedRecipeOfTheDay(
+                            recipeRepository = recipeRepository,
+                            context = context,
+                            profile = profile
+                        ) { recipe ->
+                            recipeOfTheDay = recipe
+                            isLoading = false
+                            hasLoaded = true
+                            
+                            // Cache the recipe details for fast loading
+                            recipe?.let { r ->
+                                prefs.edit()
+                                    .putString("cached_recipe_name", r.name)
+                                    .putString("cached_recipe_category", r.category)
+                                    .putInt("cached_recipe_calories", r.calories)
+                                    .putInt("cached_recipe_time", r.time)
+                                    .putString("cached_recipe_image_url", r.imageUrl)
+                                    .putString("cached_recipe_description", r.description)
+                                    .apply()
+                            }
+                        }
+                    },
+                    onFailure = { 
+                        // If profile loading fails, fallback to random recipe
+                        Log.w("RecipeOfTheDay", "Could not load user profile, using random recipe")
+                        getRandomRecipeOfTheDay(recipeRepository, context) { recipe ->
+                            recipeOfTheDay = recipe
+                            isLoading = false
+                            hasLoaded = true
+                            
+                            // Cache the fallback recipe too
+                            recipe?.let { r ->
+                                prefs.edit()
+                                    .putString("cached_recipe_name", r.name)
+                                    .putString("cached_recipe_category", r.category)
+                                    .putInt("cached_recipe_calories", r.calories)
+                                    .putInt("cached_recipe_time", r.time)
+                                    .putString("cached_recipe_image_url", r.imageUrl)
+                                    .putString("cached_recipe_description", r.description)
+                                    .apply()
+                            }
+                        }
+                    }
+                )
+            }
+        } catch (e: Exception) {
+            isLoading = false
+            hasLoaded = true
+            Log.e("RecipeOfTheDay", "Error loading recipe of the day", e)
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 16.dp)
+    ) {
+        // Section header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Recipe of the Day",
+                style = typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = colors.onBackground
+            )
+            
+            TextButton(
+                onClick = { /* Navigate to all recipes */ }
+            ) {
+                Text(
+                    text = "See All",
+                    color = colors.primary,
+                    style = typography.bodyMedium
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        // Featured recipe card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .clickable { 
+                    val recipe = recipeOfTheDay
+                    if (recipe != null) {
+                        navController.navigate("recipe/${recipe.id}")
+                    }
+                },
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = colors.surface
+            ),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 4.dp
+            )
+        ) {
+            if (isLoading) {
+                // Loading state
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(
+                            color = colors.primary,
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Loading recipe...",
+                            style = typography.bodyMedium,
+                            color = colors.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            } else {
+                val recipe = recipeOfTheDay
+                if (recipe != null) {
+                    // Real recipe data
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // Recipe image background
+                        AsyncImage(
+                            model = recipe.imageUrl.ifBlank { 
+                                "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=800" 
+                            },
+                            contentDescription = "Recipe of the day: ${recipe.name}",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                    
+                    // Gradient overlay
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.7f)
+                                    )
+                                )
+                            )
+                    )
+                    
+                                            // Recipe info
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = recipe.name,
+                            style = typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Schedule,
+                                    contentDescription = "Cooking time",
+                                    tint = Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "${recipe.time} min",
+                                    style = typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                            }
+                            
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.LocalFireDepartment,
+                                    contentDescription = "Calories",
+                                    tint = Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "${recipe.calories} cal",
+                                    style = typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Category badge
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = colors.primary.copy(alpha = 0.9f)
+                    ) {
+                        Text(
+                            text = recipe.category,
+                            style = typography.labelSmall,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                } else {
+                    // Error state
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Restaurant,
+                                contentDescription = "No recipe",
+                                tint = colors.onSurface.copy(alpha = 0.5f),
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "No recipe available",
+                                style = typography.bodyMedium,
+                                color = colors.onSurface.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Get a personalized recipe of the day based on user preferences and allergies
+ */
+private suspend fun getPersonalizedRecipeOfTheDay(
+    recipeRepository: RecipeRepository,
+    context: Context,
+    profile: Profile,
+    onResult: (RecipeRepository.RecipeListItem?) -> Unit
+) {
+    try {
+        val prefs = context.getSharedPreferences("recipe_of_day", Context.MODE_PRIVATE)
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val lastRecipeId = prefs.getString("last_recipe_id", "")
+        val lastRecipeDate = prefs.getString("last_recipe_date", "")
+        
+        // If we already have a recipe for today, try to use it
+        if (lastRecipeDate == today && lastRecipeId?.isNotEmpty() == true) {
+            // Try to get the same recipe as yesterday if it's still valid
+            recipeRepository.getRecipeDetails(lastRecipeId).collect { result ->
+                result.fold(
+                    onSuccess = { recipe ->
+                        if (isRecipeCompatibleWithProfile(recipe, profile)) {
+                            onResult(RecipeRepository.RecipeListItem.fromDetailedRecipe(recipe))
+                            return@collect
+                        }
+                    },
+                    onFailure = { /* Continue to get new recipe */ }
+                )
+                
+                // If cached recipe failed or incompatible, get a new one
+                getNewPersonalizedRecipe(recipeRepository, context, profile, lastRecipeId, onResult)
+            }
+        } else {
+            // Get a new recipe for today
+            getNewPersonalizedRecipe(recipeRepository, context, profile, lastRecipeId, onResult)
+        }
+        
+    } catch (e: Exception) {
+        Log.e("RecipeOfTheDay", "Error getting personalized recipe", e)
+        onResult(null)
+    }
+}
+
+/**
+ * Get a new personalized recipe that hasn't been shown recently
+ */
+private suspend fun getNewPersonalizedRecipe(
+    recipeRepository: RecipeRepository,
+    context: Context,
+    profile: Profile,
+    excludeRecipeId: String?,
+    onResult: (RecipeRepository.RecipeListItem?) -> Unit
+) {
+    // Get random recipes and filter them
+    recipeRepository.getRandomRecipes(20).collect { result ->
+        result.fold(
+            onSuccess = { recipes ->
+                val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+                
+                // Filter recipes based on user preferences and allergies
+                val compatibleRecipes = recipes.filter { recipe ->
+                    recipe.id != excludeRecipeId && isRecipeCompatibleWithProfile(recipe, profile)
+                }
+                
+                if (compatibleRecipes.isNotEmpty()) {
+                    val selectedRecipe = compatibleRecipes.random()
+                    val recipeListItem = RecipeRepository.RecipeListItem.fromDetailedRecipe(selectedRecipe)
+                    
+                    // Cache the selection for today
+                    val prefs = context.getSharedPreferences("recipe_of_day", Context.MODE_PRIVATE)
+                    prefs.edit()
+                        .putString("last_recipe_id", selectedRecipe.id)
+                        .putString("last_recipe_date", today)
+                        .apply()
+                    
+                    onResult(recipeListItem)
+                } else {
+                    // If no compatible recipes, fallback to any random recipe
+                    Log.w("RecipeOfTheDay", "No compatible recipes found, using fallback")
+                    getRandomRecipeOfTheDay(recipeRepository, context, onResult)
+                }
+            },
+            onFailure = { 
+                Log.e("RecipeOfTheDay", "Failed to get personalized recipes", it)
+                onResult(null)
+            }
+        )
+    }
+}
+
+/**
+ * Check if a recipe is compatible with user's dietary preferences and allergies
+ */
+private fun isRecipeCompatibleWithProfile(recipe: com.thenewkenya.ingrediet.data.model.DetailedRecipe, profile: Profile): Boolean {
+    val recipeName = recipe.name.lowercase()
+    val recipeDescription = recipe.description.lowercase()
+    val recipeCategory = recipe.category.lowercase()
+    val recipeTags = recipe.tags.map { it.lowercase() }
+    val recipeIngredients = recipe.ingredients.map { it.name.lowercase() }
+    
+    // Check for allergies - if user has allergies, exclude recipes with those ingredients
+    for (allergy in profile.allergies) {
+        val allergyLower = allergy.lowercase()
+        
+        // Check in ingredients
+        if (recipeIngredients.any { it.contains(allergyLower) }) {
+            Log.d("RecipeOfTheDay", "Recipe ${recipe.name} excluded due to allergy: $allergy")
+            return false
+        }
+        
+        // Check in recipe name and description
+        if (recipeName.contains(allergyLower) || recipeDescription.contains(allergyLower)) {
+            Log.d("RecipeOfTheDay", "Recipe ${recipe.name} excluded due to allergy in name/description: $allergy")
+            return false
+        }
+    }
+    
+    // Check dietary preferences - if user has specific dietary preferences, try to match them
+    if (profile.dietaryPreferences.isNotEmpty()) {
+        val hasMatchingPreference = profile.dietaryPreferences.any { preference ->
+            val prefLower = preference.lowercase()
+            
+            // Check if recipe tags match dietary preferences
+            recipeTags.any { it.contains(prefLower) } ||
+            recipeCategory.contains(prefLower) ||
+            recipeName.contains(prefLower) ||
+            recipeDescription.contains(prefLower)
+        }
+        
+        // If user has specific preferences but recipe doesn't match any, lower priority but don't exclude
+        if (!hasMatchingPreference) {
+            Log.d("RecipeOfTheDay", "Recipe ${recipe.name} doesn't match preferences but allowed")
+        }
+    }
+    
+    return true
+}
+
+/**
+ * Fallback function to get any random recipe
+ */
+private suspend fun getRandomRecipeOfTheDay(
+    recipeRepository: RecipeRepository,
+    context: Context,
+    onResult: (RecipeRepository.RecipeListItem?) -> Unit
+) {
+    recipeRepository.getRandomRecipes(1).collect { result ->
+        result.fold(
+            onSuccess = { recipes ->
+                if (recipes.isNotEmpty()) {
+                    val detailedRecipe = recipes.first()
+                    onResult(RecipeRepository.RecipeListItem.fromDetailedRecipe(detailedRecipe))
+                } else {
+                    onResult(null)
+                }
+            },
+            onFailure = { 
+                Log.e("RecipeOfTheDay", "Failed to load fallback recipe", it)
+                onResult(null)
+            }
+        )
+    }
+}
+
+
