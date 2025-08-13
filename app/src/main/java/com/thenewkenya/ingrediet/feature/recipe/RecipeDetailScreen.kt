@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.AddShoppingCart
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.FitnessCenter
@@ -78,6 +80,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -113,6 +129,8 @@ import com.thenewkenya.ingrediet.data.model.DetailedRecipe
 import com.thenewkenya.ingrediet.data.model.IngredientItem
 import com.thenewkenya.ingrediet.ui.theme.Primary
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
 
 
 // CompositionLocal for RecipeDetailViewModel
@@ -244,171 +262,431 @@ private fun RecipeContent(
     recipe: DetailedRecipe,
     onBackPress: () -> Unit
 ) {
-    val scrollState = rememberLazyListState()
-    val headerHeight = 300.dp
-    val headerHeightPx = with(LocalDensity.current) { headerHeight.toPx() }
-    val scrollOffset = remember { mutableStateOf(0f) }
-
-    // Update scroll offset based on first visible item
-    val firstVisibleItemIndex = scrollState.firstVisibleItemIndex
-    val firstVisibleItemScrollOffset = scrollState.firstVisibleItemScrollOffset
-    scrollOffset.value = if (firstVisibleItemIndex == 0) {
-        (firstVisibleItemScrollOffset / headerHeightPx).coerceIn(0f, 1f)
-    } else {
-        1f
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+    
+    // Custom draggable bottom sheet state
+    val initialSheetHeight = screenHeightPx * 0.4f // Start at 40% of screen
+    var sheetOffsetY by remember { mutableStateOf(screenHeightPx - initialSheetHeight) }
+    
+    val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarHeight = with(density) { statusBarPadding.toPx() }
+    
+    val draggableState = rememberDraggableState { delta ->
+        val minOffset = statusBarHeight + with(density) { 80.dp.toPx() } // Leave space for top bar
+        val maxOffset = screenHeightPx - with(density) { 56.dp.toPx() } // Always keep handle + padding visible
+        
+        sheetOffsetY = (sheetOffsetY + delta).coerceIn(
+            minimumValue = minOffset, // Prevent going too high
+            maximumValue = maxOffset // Prevent going too low
+        )
     }
+    
+    // Track if sheet is near minimal height
+    val isMinimized by remember {
+        derivedStateOf {
+            val currentHeight = screenHeightPx - sheetOffsetY
+            currentHeight < (screenHeightPx * 0.15f) // Less than 15% of screen height
+        }
+    }
+    
+
+    
+    // Calculate target image scale based on drawer position
+    val targetImageScale by remember {
+        derivedStateOf {
+            val currentHeight = screenHeightPx - sheetOffsetY
+            val maxHeight = screenHeightPx * 0.6f // When drawer is high (60% of screen)
+            val minHeight = screenHeightPx * 0.15f // When drawer is low (15% of screen)
+            
+            // Smoothly interpolate between 1.0x (high position) and 1.15x (low position)
+            val progress = ((maxHeight - currentHeight) / (maxHeight - minHeight)).coerceIn(0f, 1f)
+            1.0f + (progress * 0.15f) // Scale from 1.0x to 1.15x
+        }
+    }
+    
+    // Animate the image scale smoothly
+    val imageScale by animateFloatAsState(
+        targetValue = targetImageScale,
+        animationSpec = tween(durationMillis = 150), // Quick, responsive animation
+        label = "imageScale"
+    )
+    
+    var selectedTabIndex by remember { mutableStateOf(0) }
+    val tabs = listOf("Instructions", "Ingredients", "Nutrition")
 
     Box(modifier = Modifier.fillMaxSize()) {
-        var selectedTabIndex by remember { mutableStateOf(0) }
-        val tabs = listOf("Instructions", "Ingredients", "Nutrition")
-
-        LazyColumn(
-            state = scrollState,
+        // Background image that fills the entire screen
+        RecipeImageBackground(
+            recipe = recipe,
+            isMinimized = isMinimized,
+            imageScale = imageScale,
             modifier = Modifier.fillMaxSize()
-        ) {
-            item {
-                Header(
-                    recipe = recipe,
-                    headerHeight = headerHeight,
-                    scrollOffset = scrollOffset.value
-                )
-            }
-            
-            // Quick Info
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
-                QuickInfoSection(recipe)
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            // Tabs
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(
-                                width = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                                shape = RoundedCornerShape(32.dp)
-                            ),
-                        shape = RoundedCornerShape(32.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                        tonalElevation = 0.dp
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .padding(4.dp)
-                                .fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            tabs.forEachIndexed { index, title ->
-                                val selected = selectedTabIndex == index
-                                Surface(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(4.dp)
-                                        .height(36.dp),
-                                    shape = RoundedCornerShape(20.dp),
-                                    color = if (selected) {
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                                    } else {
-                                        Color.Transparent
-                                    },
-                                    onClick = { selectedTabIndex = index }
-                                ) {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = title,
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = if (selected) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                            fontSize = 13.sp
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            // Tab content
-            when (selectedTabIndex) {
-                0 -> {
-                    // Instructions tab
-                    item {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            shape = RoundedCornerShape(24.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 1.dp
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(
-                                    text = "Step by Step Instructions",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                recipe.instructions.forEachIndexed { index, instruction ->
-                                    if (index > 0) {
-                                        Spacer(modifier = Modifier.height(12.dp))
-                                    }
-                                    InstructionItem(index + 1, instruction)
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-                }
-                1 -> {
-                    // Ingredients tab
-                    item {
-                        val viewModel = LocalRecipeDetailViewModel.current
-                        IngredientsSection(
-                            ingredients = recipe.ingredients,
-                            servings = recipe.servings,
-                            onAddAllToShoppingList = { viewModel.addAllIngredientsToShoppingList() }
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-                }
-                2 -> {
-                    // Nutrition tab
-                    item {
-                        NutritionSection(recipe)
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-                }
-            }
-
-            // Add bottom spacing for FAB
-            item {
-                Spacer(modifier = Modifier.height(88.dp))
-            }
-        }
-
-        // Fixed top bar that stays on top
+        )
+        
+        // Top bar overlay
         TopBarOverlay(
             recipe = recipe,
-            scrollOffset = scrollOffset.value,
-            onBackPress = onBackPress
+            scrollOffset = if (isMinimized) 0f else 0.5f,
+            onBackPress = onBackPress,
+            isFullImageMode = isMinimized
         )
+        
+        // Custom draggable bottom sheet that extends to screen bottom
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(with(density) { screenHeightPx.toDp() }) // Full screen height
+                .offset { IntOffset(0, sheetOffsetY.roundToInt()) }
+                .background(
+                    MaterialTheme.colorScheme.surface,
+                    RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                ) // Background covers everything with rounded top
+                .draggable(
+                    state = draggableState,
+                    orientation = Orientation.Vertical
+                )
+        ) {
+            BottomSheetContent(
+                recipe = recipe,
+                selectedTabIndex = selectedTabIndex,
+                onTabSelected = { selectedTabIndex = it },
+                tabs = tabs,
+                isMinimized = isMinimized
+            )
+        }
+    }
+}
+
+// New component functions for bottom sheet implementation
+
+@Composable
+private fun RecipeImageBackground(
+    recipe: DetailedRecipe,
+    isMinimized: Boolean,
+    imageScale: Float,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier) {
+        // Full screen recipe image with dynamic scaling
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(recipe.imageUrl)
+                .crossfade(true)
+                .build(),
+            contentDescription = recipe.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = imageScale
+                    scaleY = imageScale
+                }
+        )
+        
+        // Dynamic gradient overlay that responds to image scale
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = if (isMinimized) {
+                            // When fully zoomed, add subtle vignette effect
+                            listOf(
+                                Color.Black.copy(alpha = 0.2f),
+                                Color.Transparent,
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.3f)
+                            )
+                        } else {
+                            // Standard overlay for content viewing
+                            listOf(
+                                Color.Black.copy(alpha = 0.1f),
+                                Color.Black.copy(alpha = 0.3f)
+                            )
+                        }
+                    )
+                )
+        )
+        
+        // Recipe title overlay - only show when not minimized
+        if (!isMinimized) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(24.dp)
+                    .padding(bottom = 80.dp) // Space for bottom sheet
+            ) {
+                Text(
+                    text = recipe.name,
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                
+                if (recipe.description.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = recipe.description,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White.copy(alpha = 0.9f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BottomSheetContent(
+    recipe: DetailedRecipe,
+    selectedTabIndex: Int,
+    onTabSelected: (Int) -> Unit,
+    tabs: List<String>,
+    isMinimized: Boolean
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Bottom sheet handle - always visible
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(40.dp)
+                    .height(4.dp)
+                    .background(
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        RoundedCornerShape(2.dp)
+                    )
+            )
+        }
+        
+        // Recipe name - always visible
+        Text(
+            text = recipe.name,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        
+        // Show content with smooth fade based on sheet height
+        AnimatedVisibility(
+            visible = !isMinimized,
+            enter = fadeIn(animationSpec = tween(200)) + expandVertically(animationSpec = tween(200)),
+            exit = fadeOut(animationSpec = tween(200)) + shrinkVertically(animationSpec = tween(200))
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Quick Info Section
+                item {
+                    QuickInfoSection(recipe)
+                }
+                
+                // Tabs
+                item {
+                    TabSection(
+                        selectedTabIndex = selectedTabIndex,
+                        onTabSelected = onTabSelected,
+                        tabs = tabs
+                    )
+                }
+                
+                // Tab Content
+                when (selectedTabIndex) {
+                    0 -> {
+                        item {
+                            InstructionsSection(recipe)
+                        }
+                    }
+                    1 -> {
+                        item {
+                            val viewModel = LocalRecipeDetailViewModel.current
+                            IngredientsSection(
+                                ingredients = recipe.ingredients,
+                                servings = recipe.servings,
+                                onAddAllToShoppingList = { viewModel.addAllIngredientsToShoppingList() }
+                            )
+                        }
+                    }
+                    2 -> {
+                        item {
+                            NutritionSection(recipe)
+                        }
+                    }
+                }
+                
+                // Bottom padding
+                item {
+                    Spacer(modifier = Modifier.height(32.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PullUpHint(
+    modifier: Modifier = Modifier
+) {
+    // Subtle visual hint to pull up (no automatic behavior)
+    Box(
+        modifier = modifier
+            .width(40.dp)
+            .height(4.dp)
+            .background(
+                Color.White.copy(alpha = 0.6f),
+                RoundedCornerShape(2.dp)
+            )
+    )
+}
+
+@Composable
+private fun TabSection(
+    selectedTabIndex: Int,
+    onTabSelected: (Int) -> Unit,
+    tabs: List<String>
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 0.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(32.dp)
+            ),
+        shape = RoundedCornerShape(32.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            tabs.forEachIndexed { index, title ->
+                val selected = selectedTabIndex == index
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(4.dp)
+                        .height(36.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                    } else {
+                        Color.Transparent
+                    },
+                    onClick = { onTabSelected(index) }
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopBarOverlay(
+    recipe: DetailedRecipe,
+    scrollOffset: Float,
+    onBackPress: () -> Unit,
+    isFullImageMode: Boolean = false
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .background(
+                if (isFullImageMode) {
+                    Color.Black.copy(alpha = 0.3f)
+                } else {
+                    Color.Black.copy(alpha = scrollOffset * 0.8f)
+                }
+            )
+    ) {
+        IconButton(
+            onClick = onBackPress,
+            modifier = Modifier.align(Alignment.CenterStart)
+        ) {
+            Icon(
+                imageVector = Icons.Default.ArrowBack,
+                contentDescription = "Back",
+                tint = Color.White
+            )
+        }
+        
+        // Show recipe title in top bar when in full image mode
+        if (isFullImageMode) {
+            Text(
+                text = recipe.name,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 72.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun InstructionsSection(recipe: DetailedRecipe) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Step by Step Instructions",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            recipe.instructions.forEachIndexed { index, instruction ->
+                if (index > 0) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                InstructionItem(index + 1, instruction)
+            }
+        }
     }
 }
 
