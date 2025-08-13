@@ -65,7 +65,7 @@ data class NutritionResponse(
     val sugar: Float? = null
 )
 
-class RecipeRepository(context: Context) {
+class RecipeRepository(private val context: Context) {
 
     // Add companion object for singleton access
     companion object {
@@ -184,13 +184,108 @@ class RecipeRepository(context: Context) {
                 }
             }
             
-            // Update each recipe with its ingredients
-            return recipes.map { recipe ->
-                recipe.copy(ingredients = ingredientsMap[recipe.id] ?: emptyList())
+            // Update each recipe with its ingredients and calculated nutrition
+            val updatedRecipes = mutableListOf<DetailedRecipe>()
+            for (recipe in recipes) {
+                val ingredients = ingredientsMap[recipe.id] ?: emptyList()
+                val calculatedNutrition = calculateNutritionFromIngredients(
+                    ingredients, 
+                    recipe.name, 
+                    recipe.description
+                )
+                updatedRecipes.add(
+                    recipe.copy(
+                        ingredients = ingredients,
+                        nutritionFacts = calculatedNutrition
+                    )
+                )
             }
+            return updatedRecipes
         } catch (e: Exception) {
             Log.e("RecipeRepository", "Error populating ingredients: ${e.message}", e)
             return recipes // Return original recipes if there's an error
+        }
+    }
+
+    /**
+     * Calculate nutrition facts from a list of ingredients using the same method as recipe detail screen
+     */
+    private suspend fun calculateNutritionFromIngredients(ingredients: List<IngredientItem>, recipeName: String, recipeDescription: String): NutritionFacts {
+        try {
+            val nutritionRepo = NutritionRepository(context)
+            
+            // Apply cooking method factors (same as recipe detail screen)
+            fun getCookingFactors(name: String, desc: String): Triple<Float, Float, Float> {
+                val text = (name + " " + desc).lowercase()
+                return when {
+                    text.contains("fried") || text.contains("fry") -> Triple(1.0f, 0.95f, 1.15f)
+                    text.contains("roast") || text.contains("baked") -> Triple(1.0f, 1.05f, 1.05f)
+                    text.contains("boil") || text.contains("simmer") -> Triple(0.95f, 1.0f, 1.0f)
+                    else -> Triple(1.0f, 1.0f, 1.0f)
+                }
+            }
+            
+            val (carbFactor, proteinFactor, fatFactor) = getCookingFactors(recipeName, recipeDescription)
+            var totalCalories = 0
+            var totalProtein = 0f
+            var totalCarbs = 0f
+            var totalFat = 0f
+            var totalFiber: Float? = null
+            var totalSugar: Float? = null
+            
+            for (ingredient in ingredients) {
+                try {
+                    // Get detailed nutrition data for this ingredient
+                    val nutrition = nutritionRepo.getNutritionByName(ingredient.name)
+                    if (nutrition != null) {
+                        // Convert ingredient quantity to grams
+                        val grams = com.thenewkenya.ingrediet.feature.recipe.UnitConversion.toGrams(
+                            ingredient.quantity, 
+                            ingredient.unit, 
+                            ingredient.name
+                        )
+                        
+                        // Calculate nutrition for this weight using same method as detail screen
+                        val nutritionForWeight = com.thenewkenya.ingrediet.feature.recipe.NutritionMath.totalForWeight(
+                            nutrition.per100g, 
+                            grams
+                        )
+                        
+                        // Apply cooking factors and sum up totals
+                        totalCalories += nutritionForWeight.calories
+                        totalProtein += nutritionForWeight.protein * proteinFactor
+                        totalCarbs += nutritionForWeight.carbs * carbFactor
+                        totalFat += nutritionForWeight.fat * fatFactor
+                        
+                        nutritionForWeight.fiber?.let { fiber ->
+                            totalFiber = (totalFiber ?: 0f) + fiber
+                        }
+                        nutritionForWeight.sugar?.let { sugar ->
+                            totalSugar = (totalSugar ?: 0f) + sugar
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("RecipeRepository", "Error calculating nutrition for ingredient ${ingredient.name}: ${e.message}")
+                }
+            }
+            
+            return NutritionFacts(
+                calories = totalCalories,
+                protein = totalProtein,
+                carbs = totalCarbs,
+                fat = totalFat,
+                fiber = totalFiber,
+                sugar = totalSugar
+            )
+        } catch (e: Exception) {
+            Log.e("RecipeRepository", "Error calculating nutrition from ingredients: ${e.message}")
+            // Fallback to default values if calculation fails
+            return NutritionFacts(
+                calories = 250,
+                protein = 15f,
+                carbs = 30f,
+                fat = 8f
+            )
         }
     }
 
