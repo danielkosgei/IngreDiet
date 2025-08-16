@@ -10,7 +10,7 @@ A modern recipe management and meal planning application built with Jetpack Comp
 
 IngreDiet is currently in active alpha development. Core features are being implemented and stabilized.
 
-## 📱 Current Features
+## Current Features
 
 - **Recipe Browser**: Browse through curated recipes with images and basic details
 - **Recipe Detail View**: View detailed recipe information including ingredients, instructions, and nutritional facts
@@ -43,11 +43,11 @@ IngreDiet is currently in active alpha development. Core features are being impl
 - Social sharing functionality
 - Integration with health tracking apps
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🧪 Known Issues
+## Known Issues
 
 - Limited recipe database during development
 - Some UI components may not be fully responsive on all screen sizes
