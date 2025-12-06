@@ -21,16 +21,23 @@ A modern **recipe management and meal planning** Android application built with 
 ## Screenshots
 
 <p align="center">
-  <i><!-- TODO: Add screenshots here --></i>
+  <img src="https://github.com/user-attachments/assets/73e35d68-f44f-4277-8018-ca9d22723351" width="180" alt="Home"/>
+  <img src="https://github.com/user-attachments/assets/cf3c508a-b259-4d09-b7ca-b4d704c72d6d" width="180" alt="Recipe Detail"/>
+  <img src="https://github.com/user-attachments/assets/8b4fdfad-3f6b-4f8f-9fe2-bb4607e102f5" width="180" alt="Meal Planner"/>
+  <img src="https://github.com/user-attachments/assets/2339d8d2-e709-4bdb-9ad2-bf23858a4ce3" width="180" alt="Shopping List"/>
+</p>
+<p align="center">
+  <b>Home</b> · <b>Recipe Detail</b> · <b>Meal Planner</b> · <b>Shopping List</b>
 </p>
 
-| Home | Recipe Detail | Meal Planner | Shopping List |
-|:----:|:-------------:|:------------:|:-------------:|
-| <!-- Screenshot placeholder --> | <!-- Screenshot placeholder --> | <!-- Screenshot placeholder --> | <!-- Screenshot placeholder --> |
-
-| Profile | Kenyan Recipes | Cooking Mode | Nutrition Goals |
-|:-------:|:--------------:|:------------:|:---------------:|
-| <!-- Screenshot placeholder --> | <!-- Screenshot placeholder --> | <!-- Screenshot placeholder --> | <!-- Screenshot placeholder --> |
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/476afb6f-2392-4946-b793-de495b30c46a" width="180" alt="Nutrition Summary"/>
+  <img src="https://github.com/user-attachments/assets/ac33c1f9-9029-44c0-8098-693c7fba12d2" width="180" alt="Recipe Finder"/>
+  <img src="https://github.com/user-attachments/assets/07dacab9-67ca-40e5-8b54-4e6203314563" width="180" alt="Cooking Mode"/>
+</p>
+<p align="center">
+  <b>Nutrition Summary</b> · <b>Recipe Finder</b> · <b>Cooking Mode</b>
+</p>
 
 ---
 
