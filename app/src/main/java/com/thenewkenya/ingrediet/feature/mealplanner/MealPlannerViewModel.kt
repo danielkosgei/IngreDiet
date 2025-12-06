@@ -1283,11 +1283,11 @@ class MealPlannerViewModel(context: Context) : ViewModel() {
                     DayOfWeek.values().forEach { updateNutritionSummary(it) }
                     android.util.Log.d("MealPlannerViewModel", "Nutrition summaries updated")
                 } else {
-                                    android.util.Log.w("MealPlannerViewModel", "Generated plan was empty, using fallback")
-                // Note: Don't set error here since fallback plan will work
-                _generationStage.value = "Using offline meal plan..."
-                android.util.Log.d("MealPlannerViewModel", "Creating offline fallback plan...")
-                val fallback = createOfflineMealPlan(calorieTarget, dietType)
+                    android.util.Log.w("MealPlannerViewModel", "Generated plan was empty, using fallback")
+                    // Note: Don't set error here since fallback plan will work
+                    _generationStage.value = "Using offline meal plan..."
+                    android.util.Log.d("MealPlannerViewModel", "Creating offline fallback plan...")
+                    val fallback = createOfflineMealPlan(calorieTarget, dietType)
                     android.util.Log.d("MealPlannerViewModel", "Fallback plan created with ${fallback.values.sumOf { it.size }} meals")
                     _mealPlans.value = fallback
                     

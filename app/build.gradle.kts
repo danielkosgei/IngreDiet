@@ -67,7 +67,7 @@ android {
     
     lint {
         baseline = file("lint-baseline.xml")
-        abortOnError = false // Temporarily disable build failing on lint errors
+        abortOnError = true
         checkDependencies = true
         checkReleaseBuilds = false
         warningsAsErrors = false
