@@ -143,7 +143,7 @@ app/src/main/java/com/thenewkenya/ingrediet/
 | **Supabase** | 3.1.1 BOM | Backend-as-a-Service |
 | **Ktor** | 3.0.3 | HTTP client (OkHttp engine) |
 | **Kotlinx Serialization** | 1.6.2 | JSON parsing |
-| **PostgreSQL** | — | Database (via Supabase) |
+| **PostgreSQL** | 15 | Database (via Supabase) |
 
 ### Authentication
 | Technology | Purpose |
