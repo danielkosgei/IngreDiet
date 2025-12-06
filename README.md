@@ -41,53 +41,6 @@ A modern **recipe management and meal planning** Android application built with 
 
 ---
 
-## Features
-
-### Recipe Management
-- **Browse Recipes** — Explore curated recipes with beautiful imagery and detailed information
-- **Kenyan Cuisine Focus** — Dedicated section featuring authentic traditional Kenyan dishes (Ugali, Nyama Choma, Sukuma Wiki, and more)
-- **Recipe Details** — View ingredients, step-by-step instructions, nutritional facts, and cooking times
-- **Cooking Mode** — Interactive guided cooking experience with step-by-step progress tracking
-- **Create Recipes** — Add your own custom recipes with images, ingredients, and instructions
-- **Recipe Search** — Find recipes by name, ingredients, or tags with fuzzy search support
-
-### Meal Planning
-- **Weekly Planner** — Plan your meals for each day of the week (breakfast, lunch, dinner, snacks)
-- **Meal Scheduling** — Set specific times for each meal
-- **Calorie Tracking** — Track daily calorie intake against your goals
-- **Quick Add** — Easily add recipes from your favorites or the recipe catalog
-
-### Shopping List
-- **Smart Lists** — Automatically generate shopping lists from meal plans
-- **Category Organization** — Items organized by grocery store sections
-- **Check-off Items** — Mark items as purchased with intuitive checkboxes
-- **Cloud Sync** — Shopping list syncs across devices
-
-### Favorites & Personalization
-- **Save Favorites** — Bookmark recipes for quick access
-- **Dietary Preferences** — Set preferences (Vegetarian, Vegan, Keto, Low-Carb, etc.)
-- **Allergy Management** — Track food allergies and intolerances
-- **Nutrition Goals** — Set personalized daily targets for calories, protein, carbs, and fats
-
-### Security & Authentication
-- **User Accounts** — Secure authentication with email/password
-- **Biometric Login** — Fingerprint/Face unlock for quick access
-- **App Lock** — Optional PIN/biometric lock screen for privacy
-- **Google Sign-In** — OAuth integration via Google Credentials API
-
-### Notifications
-- **Meal Reminders** — Get notified when it's time to prepare meals
-- **Notification Inbox** — Centralized location for all app notifications
-- **Customizable Alerts** — Control notification preferences
-
-### UI/UX
-- **Material Design 3** — Modern, accessible interface following latest guidelines
-- **Dark Mode** — Full support for system-wide dark theme
-- **Dynamic Theming** — Wellness-inspired color palette with nutritional indicators
-- **Smooth Animations** — Polished transitions and micro-interactions
-
----
-
 ## Architecture
 
 IngreDiet follows **MVVM (Model-View-ViewModel)** architecture with the **Repository Pattern**, ensuring a clean separation of concerns and testability.
